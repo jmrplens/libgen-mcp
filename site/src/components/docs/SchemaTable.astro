@@ -37,13 +37,18 @@ interface Row {
 	enum?: string[];
 }
 
+// The prop is `part`, not `section`, because every slot is named after a field
+// and MDX hands a named slot to the component as a prop of the same name: the
+// read tool has a `section` field, and its slot replaced a `section` prop, so
+// the table looked up `undefined`. A prop name no field will ever take keeps
+// the two namespaces apart.
 interface Props {
 	/** A tool name for input/output, a prompt name for arguments. */
 	name: string;
-	section: "input" | "output" | "arguments";
+	part: "input" | "output" | "arguments";
 }
 
-const { name, section } = Astro.props;
+const { name, part: section } = Astro.props;
 const requiredLabel = Astro.locals.t("lgm.schema.required");
 
 const tools = schema.tools as Record<string, Record<string, Row[]>>;

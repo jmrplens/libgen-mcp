@@ -1,0 +1,44 @@
+%!PS-Adobe-3.0
+%%Title: sections fixture
+% The source of sections.pdf. Regenerate it with:
+%   gs -q -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -dCompatibilityLevel=1.7 -sOutputFile=sections.pdf sections.ps
+% Eight pages, and an outline two levels deep whose entries share a page twice
+% (Chapter 2 and Sampling on page five, Analysis and the second Summary on page
+% six) and repeat a title (Summary), which is what the section tests read.
+/Helvetica findfont 12 scalefont setfont
+/line { 72 exch moveto show } def
+(Page one. Preface. Why this booklet exists.) 720 line
+(The preface ends on this page.) 700 line
+showpage
+(Page two. Chapter 1 Foundations.) 720 line
+(Foundations open the first chapter.) 700 line
+showpage
+(Page three. Terms.) 720 line
+(Every term is defined here.) 700 line
+showpage
+(Page four. Summary of the foundations.) 720 line
+(The first summary closes chapter one.) 700 line
+showpage
+(Page five. Chapter 2 Methods.) 720 line
+(Sampling starts on the same page as its chapter.) 700 line
+showpage
+(Page six. Analysis.) 720 line
+(The second summary shares this page with analysis.) 700 line
+showpage
+(Page seven. Chapter 3 Results.) 720 line
+(Results are reported here.) 700 line
+showpage
+(Page eight. Appendix.) 720 line
+(The appendix is the last entry.) 700 line
+showpage
+[ /Title (Preface) /Page 1 /OUT pdfmark
+[ /Count -2 /Title (Chapter 1 Foundations) /Page 2 /OUT pdfmark
+[ /Title (Terms) /Page 3 /OUT pdfmark
+[ /Title (Summary) /Page 4 /OUT pdfmark
+[ /Count -3 /Title (Chapter 2 Methods) /Page 5 /OUT pdfmark
+[ /Title (Sampling) /Page 5 /OUT pdfmark
+[ /Title (Analysis) /Page 6 /OUT pdfmark
+[ /Title (Summary) /Page 6 /OUT pdfmark
+[ /Title (Chapter 3 Results) /Page 7 /OUT pdfmark
+[ /Title (Appendix) /Page 8 /OUT pdfmark
+[ /Title (Sections fixture) /Author (libgen-mcp tests) /DOCINFO pdfmark

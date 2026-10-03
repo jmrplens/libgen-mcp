@@ -228,7 +228,7 @@ func TestExtractPDF_ContextCancelledDirect(t *testing.T) {
 func TestReadPDFPages_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := readPDFPages(ctx, docFor(t, "testdata/sample.pdf"), 1, 5, defaultMaxChars); err == nil {
+	if _, err := readPDFPages(ctx, docFor(t, "testdata/sample.pdf"), pdfRange{start: 1, maxPages: 5, maxChars: defaultMaxChars}); err == nil {
 		t.Fatal("expected a context error, got nil")
 	}
 }

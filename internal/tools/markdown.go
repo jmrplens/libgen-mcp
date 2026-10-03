@@ -8,6 +8,7 @@ import (
 	"unicode"
 
 	"github.com/jmrplens/libgen-mcp/v2/internal/discovery"
+	"github.com/jmrplens/libgen-mcp/v2/internal/extract"
 	"github.com/jmrplens/libgen-mcp/v2/internal/libgen"
 	"github.com/jmrplens/libgen-mcp/v2/internal/toolutil"
 )
@@ -344,6 +345,9 @@ func renderReadMarkdown(out ReadOutput) string {
 		writeNextSteps(&b, out.NextSteps)
 		return b.String()
 	}
+	if sec := out.Section; sec != nil {
+		fmt.Fprintf(&b, "Section %d: %s (%s).\n", sec.Index, mdInline(sec.Title), sectionExtent(*sec))
+	}
 	fmt.Fprintf(&b, "Extracted text (%s", mdInline(out.Format))
 	if out.TotalPages > 0 {
 		fmt.Fprintf(&b, ", pages %d-%d of %d", out.PageStart, out.PageEnd, out.TotalPages)
@@ -357,6 +361,15 @@ func renderReadMarkdown(out ReadOutput) string {
 	b.WriteString("\n")
 	writeNextSteps(&b, out.NextSteps)
 	return b.String()
+}
+
+// sectionExtent names how far a section reaches: a page range for a PDF, a
+// character range for an EPUB.
+func sectionExtent(sec extract.SectionSpan) string {
+	if sec.PageStart > 0 {
+		return fmt.Sprintf("pages %d-%d", sec.PageStart, sec.PageEnd)
+	}
+	return fmt.Sprintf("chars %d-%d", sec.CharStart, sec.CharEnd)
 }
 
 // renderMatches renders a find-mode result as a header line plus one bullet per
@@ -385,7 +398,8 @@ func renderMatches(b *strings.Builder, out ReadOutput) {
 }
 
 // renderOutline renders an outline-mode result as an indented table-of-contents
-// list, one line per entry indented by its nesting Level, with the (PDF) page in
+// list, one line per entry indented by its nesting Level, led by the entry's
+// number in brackets (what section takes) and with the (PDF) page in
 // parentheses when known. Entry titles are UNTRUSTED document/catalog content, so
 // each goes through mdInline. A zero-entry outline (a valid document with no
 // embedded TOC) renders an explicit "No table of contents found." line instead
@@ -405,10 +419,10 @@ func renderOutline(b *strings.Builder, out ReadOutput) {
 	for _, e := range out.Outline {
 		indent := strings.Repeat("  ", max(0, e.Level))
 		if e.Page > 0 {
-			fmt.Fprintf(b, "%s- %s (p.%d)\n", indent, mdInline(e.Title), e.Page)
+			fmt.Fprintf(b, "%s- [%d] %s (p.%d)\n", indent, e.Index, mdInline(e.Title), e.Page)
 			continue
 		}
-		fmt.Fprintf(b, "%s- %s\n", indent, mdInline(e.Title))
+		fmt.Fprintf(b, "%s- [%d] %s\n", indent, e.Index, mdInline(e.Title))
 	}
 }
 

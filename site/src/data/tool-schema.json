@@ -273,6 +273,11 @@
           "name": "max_depth",
           "type": "integer",
           "required": false
+        },
+        {
+          "name": "section",
+          "type": "string",
+          "required": false
         }
       ],
       "output": [
@@ -359,6 +364,11 @@
         {
           "name": "query",
           "type": "string",
+          "required": false
+        },
+        {
+          "name": "section",
+          "type": "object",
           "required": false
         },
         {

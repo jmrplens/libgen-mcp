@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -47,7 +48,7 @@ func downloadRoots(cfg *config.Config) pathguard.Roots {
 // outcomes, cursor pagination), one topic per paragraph like search's.
 const readToolDescription = `Read a book or paper's text in chunks without downloading the whole file. Identify it by md5, doi, or absolute local path (local server only). PDFs paginate by page, EPUB/TXT by character offset. While has_more, re-call with the cursor.
 
-find returns matching passages instead of text, and outline returns the table of contents, to jump in with start_page. Unreadable files (scanned, DRM-protected) report extractable=false with a reason. Use download for the raw file.
+find returns matching passages instead of text. outline returns the numbered table of contents, and section reads one entry of it by number or title, stopping where the next entry at the same or a higher level starts. Unreadable files (scanned, DRM-protected) report extractable=false with a reason. Use download for the raw file.
 
 Example: {"doi": "10.1038/nature12373", "find": "methods"}.
 
@@ -64,13 +65,15 @@ type ReadInput struct {
 	MaxPages  int    `json:"max_pages,omitempty" jsonschema:"max pages this call (PDF)"`
 	Offset    int    `json:"offset,omitempty" jsonschema:"start character offset (EPUB/TXT)"`
 	MaxChars  int    `json:"max_chars,omitempty" jsonschema:"max characters this call"`
-	Cursor    string `json:"cursor,omitempty" jsonschema:"from a previous read, for the next chunk or the next matches. Overrides start_page and offset"`
+	Cursor    string `json:"cursor,omitempty" jsonschema:"from a previous read, for the next chunk or the next matches. Overrides start_page, offset and section"`
 
 	Find       string `json:"find,omitempty" jsonschema:"text to search for instead of reading sequentially. Whitespace is ignored"`
 	MaxMatches int    `json:"max_matches,omitempty" jsonschema:"max matches per call when find is set"`
 
 	Outline  bool `json:"outline,omitempty" jsonschema:"return the table of contents instead of text"`
 	MaxDepth int  `json:"max_depth,omitempty" jsonschema:"outline levels kept, where 1 is top-level only. Omit for every level, which can run to hundreds"`
+
+	Section string `json:"section,omitempty" jsonschema:"read one table-of-contents entry, by the number outline mode shows or by its title (case-insensitive). A value of digits only is a number. Reads to where the next entry at the same or a higher level starts"`
 }
 
 // ReadOutput holds one extracted chunk plus pagination metadata. NextSteps leads
@@ -97,7 +100,11 @@ type ReadOutput struct {
 	MatchCount int             `json:"match_count,omitempty" jsonschema:"total matches found"`
 	Query      string          `json:"query,omitempty" jsonschema:"the find query"`
 
-	Outline      []extract.OutlineEntry `json:"outline,omitempty" jsonschema:"table of contents (title, level, page)"`
+	// Section is set on a section read only, and says how far the section
+	// reaches, so a chunk's own range can be read against it.
+	Section *extract.SectionSpan `json:"section,omitempty" jsonschema:"the outline entry a section read covers and its full extent"`
+
+	Outline      []extract.OutlineEntry `json:"outline,omitempty" jsonschema:"table of contents (index, title, level, page)"`
 	OutlineTotal int                    `json:"outline_total,omitempty" jsonschema:"entries before max_depth trimming"`
 	// OutlineRequested marks an outline-mode result so the renderer never has to
 	// guess: an outline with zero entries (a valid document with no embedded TOC)
@@ -118,6 +125,9 @@ func validateReadInput(in ReadInput) error {
 	if in.MD5 != "" && !md5Re.MatchString(in.MD5) {
 		return errors.New("md5 must be a 32-char hex string")
 	}
+	if err := validateSectionInput(in); err != nil {
+		return err
+	}
 	if in.Path != "" {
 		// The gate lives in pathguard so every path argument consults one helper,
 		// rather than each one carrying its own copy of the rule — which is a rule
@@ -126,6 +136,95 @@ func validateReadInput(in ReadInput) error {
 		return pathguard.RequireLocalAccess("path", "md5 or doi")
 	}
 	return nil
+}
+
+// validateSectionInput refuses the arguments a section read cannot honor
+// together with section. Each would otherwise be dropped in silence: outline
+// and find are modes of their own, and start_page and offset would move the
+// start of a section whose start the outline already fixes.
+func validateSectionInput(in ReadInput) error {
+	if err := validateSectionCursor(in); err != nil {
+		return err
+	}
+	if strings.TrimSpace(in.Section) == "" {
+		return nil
+	}
+	switch {
+	case in.Outline:
+		return errors.New("section cannot be combined with outline: list the entries with outline first, then read one with section")
+	case strings.TrimSpace(in.Find) != "":
+		return errors.New("section cannot be combined with find: search the whole document with find, or read the section without it")
+	case in.StartPage > 0 || in.Offset > 0:
+		return errors.New("section fixes where reading starts, so omit start_page and offset: continue a long section with the cursor")
+	}
+	return nil
+}
+
+// validateSectionCursor refuses a cursor sent to a mode it was not issued by.
+// A cursor from a section read carries the section, so sent with outline or
+// find it would be read as another mode's position. A cursor from any other
+// read, sent with section, would resume the section at a position nobody
+// computed for it. A malformed cursor is left to the branch that decodes it,
+// which reports it as invalid.
+func validateSectionCursor(in ReadInput) error {
+	if !wellFormedCursor(in.Cursor) {
+		return nil
+	}
+	fromSection := sectionCursor(in.Cursor) > 0
+	switch {
+	case fromSection && in.Outline:
+		return errors.New("this cursor continues a section read and cannot be used with outline: drop the cursor")
+	case fromSection && strings.TrimSpace(in.Find) != "":
+		return errors.New("this cursor continues a section read and cannot be used with find: drop the cursor to search")
+	case !fromSection && strings.TrimSpace(in.Section) != "":
+		return errors.New("this cursor did not come from a section read: drop section to continue that read, or drop the cursor to start the section")
+	}
+	return nil
+}
+
+// noOutlineForSection answers a section read of a document with no table of
+// contents, naming the arguments that can still reach a part of it.
+const noOutlineForSection = "this document has no table of contents, so section cannot address part of it: " +
+	"read by page with start_page (PDF) or by character with offset (EPUB/TXT), or search it with find"
+
+// parseSectionRef reads the section argument: digits only are an entry number,
+// anything else a title. A number is never also tried as a title, so the same
+// value always means the same entry, even in a book whose chapters are titled
+// "1", "2" and so on: outline mode shows every entry's number beside its title.
+func parseSectionRef(s string) (extract.SectionRef, error) {
+	s = strings.TrimSpace(s)
+	if strings.Trim(s, "0123456789") != "" {
+		return extract.SectionRef{Title: s}, nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 1 {
+		return extract.SectionRef{}, errors.New("section number must be an entry number from outline mode, starting at 1")
+	}
+	return extract.SectionRef{Index: n}, nil
+}
+
+// wellFormedCursor reports whether s is a cursor this server could have
+// issued. An absent cursor is not one.
+func wellFormedCursor(s string) bool {
+	if s == "" {
+		return false
+	}
+	_, err := decodeCursor(s)
+	return err == nil
+}
+
+// sectionCursor returns the section a cursor was issued for, or 0 when the
+// cursor is absent, malformed or from another mode. A malformed cursor is
+// reported by the branch that decodes it for its position.
+func sectionCursor(s string) int {
+	if s == "" {
+		return 0
+	}
+	cur, err := decodeCursor(s)
+	if err != nil {
+		return 0
+	}
+	return cur.Sec
 }
 
 // readReq builds the extraction request for a read call. When a cursor is set it
@@ -166,11 +265,13 @@ func readReq(in ReadInput, cfg *config.Config) (extract.Req, error) {
 // readCursor is the tool-level opaque cursor payload, carrying both the
 // sequential resume position (Page/Char, from extract) and the find-mode resume
 // index (Match). One field or the other is set depending on the read mode; the
-// unused fields stay zero.
+// unused fields stay zero. Sec is the outline entry a section read was reading,
+// so the cursor alone continues the section and still stops at its end.
 type readCursor struct {
 	Page  int `json:"page,omitempty"`
 	Char  int `json:"char,omitempty"`
 	Match int `json:"match,omitempty"`
+	Sec   int `json:"sec,omitempty"`
 }
 
 // decodeCursor decodes an opaque base64(JSON) cursor into a readCursor.
@@ -256,8 +357,10 @@ func readNextSteps(out ReadOutput) []string {
 	switch {
 	case !out.Extractable:
 		steps = append(steps, notExtractableSteps(out)...)
+	case out.Section != nil:
+		steps = append(steps, sectionSteps(out)...)
 	case out.OutlineRequested && len(out.Outline) > 0:
-		steps = append(steps, "Jump to a section by calling read again with start_page set to an entry's page (PDF) — or read sequentially.")
+		steps = append(steps, "Read one entry by calling read again with section set to its number. It stops where the next entry at the same or a higher level starts. Or read sequentially.")
 		if out.OutlineTotal > len(out.Outline) {
 			steps = append(steps, fmt.Sprintf(
 				"Showing %d of %d entries: max_depth hid the deeper levels. Raise max_depth or omit it for the full table of contents.",
@@ -276,6 +379,29 @@ func readNextSteps(out ReadOutput) []string {
 		steps = append(steps,
 			"No matches — try a different phrase, or read sequentially (omit find).",
 			"Report that the term was not found; do not quote passages that were not returned.")
+	}
+	return steps
+}
+
+// sectionSteps builds the guidance for a section read: how to continue while
+// the section has more, and that the section is over when it has not, so the
+// model does not page on into the next entry believing it is the same one. A
+// PDF section that ends on the page the next entry opens on says so, because
+// the bottom of that page is the next entry's text.
+func sectionSteps(out ReadOutput) []string {
+	sec := out.Section
+	if out.HasMore {
+		return []string{fmt.Sprintf(
+			"Call read again with the same md5/doi/path and cursor=%q for the rest of section %d.", out.Cursor, sec.Index,
+		)}
+	}
+	steps := []string{fmt.Sprintf(
+		"This is the end of section %d. Read another entry with section set to its number.", sec.Index,
+	)}
+	if sec.PageEnd > 0 && sec.PageEnd < out.TotalPages {
+		steps = append(steps, fmt.Sprintf(
+			"Page %d is where the next entry starts, so the text after this section's end on that page belongs to the next entry.", sec.PageEnd,
+		))
 	}
 	return steps
 }
@@ -444,10 +570,61 @@ func readSequential(ctx context.Context, mcpReq *mcp.CallToolRequest, c *libgen.
 	return out, nil
 }
 
+// sectionReq builds a section read's request: the entry to read and the
+// position to resume at. A cursor a section read issued names its own section
+// and wins over the section argument, the way a cursor wins over start_page and
+// offset, so a continuation can never drift into a different entry.
+func sectionReq(in ReadInput, cfg *config.Config) (extract.SectionRef, extract.Req, error) {
+	req, err := readReq(in, cfg)
+	if err != nil {
+		return extract.SectionRef{}, extract.Req{}, err
+	}
+	if sec := sectionCursor(in.Cursor); sec > 0 {
+		return extract.SectionRef{Index: sec}, req, nil
+	}
+	ref, err := parseSectionRef(in.Section)
+	return ref, req, err
+}
+
+// readSection runs the section branch: it reads one outline entry's text,
+// paginated like a sequential read but bounded by the section, and records the
+// section's extent on the result. A document with no outline is refused with
+// the arguments that can still reach part of it.
+func readSection(ctx context.Context, mcpReq *mcp.CallToolRequest, c *libgen.Client, cfg *config.Config, in ReadInput) (ReadOutput, error) {
+	ref, req, err := sectionReq(in, cfg)
+	if err != nil {
+		return ReadOutput{}, err
+	}
+	f, release, err := openReadFile(ctx, mcpReq, c, cfg, in)
+	if err != nil {
+		return ReadOutput{}, err
+	}
+	defer release()
+
+	sc, err := extract.Section(ctx, f, ref, req)
+	if errors.Is(err, extract.ErrNoOutline) {
+		return ReadOutput{}, errors.New(noOutlineForSection)
+	}
+	if err != nil {
+		return ReadOutput{}, err
+	}
+	out := chunkToOutput(sc.Chunk)
+	if sc.Extractable {
+		span := sc.Span
+		out.Section = &span
+	}
+	if out.HasMore {
+		out.Cursor = encodeCursor(readCursor{Page: sc.NextCursor.Page, Char: sc.NextCursor.Char, Sec: sc.Span.Index})
+	}
+	out.NextSteps = readNextSteps(out)
+	return out, nil
+}
+
 // readHandler builds the read tool handler. It validates the request, then
 // dispatches: when outline is set it returns the document's table of contents,
-// when find is set it returns in-document matches, otherwise it extracts one
-// paginated text chunk. All branches resolve the file (a local
+// when find is set it returns in-document matches, when section is set (or the
+// cursor came from a section read) it reads that outline entry, otherwise it
+// extracts one paginated text chunk. All branches resolve the file (a local
 // path or a server-side fetch) and lead with the UNTRUSTED guidance. A
 // not-extractable file is a normal result (extractable=false with a reason), not
 // an error. cfg supplies the default max_pages/max_chars applied when the caller
@@ -467,6 +644,8 @@ func readHandler(c *libgen.Client, cfg *config.Config) mcp.ToolHandlerFor[ReadIn
 			out, err = readOutline(ctx, mcpReq, c, cfg, in)
 		case strings.TrimSpace(in.Find) != "":
 			out, err = readFind(ctx, mcpReq, c, cfg, in)
+		case strings.TrimSpace(in.Section) != "" || sectionCursor(in.Cursor) > 0:
+			out, err = readSection(ctx, mcpReq, c, cfg, in)
 		default:
 			out, err = readSequential(ctx, mcpReq, c, cfg, in)
 		}
