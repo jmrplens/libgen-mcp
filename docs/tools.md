@@ -35,6 +35,8 @@ per-result download options, plus pagination metadata.
 | `page`             | int      | no       | Result page, starting at `1`. Default `1`.                                                                                                                                                                                                                                                                                                                               |
 | `order`            | string   | no       | Sort by: `id`, `time_added`, `title`, `author`, `year`, `size`.                                                                                                                                                                                                                                                                                                          |
 | `order_mode`       | string   | no       | Sort direction: `asc` or `desc`.                                                                                                                                                                                                                                                                                                                                         |
+| `year_from`        | int      | no       | Earliest publication year to keep, inclusive (1000 to 2100). Omit for no lower bound. See [Narrowing by year](#narrowing-by-year).                                                                                                                                                                                                                                       |
+| `year_to`          | int      | no       | Latest publication year to keep, inclusive (1000 to 2100). Omit for no upper bound. A `year_from` after `year_to` is refused.                                                                                                                                                                                                                                            |
 | `extra_sources`    | string   | no       | When to search beyond the Library Genesis catalog (Anna's Archive, arXiv, OpenAlex, Europe PMC, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC): `auto` consults them only when the catalog finds nothing or fails outright, `always` consults them on every search, `never` restricts the search to the catalog. Omit to use the server default (`auto`). |
 
 ### search output
@@ -51,6 +53,7 @@ per-result download options, plus pagination metadata.
 | `hint`             | string | Present only when `truncated` — advises refining the query (add author/year, use title-only columns, or narrow topics).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `has_more`         | bool   | `true` when this page is full (`len(results) >= results_per_page`), suggesting a next page may exist.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `mirror`           | string | The mirror base URL that served this search.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `year_filtered`    | int    | Present only when `year_from`/`year_to` left catalog records out of this page: how many, counting records outside the range and undated ones. It counts this page only. See [Narrowing by year](#narrowing-by-year).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `open_access`      | array  | Present only when open-access discovery ran and found something. See [Open-access discovery](#open-access-discovery).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 ### Pagination and truncation
@@ -64,11 +67,31 @@ search is `truncated` and `hint` explains how to narrow it, for example:
 
 Prefer refining a truncated query over deep paging: pages beyond `reachable` return nothing.
 
+### Narrowing by year
+
+`year_from` and `year_to` keep records published in that range, both ends included, and either
+can be left out to leave that side open. They apply differently on each side of the search:
+
+- **The Library Genesis catalog has no year filter.** The page is fetched as usual and then
+  filtered, so `total_files`, `reachable` and `has_more` still describe the unfiltered search,
+  and `year_filtered` says how many records on this page were left out, counting undated ones,
+  which nothing shows to be in range. A range can therefore empty a page that the next page
+  would partly fill.
+- **The searchers beyond the catalog take the range in their own query** wherever their API
+  can: arXiv (`submittedDate`), OpenAlex (`publication_year`), Europe PMC (`PUB_YEAR`),
+  Crossref (`from-pub-date`/`until-pub-date`), PubMed (`mindate`/`maxdate`), ERIC
+  (`publicationdateyear`) and OpenLibrary (`first_publish_year`). Their page is spent on
+  in-range records. dblp, Project Gutenberg and Anna's Archive cannot take one, so their hits
+  are filtered after they arrive. Gutenberg records carry no year at all, so a range leaves
+  none of them.
+
+Every result outside the range is dropped whichever side found it.
+
 ### Errors
 
 Invalid input is rejected before any network call: an empty `query`, an unknown `topic`,
-`search_in`, or `order`, a `results_per_page` other than 25/50/100, or an `order_mode` other
-than `asc`/`desc`. Connectivity and mirror problems surface as described in
+`search_in`, or `order`, a `results_per_page` other than 25/50/100, an `order_mode` other
+than `asc`/`desc`, or a year outside 1000 to 2100 or a `year_from` after `year_to`. Connectivity and mirror problems surface as described in
 [Troubleshooting](troubleshooting.md).
 
 ### Open-access discovery

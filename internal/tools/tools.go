@@ -96,6 +96,8 @@ type SearchInput struct {
 	Page           int      `json:"page,omitempty" jsonschema:"page number from 1 (default 1)"`
 	Order          string   `json:"order,omitempty" jsonschema:"a single value, not an array, to sort by: id time_added title author year or size"`
 	OrderMode      string   `json:"order_mode,omitempty" jsonschema:"a single value, not an array: asc or desc"`
+	YearFrom       int      `json:"year_from,omitempty" jsonschema:"earliest publication year to keep, inclusive. Omit for no lower bound"`
+	YearTo         int      `json:"year_to,omitempty" jsonschema:"latest publication year to keep, inclusive. Omit for no upper bound. The catalog has no year filter, so its page is filtered after it is fetched and year_filtered counts what was left out"`
 	ExtraSources   string   `json:"extra_sources,omitempty" jsonschema:"a single value, not an array: always also queries Anna's Archive, arXiv, OpenAlex, Europe PMC, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed and ERIC. auto (default) reaches them only when the catalog finds nothing or fails, and never stays on the catalog. Set always for open-access, public-domain, preprint or grey-literature requests. A server set to never ignores this argument"`
 }
 
@@ -111,6 +113,7 @@ type SearchOutput struct {
 	Truncated      bool                        `json:"truncated" jsonschema:"true when some matches cannot be paged to"`
 	Hint           string                      `json:"hint,omitempty" jsonschema:"how to refine the query, and only when truncated"`
 	HasMore        bool                        `json:"has_more" jsonschema:"true when this page is full, so a next page may exist"`
+	YearFiltered   int                         `json:"year_filtered,omitempty" jsonschema:"catalog records on this page left out by year_from or year_to, being outside the range or undated. Counts this page only, never the catalog total"`
 	Mirror         string                      `json:"mirror" jsonschema:"mirror base URL that served this search"`
 	OpenAccess     []discovery.DiscoveryResult `json:"open_access,omitempty" jsonschema:"beyond-catalog hits, labeled by origin. Only open_access true is free to read, and the publisher may still refuse a fetch. dblp and pubmed are records to cite, not files. Pass the doi to read/download rather than the UNVERIFIED crossref pdf_url. With no doi (arXiv, ERIC, gutenberg) fetch pdf_url/full_text_url yourself, and an isbn goes to download"`
 }
@@ -579,6 +582,10 @@ func searchInputSchema() *jsonschema.Schema {
 			rpp.Enum[i] = v
 		}
 	}
+	// The year bounds come from internal/discovery, where YearRange.Validate
+	// enforces them, so the schema and the refusal cannot disagree.
+	setIntegerRange(schema, "year_from", discovery.MinYear, discovery.MaxYear)
+	setIntegerRange(schema, "year_to", discovery.MinYear, discovery.MaxYear)
 	return withExample(schema, searchExample)
 }
 
@@ -593,6 +600,17 @@ func setStringEnum(schema *jsonschema.Schema, name string, values []string) {
 	for i, v := range values {
 		prop.Enum[i] = v
 	}
+}
+
+// setIntegerRange pins an inclusive minimum and maximum onto an integer property,
+// leaving the property untouched when the schema does not carry it.
+func setIntegerRange(schema *jsonschema.Schema, name string, minimum, maximum int) {
+	prop := schema.Properties[name]
+	if prop == nil {
+		return
+	}
+	lo, hi := float64(minimum), float64(maximum)
+	prop.Minimum, prop.Maximum = &lo, &hi
 }
 
 // setItemsStringEnum pins an enum onto an array property's items, so the
@@ -877,26 +895,22 @@ func resultsHaveLinks(results []libgen.Result) bool {
 // policy is the DEPLOYMENT's extra_sources setting, not the mode this call ran
 // under, because the two answer different questions: the mode says whether the
 // extra searchers ran, the policy says whether they ever can.
+//
+// An empty catalog list with open_access hits is not an empty search: escalation
+// runs precisely when the catalog finds nothing, so that is the shape every rescue
+// takes, and it is answered with the open-access guidance rather than "no matches".
 func searchNextSteps(out SearchOutput, extrasRan bool, policy config.ExtraSourcesMode) []string {
-	if len(out.Results) == 0 {
-		steps := []string{
-			"No matches. Broaden the query text, drop search_in field filters, or try other topics: " +
-				strings.Join(libgen.TopicNames(), ", ") + ".",
-			emptySearchEscalationStep(extrasRan, policy),
-		}
-		return append(steps,
-			"Tell the user nothing was found; do not present titles, authors or download links that were not returned.")
+	if len(out.Results) == 0 && len(out.OpenAccess) == 0 {
+		return emptySearchSteps(out, extrasRan, policy)
 	}
-	first := out.Results[0]
 	steps := []string{}
-	if first.MD5 != "" {
-		steps = append(steps,
-			fmt.Sprintf("For full metadata on a result, call get_details with its md5, e.g. {\"md5\":%q}.", first.MD5),
-			downloadStep(first))
+	if step := yearFilterStep(out); step != "" {
+		steps = append(steps, step)
 	}
-	if first.DOI != "" {
-		steps = append(steps,
-			fmt.Sprintf("To fetch an article, call download with its doi, e.g. {\"doi\":%q}.", first.DOI))
+	if len(out.Results) > 0 {
+		steps = append(steps, firstResultSteps(out.Results[0])...)
+	} else {
+		steps = append(steps, noCatalogMatchStep(out))
 	}
 	if step := openAccessStep(out.OpenAccess, extrasRan); step != "" {
 		steps = append(steps, step)
@@ -910,6 +924,78 @@ func searchNextSteps(out SearchOutput, extrasRan bool, policy config.ExtraSource
 		steps = append(steps, fmt.Sprintf("This page is full; request page %d for more results.", out.Page+1))
 	}
 	return steps
+}
+
+// emptySearchSteps is the guidance for a search that returned nothing at all. When
+// the year range is what emptied the catalog page, that is said first and the
+// "no matches" advice is left out, because there were matches, outside the range.
+func emptySearchSteps(out SearchOutput, extrasRan bool, policy config.ExtraSourcesMode) []string {
+	steps := []string{}
+	if step := yearFilterStep(out); step != "" {
+		steps = append(steps, step)
+	} else {
+		steps = append(steps, "No matches. Broaden the query text, drop search_in field filters, or try other topics: "+
+			strings.Join(libgen.TopicNames(), ", ")+".")
+	}
+	return append(steps, emptySearchEscalationStep(extrasRan, policy), emptySearchVerdictStep(out))
+}
+
+// noCatalogMatchStep introduces an open_access list the catalog contributed
+// nothing to. When the year range is what emptied the catalog page, it says the
+// catalog had no match in the range, since it did have matches outside it.
+func noCatalogMatchStep(out SearchOutput) string {
+	if out.YearFiltered > 0 {
+		return "The Library Genesis catalog had no match in the year range on this page. Every hit below is in " +
+			"open_access, from the searchers beyond the catalog."
+	}
+	return "The Library Genesis catalog had no match. Every hit below is in open_access, " +
+		"from the searchers beyond the catalog."
+}
+
+// emptySearchVerdictStep is what to tell the user about a search that returned
+// nothing. A page the year range emptied is not proof that nothing exists in the
+// range: when a next page may exist, the step points at it rather than at "nothing
+// was found".
+func emptySearchVerdictStep(out SearchOutput) string {
+	if out.YearFiltered > 0 && out.HasMore {
+		return fmt.Sprintf("Nothing on this page falls in the year range, but the catalog has more pages: request page %d "+
+			"before telling the user nothing was found. Do not present titles, authors or download links that were not returned.",
+			out.Page+1)
+	}
+	return "Tell the user nothing was found; do not present titles, authors or download links that were not returned."
+}
+
+// firstResultSteps are the ready-to-run follow-ups for the first catalog result:
+// get_details and download by its md5, or download by its doi.
+func firstResultSteps(first libgen.Result) []string {
+	var steps []string
+	if first.MD5 != "" {
+		steps = append(steps,
+			fmt.Sprintf("For full metadata on a result, call get_details with its md5, e.g. {\"md5\":%q}.", first.MD5),
+			downloadStep(first))
+	}
+	if first.DOI != "" {
+		steps = append(steps,
+			fmt.Sprintf("To fetch an article, call download with its doi, e.g. {\"doi\":%q}.", first.DOI))
+	}
+	return steps
+}
+
+// yearFilterStep says what the year range did to the catalog page, or "" when it
+// left nothing out. The counts the catalog reports are the unfiltered ones and
+// stay so, so the step says the filter covers this page only and where the rest
+// of the range is to be found.
+func yearFilterStep(out SearchOutput) string {
+	if out.YearFiltered == 0 {
+		return ""
+	}
+	step := fmt.Sprintf("year_from/year_to left out %d catalog records on this page, being outside the range or undated. "+
+		"The catalog cannot filter by year, so total_files and has_more describe the unfiltered search, "+
+		"never the range.", out.YearFiltered)
+	if out.HasMore {
+		step += fmt.Sprintf(" Request page %d for more records to filter, or add the year to the query text.", out.Page+1)
+	}
+	return step
 }
 
 // emptySearchEscalationStep says what looking beyond the catalog can still do for
@@ -936,8 +1022,8 @@ func emptySearchEscalationStep(extrasRan bool, policy config.ExtraSourcesMode) s
 			"a different query or topic if one is plausible."
 	default:
 		return "The search did not look beyond the Library Genesis catalog. Retry with " +
-			"extra_sources=\"always\" to also search Anna's Archive, arXiv, Crossref, OpenLibrary, " +
-			"Project Gutenberg, dblp, PubMed and ERIC."
+			"extra_sources=\"always\" to also search Anna's Archive, arXiv, OpenAlex, Europe PMC, Crossref, " +
+			"OpenLibrary, Project Gutenberg, dblp, PubMed and ERIC."
 	}
 }
 
@@ -1221,35 +1307,21 @@ func endedByActionDeadline(ctx context.Context) bool {
 func searchHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery.MirrorLister) mcp.ToolHandlerFor[SearchInput, SearchOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in SearchInput) (*mcp.CallToolResult, SearchOutput, error) {
 		var zero SearchOutput
-		mode, err := resolveExtraMode(in, cfg)
+		mode, params, q, err := prepareSearch(in, cfg)
 		if err != nil {
 			return nil, zero, err
 		}
-		params := libgen.SearchParams{
-			Query:          in.Query,
-			Topics:         in.Topics,
-			SearchIn:       in.SearchIn,
-			ResultsPerPage: in.ResultsPerPage,
-			Page:           in.Page,
-			Order:          in.Order,
-			OrderMode:      in.OrderMode,
-		}
-		// Validate up front so an input error (bad topic, bad page) is returned
-		// immediately without escalating — escalation is for catalog outages and
-		// misses, not for caller mistakes.
-		if verr := params.Validate(); verr != nil {
-			return nil, zero, verr
-		}
-		extras := startExtras(ctx, mode, in.Query, cfg, annasMirrors)
+		extras := startExtras(ctx, mode, q, cfg, annasMirrors)
 		defer extras.wait()
 		page, mirror, searchErr := c.Search(ctx, params)
 
 		var out SearchOutput
 		if searchErr == nil {
 			out = buildSearchOutput(page, mirror, in)
+			out.Results, out.YearFiltered = keepCatalogYears(out.Results, q.years)
 		}
 
-		hits, extrasRan := extras.collect(ctx, mode, in.Query, cfg, annasMirrors, len(out.Results), searchErr)
+		hits, extrasRan := extras.collect(ctx, mode, q, cfg, annasMirrors, len(out.Results), searchErr)
 		mergeExtraHits(&out, hits)
 		if searchErr != nil && len(out.Results) == 0 && len(out.OpenAccess) == 0 {
 			return nil, zero, searchErr
@@ -1258,6 +1330,55 @@ func searchHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery.
 		out.NextSteps = searchNextSteps(out, extrasRan, cfg.ExtraSources)
 		return markdownResult(renderSearchMarkdown(out)), out, nil
 	}
+}
+
+// extraQuery is what the extra searchers are asked: the caller's text and the
+// publication years it is bounded to.
+type extraQuery struct {
+	text  string
+	years discovery.YearRange
+}
+
+// prepareSearch resolves the extra-sources mode and validates every argument
+// before anything is fetched, so an input error (a bad topic, a bad page, a year
+// range that ends before it starts) is returned at once and never escalates:
+// escalation is for catalog outages and misses, not for caller mistakes.
+func prepareSearch(in SearchInput, cfg *config.Config) (config.ExtraSourcesMode, libgen.SearchParams, extraQuery, error) {
+	params := libgen.SearchParams{
+		Query:          in.Query,
+		Topics:         in.Topics,
+		SearchIn:       in.SearchIn,
+		ResultsPerPage: in.ResultsPerPage,
+		Page:           in.Page,
+		Order:          in.Order,
+		OrderMode:      in.OrderMode,
+	}
+	q := extraQuery{text: in.Query, years: discovery.YearRange{From: in.YearFrom, To: in.YearTo}}
+	mode, err := resolveExtraMode(in, cfg)
+	if err == nil {
+		err = params.Validate()
+	}
+	if err == nil {
+		err = q.years.Validate()
+	}
+	return mode, params, q, err
+}
+
+// keepCatalogYears filters a catalog page to the year range and reports how many
+// records it left out. The catalog's search takes no range, so this is the only
+// place one applies to it, and it can only see the page in hand: the count is of
+// this page, and an undated record is left out because nothing shows it belongs.
+func keepCatalogYears(results []libgen.Result, years discovery.YearRange) (kept []libgen.Result, dropped int) {
+	if years.IsZero() {
+		return results, 0
+	}
+	kept = make([]libgen.Result, 0, len(results))
+	for _, r := range results {
+		if years.Admits(r.Year, false) {
+			kept = append(kept, r)
+		}
+	}
+	return kept, len(results) - len(kept)
 }
 
 // extraSearch carries an in-flight forced search of the extra sources. The forced
@@ -1273,11 +1394,11 @@ type extraSearch struct {
 // startExtras kicks off the extra searchers when the mode forces them, and returns
 // an idle handle otherwise. An empty query never starts anything: there is nothing
 // to ask the searchers.
-func startExtras(ctx context.Context, mode config.ExtraSourcesMode, query string,
+func startExtras(ctx context.Context, mode config.ExtraSourcesMode, q extraQuery,
 	cfg *config.Config, annasMirrors discovery.MirrorLister,
 ) *extraSearch {
 	e := &extraSearch{}
-	if !forcedEscalation(mode) || strings.TrimSpace(query) == "" {
+	if !forcedEscalation(mode) || strings.TrimSpace(q.text) == "" {
 		return e
 	}
 	e.started = true
@@ -1290,7 +1411,7 @@ func startExtras(ctx context.Context, mode config.ExtraSourcesMode, query string
 				slog.Error("forced extra search panicked", "panic", r, "stack", debug.Stack())
 			}
 		}()
-		e.hits = federateExtras(ctx, query, cfg, annasMirrors)
+		e.hits = federateExtras(ctx, q, cfg, annasMirrors)
 	})
 	return e
 }
@@ -1304,24 +1425,25 @@ func (e *extraSearch) wait() { e.wg.Wait() }
 // whether the extra searchers ran at all. That second answer is not derivable from
 // an empty hit list: extras that ran and found nothing is a different thing to
 // report than extras that were never asked.
-func (e *extraSearch) collect(ctx context.Context, mode config.ExtraSourcesMode, query string,
+func (e *extraSearch) collect(ctx context.Context, mode config.ExtraSourcesMode, q extraQuery,
 	cfg *config.Config, annasMirrors discovery.MirrorLister, catalogHits int, catalogErr error,
 ) (hits []discovery.DiscoveryResult, ran bool) {
 	e.wait()
 	if e.started {
 		return e.hits, true
 	}
-	if shouldEscalate(mode, catalogHits, catalogErr) && strings.TrimSpace(query) != "" {
-		return federateExtras(ctx, query, cfg, annasMirrors), true
+	if shouldEscalate(mode, catalogHits, catalogErr) && strings.TrimSpace(q.text) != "" {
+		return federateExtras(ctx, q, cfg, annasMirrors), true
 	}
 	return nil, false
 }
 
-// federateExtras runs every extra searcher concurrently for one query.
-func federateExtras(ctx context.Context, query string, cfg *config.Config,
+// federateExtras runs every extra searcher concurrently for one query, bounded to
+// its year range.
+func federateExtras(ctx context.Context, q extraQuery, cfg *config.Config,
 	annasMirrors discovery.MirrorLister,
 ) []discovery.DiscoveryResult {
-	return discovery.Federate(ctx, query, extraLimit,
+	return discovery.FederateYears(ctx, q.text, extraLimit, q.years,
 		discovery.ExtraProviders(discovery.Settings{
 			Email:        cfg.UnpaywallEmail,
 			OpenAlexKey:  cfg.OpenAlexKey,

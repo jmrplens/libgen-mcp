@@ -100,6 +100,13 @@ func (p *OpenLibraryProvider) Name() string { return "openlibrary" }
 // resolver never sinks a federated search. Only a context cancellation or deadline
 // propagates as an error.
 func (p *OpenLibraryProvider) Search(ctx context.Context, query string, limit int) ([]DiscoveryResult, error) {
+	return p.SearchYears(ctx, query, limit, YearRange{})
+}
+
+// SearchYears is Search bounded to the years in years, which OpenLibrary's search
+// takes as a first_publish_year range in the query, the same field the result's
+// year is read from. Its contract is Search's.
+func (p *OpenLibraryProvider) SearchYears(ctx context.Context, query string, limit int, years YearRange) ([]DiscoveryResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 
@@ -107,7 +114,7 @@ func (p *OpenLibraryProvider) Search(ctx context.Context, query string, limit in
 		return nil, ctx.Err()
 	}
 
-	rawURL := buildOpenLibraryURL(query, limit)
+	rawURL := buildOpenLibraryURL(query, limit, years)
 
 	status, body, err := boundedGetUA(ctx, p.client, rawURL, p.userAgent)
 	if err != nil {
@@ -126,8 +133,12 @@ func (p *OpenLibraryProvider) Search(ctx context.Context, query string, limit in
 
 // buildOpenLibraryURL assembles the OpenLibrary search request URL, escaping the
 // query and trimming the response with the fields projection.
-func buildOpenLibraryURL(query string, limit int) string {
+func buildOpenLibraryURL(query string, limit int, years YearRange) string {
 	params := url.Values{}
+	if !years.IsZero() {
+		from, to := years.Bounds()
+		query = "(" + query + ") first_publish_year:[" + strconv.Itoa(from) + " TO " + strconv.Itoa(to) + "]"
+	}
 	params.Set("q", query)
 	params.Set("limit", strconv.Itoa(clampOpenLibraryLimit(limit)))
 	params.Set("fields", openLibraryFields)

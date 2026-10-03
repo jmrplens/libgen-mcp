@@ -84,6 +84,12 @@ func (p *CrossrefProvider) Name() string { return "crossref" }
 // provider never sinks a federated search. Only a context cancellation or deadline
 // propagates as an error.
 func (p *CrossrefProvider) Search(ctx context.Context, query string, limit int) ([]DiscoveryResult, error) {
+	return p.SearchYears(ctx, query, limit, YearRange{})
+}
+
+// SearchYears is Search bounded to the publication years in years, which Crossref
+// takes as from-pub-date and until-pub-date filters. Its contract is Search's.
+func (p *CrossrefProvider) SearchYears(ctx context.Context, query string, limit int, years YearRange) ([]DiscoveryResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 
@@ -91,7 +97,7 @@ func (p *CrossrefProvider) Search(ctx context.Context, query string, limit int) 
 		return nil, ctx.Err()
 	}
 
-	rawURL := p.buildURL(query, limit)
+	rawURL := p.buildURL(query, limit, years)
 
 	status, body, err := boundedGet(ctx, p.client, rawURL)
 	if err != nil {
@@ -110,7 +116,10 @@ func (p *CrossrefProvider) Search(ctx context.Context, query string, limit int) 
 
 // buildURL assembles the Crossref works-search request URL, trimming the response
 // with select= and appending the polite-pool mailto when a contact email is set.
-func (p *CrossrefProvider) buildURL(query string, limit int) string {
+// A year range becomes a filter on whichever sides it bounds: Crossref's
+// pub-date filters compare the earliest published date of the work, and an
+// open side is left out rather than filled.
+func (p *CrossrefProvider) buildURL(query string, limit int, years YearRange) string {
 	params := url.Values{}
 	// query.bibliographic is Crossref's citation-oriented field query: it scores
 	// title/author/container/year together, giving far better hits for a known
@@ -121,10 +130,26 @@ func (p *CrossrefProvider) buildURL(query string, limit int) string {
 	params.Set("query.bibliographic", query)
 	params.Set("rows", strconv.Itoa(clampCrossrefLimit(limit)))
 	params.Set("select", "DOI,title,author,issued,license,link")
+	if filter := crossrefYearFilter(years); filter != "" {
+		params.Set("filter", filter)
+	}
 	if p.email != "" {
 		params.Set("mailto", p.email)
 	}
 	return crossrefBase + "/works?" + params.Encode()
+}
+
+// crossrefYearFilter renders a year range as Crossref's filter parameter, or ""
+// for the zero range.
+func crossrefYearFilter(years YearRange) string {
+	var parts []string
+	if years.From != 0 {
+		parts = append(parts, "from-pub-date:"+strconv.Itoa(years.From))
+	}
+	if years.To != 0 {
+		parts = append(parts, "until-pub-date:"+strconv.Itoa(years.To))
+	}
+	return strings.Join(parts, ",")
 }
 
 // clampCrossrefLimit maps a caller-supplied limit onto Crossref's accepted range,

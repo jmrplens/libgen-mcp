@@ -157,6 +157,14 @@ Every result is returned on two channels: the structured JSON output documented 
 		Sort by: `id`, `time_added`, `title`, `author`, `year`, `size`.
 	</Fragment>
 	<Fragment slot="order_mode">Sort direction: `asc` or `desc`.</Fragment>
+	<Fragment slot="year_from">
+		Earliest publication year to keep, inclusive (1000 to 2100). Omit for no
+		lower bound. See [Narrowing by year](#narrowing-by-year).
+	</Fragment>
+	<Fragment slot="year_to">
+		Latest publication year to keep, inclusive (1000 to 2100). Omit for no upper
+		bound. A `year_from` after `year_to` is refused.
+	</Fragment>
 	<Fragment slot="extra_sources">
 		When to search beyond the Library Genesis catalog (Anna's Archive, arXiv,
 		OpenAlex, Europe PMC, Crossref, OpenLibrary, Project Gutenberg, dblp,
@@ -179,6 +187,7 @@ Every result is returned on two channels: the structured JSON output documented 
 	<Fragment slot="hint">Present only when `truncated` — advises refining the query (add author/year, use title-only columns, or narrow topics).</Fragment>
 	<Fragment slot="has_more">`true` when this page is full (`len(results) >= results_per_page`), suggesting a next page may exist.</Fragment>
 	<Fragment slot="mirror">The mirror base URL that served this search.</Fragment>
+	<Fragment slot="year_filtered">Present only when `year_from`/`year_to` left catalog records out of this page: how many, counting records outside the range and undated ones. It counts this page only. See [Narrowing by year](#narrowing-by-year).</Fragment>
 	<Fragment slot="open_access">Present only when open-access discovery ran and found something. See [Open-access discovery](#open-access-discovery).</Fragment>
 </SchemaTable>
 
@@ -190,9 +199,18 @@ Library Genesis mirrors advertise a full match count (`total_files`) but only se
 
 Prefer refining a truncated query over deep paging: pages beyond `reachable` return nothing.
 
+### Narrowing by year
+
+`year_from` and `year_to` keep records published in that range, both ends included, and either can be left out to leave that side open. They apply differently on each side of the search:
+
+- **The Library Genesis catalog has no year filter.** The page is fetched as usual and then filtered, so `total_files`, `reachable` and `has_more` still describe the unfiltered search, and `year_filtered` says how many records on this page were left out, counting undated ones, which nothing shows to be in range. A range can therefore empty a page that the next page would partly fill.
+- **The searchers beyond the catalog take the range in their own query** wherever their API can: arXiv (`submittedDate`), OpenAlex (`publication_year`), Europe PMC (`PUB_YEAR`), Crossref (`from-pub-date`/`until-pub-date`), PubMed (`mindate`/`maxdate`), ERIC (`publicationdateyear`) and OpenLibrary (`first_publish_year`). Their page is spent on in-range records. dblp, Project Gutenberg and Anna's Archive cannot take one, so their hits are filtered after they arrive. Gutenberg records carry no year at all, so a range leaves none of them.
+
+Every result outside the range is dropped whichever side found it.
+
 ### Errors
 
-Invalid input is rejected before any network call: an empty `query`, an unknown `topic`, `search_in`, or `order`, a `results_per_page` other than 25/50/100, or an `order_mode` other than `asc`/`desc`. Connectivity and mirror problems surface as described in [Troubleshooting](/libgen-mcp/troubleshooting/).
+Invalid input is rejected before any network call: an empty `query`, an unknown `topic`, `search_in`, or `order`, a `results_per_page` other than 25/50/100, an `order_mode` other than `asc`/`desc`, or a year outside 1000 to 2100 or a `year_from` after `year_to`. Connectivity and mirror problems surface as described in [Troubleshooting](/libgen-mcp/troubleshooting/).
 
 ### Open-access discovery
 

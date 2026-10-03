@@ -51,13 +51,20 @@ func (p *EuropePMCProvider) Name() string { return "europepmc" }
 // to an empty result with no error. Only a context cancellation or deadline
 // propagates.
 func (p *EuropePMCProvider) Search(ctx context.Context, query string, limit int) ([]DiscoveryResult, error) {
+	return p.SearchYears(ctx, query, limit, YearRange{})
+}
+
+// SearchYears is Search bounded to the publication years in years, which Europe
+// PMC takes as a PUB_YEAR range clause ANDed to the query. Its contract is
+// Search's.
+func (p *EuropePMCProvider) SearchYears(ctx context.Context, query string, limit int, years YearRange) ([]DiscoveryResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 
 	if err := p.limiter.Wait(ctx); err != nil {
 		return nil, ctx.Err()
 	}
-	status, body, err := boundedGet(ctx, p.client, europePMCSearchURL(query, limit))
+	status, body, err := boundedGet(ctx, p.client, europePMCSearchURL(query, limit, years))
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -73,8 +80,12 @@ func (p *EuropePMCProvider) Search(ctx context.Context, query string, limit int)
 // europePMCSearchURL assembles the search request. resultType=lite is the
 // projection that still carries the three availability flags, the PMCID and the
 // DOI, which is everything mapped here.
-func europePMCSearchURL(query string, limit int) string {
+func europePMCSearchURL(query string, limit int, years YearRange) string {
 	params := url.Values{}
+	if !years.IsZero() {
+		from, to := years.Bounds()
+		query = "(" + query + ") AND PUB_YEAR:[" + strconv.Itoa(from) + " TO " + strconv.Itoa(to) + "]"
+	}
 	params.Set("query", query)
 	params.Set("format", "json")
 	params.Set("resultType", "lite")
