@@ -16,6 +16,7 @@ func TestStripControlBytes_RemovesWhatARendererHides(t *testing.T) {
 	}{
 		{name: "plain text is untouched", in: "a plain title", want: "a plain title"},
 		{name: "a NUL is dropped", in: "java\x00script:alert(1)", want: "javascript:alert(1)"},
+		{name: "a control byte that opens the value is dropped", in: "\x00javascript:alert(1)", want: "javascript:alert(1)"},
 		{name: "a bell is dropped", in: "ti\atle", want: "title"},
 		{name: "DEL is dropped", in: "ti\x7ftle", want: "title"},
 		{name: "tab, newline and CR survive", in: "a\tb\nc\rd", want: "a\tb\nc\rd"},
