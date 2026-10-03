@@ -3,12 +3,17 @@
 #
 # Assembles an MCPB bundle directory from the checked-in manifest
 # (mcpb/manifest.json), the 512x512 icon (mcpb/icon.png), the Linux launcher
-# (mcpb/linux/launch.sh) and the release binaries produced by GoReleaser, then
-# packs it — a .mcpb is a zip with manifest.json at its root:
+# (mcpb/linux/launch.sh), the repository's LICENSE, the release binaries
+# produced by GoReleaser and <dist-dir>/THIRD_PARTY_NOTICES, the license,
+# notice and patent texts of what those binaries link, which GoReleaser
+# generates beside them (cmd/gen_third_party_notices), then packs it — a .mcpb
+# is a zip with manifest.json at its root:
 #
 #   bundle/
 #   ├── manifest.json                (version stamped to <version>)
 #   ├── icon.png
+#   ├── LICENSE
+#   ├── THIRD_PARTY_NOTICES
 #   └── server/
 #       ├── libgen-mcp               (darwin universal: arm64 + amd64)
 #       ├── libgen-mcp.exe           (windows amd64)
@@ -50,13 +55,28 @@ trap 'rm -f "$OUTPUT"' EXIT
 MANIFEST="mcpb/manifest.json"
 ICON="mcpb/icon.png"
 LAUNCHER="mcpb/linux/launch.sh"
+# The licence travels with the binaries it covers: a bundle is a redistribution
+# of the server, and MIT asks for its notice to accompany every copy.
+LICENSE_FILE="LICENSE"
+# The notices of the modules those binaries link travel with them for the same
+# reason, and are generated with the binaries rather than kept here.
+NOTICES_FILE="$DIST_DIR/THIRD_PARTY_NOTICES"
+NOTICES_HEADER="Third-party notices for libgen-mcp"
 
-for f in "$MANIFEST" "$ICON" "$LAUNCHER"; do
+for f in "$MANIFEST" "$ICON" "$LAUNCHER" "$LICENSE_FILE"; do
   if [[ ! -f "$f" ]]; then
     echo "ERROR: $f not found (run from the repository root)" >&2
     exit 1
   fi
 done
+if [[ ! -f "$NOTICES_FILE" ]]; then
+  echo "ERROR: $NOTICES_FILE not found: GoReleaser writes it beside the release binaries (cmd/gen_third_party_notices)" >&2
+  exit 1
+fi
+if [[ "$(head -n 1 "$NOTICES_FILE")" != "$NOTICES_HEADER" ]]; then
+  echo "ERROR: $NOTICES_FILE does not open with '$NOTICES_HEADER', so it is not what cmd/gen_third_party_notices writes" >&2
+  exit 1
+fi
 
 for tool in jq zip unzip; do
   if ! command -v "$tool" &> /dev/null; then
@@ -101,6 +121,8 @@ LINUX_ARM64_BIN=$(find_binary "*linux_arm64*" "libgen-mcp")
 ENTRIES=(
   manifest.json
   icon.png
+  LICENSE
+  THIRD_PARTY_NOTICES
   server/libgen-mcp
   server/libgen-mcp.exe
   server/linux/launch.sh
@@ -123,6 +145,8 @@ mkdir -p "$BUNDLE_DIR/server/linux"
 
 jq --arg v "$VERSION" '.version = $v' "$MANIFEST" > "$BUNDLE_DIR/manifest.json"
 cp "$ICON" "$BUNDLE_DIR/icon.png"
+cp "$LICENSE_FILE" "$BUNDLE_DIR/LICENSE"
+cp "$NOTICES_FILE" "$BUNDLE_DIR/THIRD_PARTY_NOTICES"
 cp "$DARWIN_BIN" "$BUNDLE_DIR/server/libgen-mcp"
 cp "$WINDOWS_BIN" "$BUNDLE_DIR/server/libgen-mcp.exe"
 cp "$LAUNCHER" "$BUNDLE_DIR/server/linux/launch.sh"

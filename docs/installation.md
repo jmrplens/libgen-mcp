@@ -395,6 +395,14 @@ gh attestation verify libgen-mcp-linux-amd64 -R jmrplens/libgen-mcp \
 to the release you downloaded. Every `gh attestation verify` on this page takes
 the first, and the second wherever you know the version.
 
+**Licences.** The binary links third-party modules whose licences ask for their
+texts to travel with it. Every release ships them as `THIRD_PARTY_NOTICES`,
+listed in the signed `checksums.txt` like the binaries. The npm, PyPI and NuGet
+packages, the Claude Desktop bundle, the image (under
+`/usr/share/licenses/libgen-mcp`) and the Homebrew formula carry it with
+`LICENSE`; a binary downloaded on its own, or through winget, does not, and that
+release asset is where its notices are.
+
 **Upgrade.** Download the new asset over the old one. Run `libgen-mcp
 --shutdown` first if a client already has one running, or the old process keeps
 its slots and its listener.

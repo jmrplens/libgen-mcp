@@ -279,8 +279,9 @@ jobs:
       # nothing here answered it at all.
       #
       # `subject-checksums` keys the claim to the exact asset names in
-      # checksums.txt, so the binaries and the seven SBOMs are covered in one
-      # step and a name that is not in that file cannot be smuggled in. The
+      # checksums.txt, so the binaries, the seven SBOMs and THIRD_PARTY_NOTICES
+      # are covered in one step and a name that is not in that file cannot be
+      # smuggled in. The
       # .mcpb needs its own step: it is built after GoReleaser, so appending it
       # to checksums.txt would invalidate the signature over that file — the
       # same reason the stamper hashes the bundle itself rather than reading it
@@ -299,8 +300,9 @@ jobs:
         with:
           subject-path: dist/libgen-mcp.mcpb
 
-      # Every asset — binaries, checksums.txt and its signature, the SBOMs and
-      # the .mcpb above — is attached before the release becomes visible, so no
+      # Every asset — binaries, checksums.txt and its signature, the SBOMs,
+      # THIRD_PARTY_NOTICES and the .mcpb above — is attached before the release
+      # becomes visible, so no
       # installer or updater ever observes a partial one. GoReleaser creates it
       # as a draft (.goreleaser.yml: draft: true) and this is the flip.
       #
@@ -314,10 +316,11 @@ jobs:
         run: gh release edit "v${RELEASE_TAG#v}" --draft=false
 
       # A rehearsal hands its build to every job downstream the way a release
-      # hands them the published assets: the staged binaries, checksums.txt and
-      # the bundle, which fetch-release-assets.sh unpacks and checks in place of
-      # downloading. One tar rather than the files, so the executable bits
-      # survive the trip.
+      # hands them the published assets: the staged binaries, checksums.txt,
+      # THIRD_PARTY_NOTICES (which every package carries and the fetch
+      # requires) and the bundle, which fetch-release-assets.sh unpacks and
+      # checks in place of downloading. One tar rather than the files, so the
+      # executable bits survive the trip.
       #
       # Without it those jobs would have nothing to run on at all: they produce
       # no artifacts of their own by design, and a dispatch publishes no release
@@ -326,7 +329,7 @@ jobs:
         if: env.REHEARSAL == 'true'
         run: |
           set -euo pipefail
-          (cd dist && tar -cf "${RUNNER_TEMP}/rehearsal-assets.tar" checksums.txt libgen-mcp.mcpb libgen-mcp-*)
+          (cd dist && tar -cf "${RUNNER_TEMP}/rehearsal-assets.tar" checksums.txt THIRD_PARTY_NOTICES libgen-mcp.mcpb libgen-mcp-*)
           tar -tf "${RUNNER_TEMP}/rehearsal-assets.tar"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

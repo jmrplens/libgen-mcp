@@ -119,7 +119,8 @@ sboms:
   #
   # `documents` has to be named too: the default template is derived from the
   # archive name, which a binary artifact does not have.
-  - artifacts: binary
+  - id: binaries
+    artifacts: binary
     documents:
       - "{{ .ArtifactName }}.sbom.json"
     cmd: syft
@@ -128,6 +129,41 @@ sboms:
       - ${artifact}
       - --output
       - spdx-json=${document}
+  # THIRD_PARTY_NOTICES: the license, notice and patent texts of every module
+  # the six binaries link, which their licenses (BSD-3-Clause, Apache-2.0,
+  # MPL-2.0) ask to travel with a binary redistribution and the SBOMs above
+  # name without carrying. It is an sboms entry because that is the one hook
+  # GoReleaser runs after every build and before checksums.txt is computed and
+  # signed, so the file becomes a release asset listed in the signed
+  # checksums.txt like every binary. `any` runs the command once, in dist/,
+  # with no artifact of its own; the glob names the six per-target build
+  # directories (libgen-mcp_<goos>_<goarch>_<variant>/) and not the universal
+  # darwin binary (libgen-mcp-universal_darwin_all/), and -targets refuses a
+  # run that read one binary fewer. GoReleaser hands the command a reduced
+  # environment, so the go settings that place the module cache the
+  # `go mod download` hook filled are passed through; an unset one reaches go
+  # empty, which go reads as unset. A failure stops the release, since a
+  # release short of its notices is not one to publish.
+  - id: third-party-notices
+    artifacts: any
+    cmd: go
+    args:
+      - run
+      - ../cmd/gen_third_party_notices
+      - -o
+      - $document
+      - -targets
+      - darwin/amd64,darwin/arm64,linux/amd64,linux/arm64,windows/amd64,windows/arm64
+      - libgen-mcp_*/libgen-mcp*
+    documents:
+      - THIRD_PARTY_NOTICES
+    env:
+      - GOPATH=${GOPATH}
+      - GOMODCACHE=${GOMODCACHE}
+      - GOCACHE=${GOCACHE}
+      - GOFLAGS=${GOFLAGS}
+      - GOTOOLCHAIN=${GOTOOLCHAIN}
+      - GOPROXY=${GOPROXY}
 
 release:
   github:

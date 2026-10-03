@@ -22,7 +22,11 @@
 /audit_test_subtests
 /gen_icon_webp
 /bench_resources
+/gen_third_party_notices
 /dist/
+# Written by cmd/gen_third_party_notices when it runs from the repository root;
+# the release generates its own copy and no commit holds one.
+/THIRD_PARTY_NOTICES
 
 # npm publish set: the six per-platform packages are generated from the release
 # binaries at publish time and each carries a ~20 MB executable. The launcher
@@ -30,6 +34,11 @@
 /npm/packages/
 /npm/**/node_modules/
 /npm/**/*.tgz
+# The launcher's licence texts are copied in by scripts/build-npm.mjs at
+# assembly time, so the repository holds each text once; the third-party notices
+# are generated with the release and held in no commit at all.
+/npm/libgen-mcp/LICENSE
+/npm/libgen-mcp/THIRD_PARTY_NOTICES
 
 # PyPI wheelhouse: six platform wheels built from the release binaries at
 # publish time. The README under /pypi/ IS committed — it is the long

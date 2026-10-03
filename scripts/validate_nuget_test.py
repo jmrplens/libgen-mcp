@@ -45,6 +45,11 @@ build_nuget = load("build_nuget")
 validate_nuget = load("validate_nuget")
 vpp = load("verify_published_packages")
 
+# The licence texts every package carries: the repository's LICENSE, and
+# third-party notices opening with the generator's header.
+NOTICES = b"Third-party notices for libgen-mcp\n\nstand-in notices\n"
+LICENSES = build_nuget.read_licenses(build_nuget.LICENSE_FILES) + [(build_nuget.NOTICES, NOTICES)]
+
 
 class Unseekable(io.RawIOBase):
     """A write-only stream that can say where it is but cannot seek, which is
@@ -122,8 +127,9 @@ class PackedFixture(unittest.TestCase):
             self.VERSION,
         )
         names = [
-            build_nuget.build_pointer(out, self.VERSION, "README " + build_nuget.MCP_NAME_TOKEN, b"\x89PNG", server_doc),
-            build_nuget.build_rid_package(out, self.VERSION, "linux-amd64", self.RID, binary),
+            build_nuget.build_pointer(out, self.VERSION, "README " + build_nuget.MCP_NAME_TOKEN, b"\x89PNG",
+                                      server_doc, LICENSES),
+            build_nuget.build_rid_package(out, self.VERSION, "linux-amd64", self.RID, binary, LICENSES),
         ]
         self.packages = {}
         for name in names:
@@ -181,6 +187,56 @@ class PackedLayoutTest(PackedFixture):
                 self.assertTrue(any(want in p for p in problems), problems)
 
 
+def without_entry(blob, entry, replacement=None):
+    """without_entry repacks a package without one entry, or with other bytes
+    in its place."""
+    out = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(blob)) as src, zipfile.ZipFile(out, "w") as dst:
+        for info in src.infolist():
+            if info.filename == entry:
+                if replacement is None:
+                    continue
+                dst.writestr(info, replacement)
+            else:
+                dst.writestr(info, src.read(info.filename))
+    return out.getvalue()
+
+
+class LicenceFilesTest(PackedFixture):
+    """Every package carries LICENSE and THIRD_PARTY_NOTICES at its root:
+    the repository's licence byte for byte, and the notices the release
+    verified."""
+
+    def licence_problems(self, blob, digest=None):
+        problems = []
+        with zipfile.ZipFile(io.BytesIO(blob)) as zf:
+            validate_nuget.check_licenses(zf, "pkg.nupkg", problems, digest)
+        return problems
+
+    def test_packed_packages_carry_both_texts(self):
+        digest = hashlib.sha256(NOTICES).hexdigest()
+        for name, blob in self.packages.items():
+            with self.subTest(name):
+                self.assertEqual(self.licence_problems(blob, digest), [])
+
+    def test_each_missing_or_foreign_text_is_refused(self):
+        blob = self.packages["{}.{}.nupkg".format(build_nuget.PKG_ID, self.VERSION)]
+        cases = [
+            ("no LICENSE", without_entry(blob, "LICENSE"), None, "no LICENSE at the package root"),
+            ("another LICENSE", without_entry(blob, "LICENSE", b"other\n"), None,
+             "LICENSE is not the repository's LICENSE"),
+            ("no notices", without_entry(blob, "THIRD_PARTY_NOTICES"), None,
+             "no THIRD_PARTY_NOTICES at the package root"),
+            ("notices the generator did not write", without_entry(blob, "THIRD_PARTY_NOTICES", b"other\n"),
+             None, "does not open with the generator's header"),
+            ("notices other than the verified ones", blob, "0" * 64, "but the release's signed checksums.txt named"),
+        ]
+        for name, tampered, digest, want in cases:
+            with self.subTest(name):
+                problems = self.licence_problems(tampered, digest)
+                self.assertTrue(any(want in p for p in problems), problems)
+
+
 class ValidatePackagesLayoutTest(unittest.TestCase):
     """validate_packages runs the layout check over every package it is given,
     so a package the signing would rewrite fails the release before the push."""
@@ -199,14 +255,14 @@ class ValidatePackagesLayoutTest(unittest.TestCase):
                 fh.write(plat_key.encode() * 64)
             with open(binary, "rb") as fh:
                 digests[plat_key] = hashlib.sha256(fh.read()).hexdigest()
-            build_nuget.build_rid_package(self.out, self.VERSION, plat_key, rid, binary)
+            build_nuget.build_rid_package(self.out, self.VERSION, plat_key, rid, binary, LICENSES)
         server_doc = build_nuget.mcp_server_json(
             {"name": build_nuget.SERVER_NAME, "packages": [
                 {"registryType": "nuget", "identifier": build_nuget.PKG_ID, "version": "0"}]},
             self.VERSION,
         )
         self.pointer = build_nuget.build_pointer(
-            self.out, self.VERSION, "README " + build_nuget.MCP_NAME_TOKEN, None, server_doc)
+            self.out, self.VERSION, "README " + build_nuget.MCP_NAME_TOKEN, None, server_doc, LICENSES)
         with open(os.path.join(self.out, validate_nuget.VERIFIED_MANIFEST), "w", encoding="utf-8") as fh:
             fh.write('{{"version": "{}", "verified": true, "binaries": {}}}'.format(
                 self.VERSION, str(digests).replace("'", '"')))

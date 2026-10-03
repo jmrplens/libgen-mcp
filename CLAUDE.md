@@ -864,6 +864,7 @@ make check-icon-webp                                       # only if you touched
 make check-manifests && make check-stamper                 # only if you touched a version-bearing manifest
 make check-mcpb                                            # only if you touched mcpb/ or scripts/build-mcpb.sh
 make check-npm-launcher                                    # only if you touched npm/libgen-mcp/cli.js
+make check-homebrew-tap                                    # only if you touched scripts/update-homebrew-tap.sh
 make check-ci-scripts                                      # only if you touched the PR description gate or the site audit
 make audit-site-deps                                       # only if you touched site/package.json or its lockfile (needs network)
 make check-pr-description                                  # once the pull request is open: its title and body land on main
@@ -1331,6 +1332,18 @@ before a tag. Ordering matters for the same reason: npm, PyPI and NuGet all
 publish **before** `mcp-publisher`, which validates ownership by fetching each
 package `server.json` declares.
 
+**Every artifact that hands out a binary carries `LICENSE` and
+`THIRD_PARTY_NOTICES`.** The binaries link BSD-3-Clause, Apache-2.0 and MPL-2.0
+code whose licences ask for their texts to travel with a binary, and the SBOMs
+name those licences without carrying them. `cmd/gen_third_party_notices` writes
+the notices from the binaries' build information and the module cache; GoReleaser
+runs it as an `sboms` entry (`artifacts: any`), the one hook between the builds
+and the signed `checksums.txt`, so the file is a signed release asset and a
+failed generation stops the release. The Dockerfile's builder generates the
+image's own from the image's binary. Each channel section below says how its
+validator holds the two files; `docs/development/release-chain.md` has the whole
+list.
+
 ### The Claude Desktop bundle
 
 `scripts/build-mcpb.sh` packs `libgen-mcp.mcpb` from `mcpb/manifest.json`, the
@@ -1363,10 +1376,15 @@ shell the runner has, and the packer over the release job's real `dist/`
 layout. On Linux the app registers no handler for `.mcpb` files, so the docs
 send Linux users to **Extensions > Install Extension…**.
 
+The bundle also packs `LICENSE` and `dist/THIRD_PARTY_NOTICES` at its root, both
+in the exact entry list the packer checks. A `dist/` without the notices, or with
+a file that does not open with the generator's header, is refused before
+anything is packed, and `make check-mcpb` drives both refusals.
+
 ### The npm channel
 
 `npm/libgen-mcp/` is the **committed** launcher package (`@jmrp.io/libgen-mcp`):
-`package.json`, `cli.js` and a README, and nothing else. The six per-platform
+`package.json`, `cli.js` and a README, and nothing else committed. The six per-platform
 packages that carry the binaries are **generated** from the release assets by
 `scripts/build-npm.mjs` at publish time and are gitignored — `npm/packages/`
 never enters a commit.
@@ -1435,6 +1453,12 @@ Three things about it are easy to get wrong:
   a jq edit could move the version and leave the pins a release behind.
   `npm/libgen-mcp/package.json` is in `VERSION_MANIFESTS`, so `make
   check-manifests` fails a bump that skipped `make sync-npm-version`.
+- **All seven tarballs carry `LICENSE` and `THIRD_PARTY_NOTICES`.**
+  `build-npm.mjs` copies them in (into the launcher too, where both are
+  gitignored), holds the notices to `checksums.txt` and records their digest
+  beside the binaries'; `validate-npm.mjs` requires both in each tarball's exact
+  file set, LICENSE byte for byte equal to the repository's and the notices equal
+  to the recorded digest.
 
 The scope is the npm **organization** `jmrp.io`, so packages are
 `@jmrp.io/libgen-mcp*`. `npm whoami` returns `jmrpio` (the maintainer's personal
@@ -1470,6 +1494,12 @@ command, because the name was free. That is not a cosmetic detail:
   the archived bytes for an ELF interpreter and for `GLIBC_` symbols and fails
   on either. Measured end to end: the wheel installs under `python:3.13-alpine`
   and the command runs.
+- **The licence is declared as PEP 639 defines it.** Core metadata 2.4,
+  `License-Expression: MIT`, a `License-File` for `LICENSE` and for
+  `THIRD_PARTY_NOTICES`, both under `.dist-info/licenses/`, and no legacy
+  `License` field or `License ::` classifier beside them, which PyPI refuses.
+  METADATA also links `Issues` and `Security`. `validate_pypi.py` holds every
+  wheel to all of it, and runs `twine check --strict` where twine is installed.
 
 ### The NuGet channel
 
@@ -1480,7 +1510,7 @@ refuses to build without it. The seven packages are **generated** into
 `nuget/dist/`, which is gitignored.
 
 It is a .NET tool whose entry point is a native executable, so nothing in the
-packages is .NET code. Six things about that layout are load-bearing:
+packages is .NET code. Seven things about that layout are load-bearing:
 
 - **Seven packages, pushed runtime-first.** One pointer, `libgen-mcp`, naming a
   package per runtime identifier, and six `libgen-mcp.<rid>` packages carrying
@@ -1492,6 +1522,11 @@ packages is .NET code. Six things about that layout are load-bearing:
 - **`<licenseUrl>https://licenses.nuget.org/MIT</licenseUrl>` beside the MIT
   expression.** nuget.org rejects an expression-licensed package without it with
   a 400 naming `aka.ms/invalidNuGetLicenseUrl`, which nothing local reports.
+- **`LICENSE` and `THIRD_PARTY_NOTICES` sit at every package's root as plain
+  files**, not as `<license type="file">`: a nuspec declares one licence form,
+  and the expression is the one nuget.org renders. `validate_nuget.py` requires
+  both in all seven packages, LICENSE equal to the repository's and the notices
+  to the digest `build_nuget.py` verified.
 - **`.mcp/server.json` ships inside the pointer** and carries *this* version, not
   the repository's: the manifest is stamped only after the packages are
   published, so the copy inside has to stand alone.
