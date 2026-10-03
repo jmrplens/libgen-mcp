@@ -72,21 +72,26 @@ import { Aside } from "@astrojs/starlight/components";
 	en lugar de recurrir silenciosamente al valor por defecto.
 </Aside>
 
-Un ajuste puede venir de tres sitios, que se prueban en este orden — gana el primero donde la variable esté **definida**, que no es exactamente lo mismo que el primero que tenga valor:
+Un ajuste puede venir de tres sitios, que se prueban en este orden — gana el primero que dé a la variable un valor que no esté en blanco:
 
 1. **El entorno del proceso**, que es lo que pasó tu cliente MCP. Fíjalo en el bloque `env` del cliente (consulta [Conectar un cliente](/libgen-mcp/es/clients/)), en tu shell, o con flags `-e` en `docker run`. Unos pocos tienen además flag; véase más abajo.
 2. **El fichero que nombre `LIBGEN_MCP_ENV_FILE`**, si nombras alguno. Dale una ruta absoluta.
 3. **`~/.libgen-mcp.env`**, un fichero dotenv en tu directorio personal.
 
-<Aside type="caution">
-	**Una variable exportada con valor vacío está definida, y gana.** Un fichero
-	dotenv solo rellena los nombres que el entorno del proceso no lleva ya, así
-	que `LIBGEN_MIRROR=` en el bloque `env` de un cliente —o un `-e LIBGEN_MIRROR`
-	en `docker run` sin nada detrás— suprime el valor de ambos ficheros dotenv y
-	el ajuste vuelve a su valor por defecto documentado. Ese es el comportamiento
-	correcto (un valor vacío es algo que dijiste) y es el que sorprende, porque el
-	fichero está ahí y se lee bien. Para que un fichero pueda suministrar una
-	variable, déjala fuera del entorno por completo en vez de fijarla a nada.
+<Aside type="note">
+	**Una variable que llega con valor vacío no bloquea los ficheros.** Un fichero
+	dotenv rellena todo nombre que el entorno del proceso deje sin definir **o en
+	blanco** (vacío, o solo con espacios), así que `LIBGEN_MIRROR=` en el bloque
+	`env` de un cliente —o un `-e LIBGEN_MIRROR` en `docker run` sin nada detrás—
+	deja que `LIBGEN_MIRROR` de cualquiera de los dos ficheros surta efecto, y el
+	valor por defecto documentado solo se aplica cuando ninguno lo tiene. Eso es
+	lo que hace útiles los ficheros con un cliente que pasa todos los ajustes para
+	los que tiene campo: la extensión de Claude Desktop pasa cada campo que
+	muestra, y un campo que se deja en blanco llega como cadena vacía. Un valor en
+	blanco nunca podía decir más que «usa el valor por defecto», porque todas las
+	variables de aquí leen el blanco como sin definir. El coste es que un cliente
+	no puede anular el valor de un fichero pasando nada; para cambiarlo, pasa otro
+	valor.
 </Aside>
 
 <Aside type="danger">

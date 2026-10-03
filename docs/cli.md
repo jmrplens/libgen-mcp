@@ -36,8 +36,9 @@ be filled from a dotenv file. The first of these that sets it wins:
 4. **`~/.libgen-mcp.env`**, in the home directory of the user running the server.
 5. **The built-in default** in the tables below.
 
-A dotenv file never overrides a variable that is already set, which is what puts both files
-below the environment. A `.env` in the working directory is never read, for the reason
+A dotenv file never overrides a variable the environment already gives a value, which is
+what puts both files below the environment. A variable set but blank has no value, so a
+file fills it. A `.env` in the working directory is never read, for the reason
 [Configuration](configuration.md) gives.
 
 Two families of flags reach that order from opposite ends, with the same result:

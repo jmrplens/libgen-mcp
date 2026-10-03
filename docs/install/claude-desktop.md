@@ -44,7 +44,7 @@ Then ask Claude for a book or a paper. The extension's four tools (`search`, `ge
 
 ## Settings
 
-Every setting is optional. Each maps to one environment variable the server reads, and an empty field leaves the server's default in place.
+Every setting is optional. Each maps to one environment variable the server reads, and an empty field leaves the setting to the dotenv files below, then to the server's default.
 
 | Setting                       | Default             | Variable                        | What it does                                                                                      |
 | ----------------------------- | ------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------- |
@@ -57,7 +57,7 @@ Every setting is optional. Each maps to one environment variable the server read
 | Unpaywall email               | empty               | `LIBGEN_MCP_UNPAYWALL_EMAIL`    | Your contact address for Unpaywall, which turns that article source on                            |
 | CORE API key                  | empty               | `LIBGEN_MCP_CORE_KEY`           | A free key from core.ac.uk, which turns the CORE article source on. Marked sensitive              |
 
-**The settings file is for everything the form does not have.** A variable the extension passes wins over both dotenv files, so use the file for the settings without a field, such as `LIBGEN_MCP_EXTRA_SOURCES` or `LIBGEN_MCP_SOURCES`. A `.env` in Claude Desktop's working directory is never read. Every variable is described in [Configuration](../configuration.md).
+**The form and the settings file share the work by which fields have a value.** The extension passes every field as its variable, and a field with a value wins over both dotenv files (the one named under Settings file, then `~/.libgen-mcp.env`). A field left blank arrives empty, and the server reads an empty variable from the files instead, so Mirror, Unpaywall email and CORE API key can live in a file as long as their fields stay empty. Download directory, Request timeout, Maximum download size and Log level start out holding their defaults, so they arrive with those values and win over a file: change them in the form. Use the file for everything the form has no field for, such as `LIBGEN_MCP_EXTRA_SOURCES` or `LIBGEN_MCP_SOURCES`. A `.env` in Claude Desktop's working directory is never read. Every variable is described in [Configuration](../configuration.md).
 
 The CORE key is marked sensitive, so Claude Desktop stores it encrypted with a key the operating system protects (where one is available) and masks it in the form.
 

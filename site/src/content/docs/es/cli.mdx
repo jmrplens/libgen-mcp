@@ -39,7 +39,7 @@ Todo ajuste que configura un flag puede venir también del entorno, y el entorno
 4. **`~/.libgen-mcp.env`**, en el directorio personal del usuario que ejecuta el servidor.
 5. **El valor por defecto** de las tablas de abajo.
 
-Un fichero dotenv nunca sobrescribe una variable que ya está fijada, y eso es lo que pone los dos ficheros por debajo del entorno. Un `.env` en el directorio de trabajo no se lee nunca, por la razón que da [Configuración](/libgen-mcp/es/configuration/).
+Un fichero dotenv nunca sobrescribe una variable a la que el entorno ya da un valor, y eso es lo que pone los dos ficheros por debajo del entorno. Una variable fijada pero en blanco no tiene valor, así que un fichero la rellena. Un `.env` en el directorio de trabajo no se lee nunca, por la razón que da [Configuración](/libgen-mcp/es/configuration/).
 
 Dos familias de flags llegan a ese orden por extremos opuestos, con el mismo resultado:
 
