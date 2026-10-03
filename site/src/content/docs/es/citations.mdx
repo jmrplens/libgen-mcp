@@ -207,6 +207,24 @@ Un DOI queda como `unverified` cuando:
 
 La comprobación cuesta poco. En el camino por defecto, sin `enrich`, es una única petición sin clave a Crossref, limitada a cuatro segundos y hecha solo cuando el registro lleva DOI. Con `enrich: true`, la respuesta de Crossref obtenida para el [enriquecimiento](/libgen-mcp/es/tools/#enriquecimiento-de-metadatos) decide también el veredicto, así que a Crossref se le pregunta una sola vez. Una caída de Crossref puede dejar un DOI fuera de una cita, pero nunca hace fallar la llamada.
 
+## Otros estilos de cita
+
+BibTeX y RIS están siempre. Cualquier otro estilo se pide por su nombre en `cite_as`, y no se añade nada si no se pide:
+
+```json
+{ "doi": "10.1038/nature12373", "cite_as": ["apa", "vancouver", "csl-json"] }
+```
+
+Los estilos son `apa`, `mla`, `chicago` (autor-fecha), `harvard`, `vancouver`, `ieee` y `csl-json`. Cada uno vuelve en `citations.formatted` con su `text` y la `source` que lo produjo:
+
+| `source`      | Cuándo                                                                                                                                                                    |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `doi.org`     | El registro tiene un DOI que nombra esta obra (Crossref lo confirmó, o el registro es el del propio registro del DOI) y su agencia de registro lo formateó vía doi.org.   |
+| `local`       | El registro no tiene ese DOI, o el registro no dio una respuesta útil. El estilo se construye aquí con los mismos campos que la entrada BibTeX, y `note` explica por qué. |
+| `unavailable` | Ninguna de las dos vías pudo producirlo: el registro no tiene título propio.                                                                                              |
+
+Un DOI del catálogo que no superó la comprobación nunca se envía a doi.org, porque el registro formatearía la obra a la que ese DOI pertenece de verdad. El texto del registro llega plano: se quitan el marcado, las entidades y el `[1]` inicial de un estilo numérico. Los estilos que se piden a doi.org son los estilos CSL `apa`, `modern-language-association`, `chicago-author-date`, `elsevier-harvard`, `elsevier-vancouver` e `ieee`. Se midieron con DOI de Crossref, DataCite y mEDRA. doi.org no tiene ningún estilo llamado `vancouver`, y las variantes de Harvard y Vancouver con hueco para el editor escriben `Edited by ,` para un editor que Crossref registra sin nombre. Un estilo construido aquí usa solo los campos que tiene el registro y deja el título sin marcar donde el estilo lo pondría en cursiva. El `n.d.` de APA es el único sustituto que escribe para un valor ausente.
+
 ## Comprueba antes de publicar
 
 Una cita ya formateada suele pegarse en una bibliografía y no volver a mirarse, así que el servidor solo afirma lo que puede respaldar, y eso es menos que una referencia terminada. Toda línea `provenance` empieza con una advertencia que nombra de dónde proceden los campos, y que el servidor escribe en inglés. Para un registro del catálogo dice:

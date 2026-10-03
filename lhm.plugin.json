@@ -152,6 +152,25 @@
             "description": "a reference pasted as free text, in any style, e.g. LeCun Y, Bengio Y, Hinton G. Deep learning. Nature 2015. Resolved through Crossref to the DOI of the one work that clearly matches, else answered with the candidates and no record. Use exactly one of md5, id, doi or citation",
             "type": "string"
           },
+          "cite_as": {
+            "description": "extra citation styles to add beside BibTeX and RIS, any of apa mla chicago harvard vancouver ieee csl-json. Off by default. A record whose DOI is confirmed gets each style from its registry through doi.org, any other record gets it built from its own fields, and each style says which path produced it",
+            "items": {
+              "enum": [
+                "apa",
+                "mla",
+                "chicago",
+                "harvard",
+                "vancouver",
+                "ieee",
+                "csl-json"
+              ],
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
           "doi": {
             "description": "article DOI, e.g. 10.1016/j.cell.2011.02.013. Use exactly one of md5, id, doi or citation. The record returned carries the md5 for download",
             "type": "string"

@@ -150,6 +150,20 @@
           "name": "enrich",
           "type": "boolean",
           "required": false
+        },
+        {
+          "name": "cite_as",
+          "type": "string[]",
+          "required": false,
+          "enum": [
+            "apa",
+            "mla",
+            "chicago",
+            "harvard",
+            "vancouver",
+            "ieee",
+            "csl-json"
+          ]
         }
       ],
       "output": [
