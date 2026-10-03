@@ -20,7 +20,7 @@
         audit-test-subtests fix-test-subtests check-test-subtests \
         validate-http-stateless \
         install-tools release-check check-manifests check-stamper \
-        check-server-json-packages check-supply-chain check-verify-published check-mcpb \
+        check-server-json-packages check-supply-chain check-verify-published check-mcpb check-npm-launcher \
         check-pr-description audit-site-deps check-ci-scripts \
         mcpb gen-npm sync-npm-version validate-npm validate-npm-local \
         publish-npm-dry publish-npm \
@@ -553,6 +553,13 @@ check-mcpb: ## Exercise the Claude Desktop bundle: its manifest, its Linux launc
 	python3 -m unittest discover -s scripts -p 'mcpb_launch_sh_test.py'
 	python3 -m unittest discover -s scripts -p 'build_mcpb_sh_test.py'
 	python3 -m unittest discover -s scripts -p 'fetch_release_assets_sh_test.py'
+
+# One case runs the real server, to show a Ctrl+C through the launcher keeps
+# its --drain-delay, so the binary is built first into a directory removed after.
+check-npm-launcher: ## Exercise the npm launcher against a stand-in and the real server: argv, stdout, exit status and signals (offline)
+	@dir=$$(mktemp -d) && trap 'rm -rf "$$dir"' EXIT && \
+		CGO_ENABLED=0 go build -o "$$dir/libgen-mcp" $(CMD_PATH) && \
+		NPM_LAUNCHER_TEST_SERVER="$$dir/libgen-mcp" python3 -m unittest discover -s scripts -p 'npm_cli_js_test.py'
 
 check-supply-chain: ## Every action pinned, no run-time-resolved code in a credentialed job, cooldowns stated
 	go run ./cmd/audit_supply_chain/

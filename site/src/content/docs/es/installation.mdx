@@ -114,6 +114,10 @@ npm audit signatures
 
 En una plataforma sin binario precompilado el lanzador sale con un mensaje que apunta a los binarios de la release y a compilar desde el código fuente.
 
+**Pararlo.** Desde la primera release posterior a la 2.0.1 el lanzador para el servidor cuando se le pide que pare. En Linux y macOS le pasa SIGTERM, SIGINT y SIGHUP al servidor, y cuando lo arrancó npm (`npx`, o un script de npm) le envía SIGTERM en menos de un segundo desde que sale la shell de npm: un SIGTERM enviado al proceso `npx` solo llega a esa shell, nunca al lanzador. Hasta la 2.0.1 un servidor HTTP arrancado con `npx` seguía ocupando su puerto después de que su supervisor lo hubiera parado. Arrancado de cualquier otra forma, un servidor que sobrevive a su padre se deja en paz, igual que el binario ejecutado directamente. En Windows el Ctrl+C de la consola llega al propio servidor, y el lanzador solo lo espera.
+
+El servidor drena con su primer SIGINT o SIGTERM y termina en seco con el segundo, así que el lanzador le pide parar una sola vez: las señales posteriores no se le pasan, y un Ctrl+C desde un terminal, que ya llega al servidor, no se le pasa en absoluto. Una señal enviada a todos los procesos a la vez por otra vía le llega dos veces y se salta el drenaje, que es lo que hace el `KillMode=control-group` por defecto de systemd. Con systemd ejecuta el binario directamente, o pon `KillMode=mixed`.
+
 ## PyPI
 
 **Qué obtienes.** [`libgen-mcp`](https://pypi.org/project/libgen-mcp/), una rueda por plataforma con el binario dentro. La rueda lo pone en la ruta de scripts, así que después la orden es `libgen-mcp` y **no se ejecuta nada de Python cuando lo usas**. La distribución no declara ningún console script a propósito: el punto de entrada es el propio ejecutable nativo.
