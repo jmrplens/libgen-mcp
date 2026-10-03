@@ -258,7 +258,7 @@ A hit may also carry a `venue`: the publication venue exactly as the provider st
 
 ## get_details
 
-`get_details` is the tool that fetches full metadata for one bibliographic record — description, identifiers, DOI, cover, related edition — plus ready-to-paste BibTeX and RIS exports in its `citations` field. It looks a record up by `md5`, by `id`, or by `doi` — exactly one of the three. Catalog records come from the LibGen JSON API.
+`get_details` is the tool that fetches full metadata for one bibliographic record — description, identifiers, DOI, cover, related edition — plus ready-to-paste BibTeX and RIS exports in its `citations` field. It looks a record up by `md5`, by `id`, by `doi`, or by a pasted `citation` — exactly one of the four. Catalog records come from the LibGen JSON API.
 
 ### get_details input
 
@@ -273,6 +273,12 @@ A hit may also carry a `venue`: the publication venue exactly as the provider st
 		the catalog; the response carries the edition plus the file `md5` to pass to
 		`download`.
 	</Fragment>
+	<Fragment slot="citation">
+		A reference pasted as free text, in any style. Resolved through Crossref to
+		the DOI of the one work that clearly matches it, then looked up as that
+		`doi`. With no clear match, the candidates come back instead of a record.
+		See [Citations](/libgen-mcp/citations/).
+	</Fragment>
 	<Fragment slot="object">
 		Used with `id`: `edition` (default) or `file`.
 	</Fragment>
@@ -283,15 +289,16 @@ A hit may also carry a `venue`: the publication venue exactly as the provider st
 </SchemaTable>
 
 <Aside type="note">
-	Provide exactly one of `md5`, `id` or `doi` — never more than one. Supplying
-	several, none, an `md5` that is not 32 hex chars, or an `object` other than
-	`edition`/`file` returns an input error.
+	Provide exactly one of `md5`, `id`, `doi` or `citation` — never more than one.
+	Supplying several, none, an `md5` that is not 32 hex chars, or an `object`
+	other than `edition`/`file` returns an input error.
 </Aside>
 
 ### get_details output
 
 <SchemaTable name="get_details" section="output">
 	<Fragment slot="next_steps">Suggested follow-up tool calls given this result — e.g. a `download` call using this record's `md5` (book) or `doi` (article). Present to guide the model; safe to ignore.</Fragment>
+	<Fragment slot="citation_match">Present for a `citation` lookup: `status` `resolved` with the `doi` and `title` it matched, or `unresolved` with the `reason` and up to five `candidates` (title, authors, year, venue, DOI, Crossref score) and no `file` or `edition`.</Fragment>
 	<Fragment slot="file">The file record (present for an `md5` lookup, or an `id` lookup with `object: file`).</Fragment>
 	<Fragment slot="edition">The edition record (present for an `md5` lookup's related edition, or an `id` lookup with `object: edition`).</Fragment>
 	<Fragment slot="citations">`{"bibtex": ..., "ris": ..., "doi_status": ..., "provenance": ...}` — a ready-to-paste BibTeX and RIS export built from the record's metadata, with `doi_status` (`confirmed`, `unverified` or `mismatch` against Crossref, and only a confirmed DOI is written into the entries) and `provenance` (where each field came from, to relay with the citation). Omitted when the record has no title (the minimum needed for a usable citation). Empty metadata fields are dropped rather than emitted blank, and the export carries no ISBN field at all.</Fragment>

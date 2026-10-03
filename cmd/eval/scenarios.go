@@ -4166,10 +4166,11 @@ func detailsIdentifierGrounded(tr transcript, call toolCall) (ok bool, why strin
 	}
 	// A DOI needs no grounding in a search result: it is an identifier the user
 	// supplies directly, and looking it up is the whole point of accepting it.
-	if stringField(call.Input, "doi") != "" {
+	// A pasted citation is the same: the user's own text, resolved by the server.
+	if stringField(call.Input, "doi") != "" || stringField(call.Input, "citation") != "" {
 		return true, ""
 	}
-	return false, "get_details call set none of md5, id or doi"
+	return false, "get_details call set none of md5, id, doi or citation"
 }
 
 func assertReadSummary(tr transcript) (pass bool, detail string) {

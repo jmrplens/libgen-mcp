@@ -136,6 +136,7 @@ say.
 | `id` with `object: "file"`              | The catalog's file record alone                                                  | None                    | No `citations` field: the catalog keeps the title on the edition |
 | `doi`                                   | The catalog's edition for that DOI, matched exactly, and the first file it lists | The catalog rule below  | The md5 of that file. The DOI is still checked against Crossref  |
 | `doi` the catalog lacks                 | Crossref's metadata, labeled `file.origin: "crossref"`                           | None                    | No `citations` field. The metadata is in `enrichment`            |
+| `citation`                              | The DOI Crossref matches the text to, then as for `doi`                          | As for `doi`            | As for `doi`, with `citation_match` naming the DOI it matched    |
 
 The catalog rule: an entry is `@article` and `JOUR` when the catalog classifies the record
 as an article or when Crossref confirmed its DOI, and `@book` and `BOOK` otherwise. The bare
@@ -149,6 +150,13 @@ Both fallbacks are described under
 [Records the catalog does not carry](tools.md#records-the-catalog-does-not-carry). The
 Crossref one runs only when enrichment is allowed (`LIBGEN_MCP_ENRICH`, on by default);
 otherwise a DOI the catalog lacks returns the catalog's "no record" error.
+
+A `citation` is a reference pasted as text, in any style. The server sends it to Crossref's
+bibliographic search and takes the best candidate only when its score leads the next one by
+at least 20 percent and at least 90 percent of its title's words appear in the text. Anything
+less comes back as up to five candidates (title, authors, year, venue and DOI) with no record,
+to call again with the right `doi`. A book, a preprint or a report with no Crossref DOI ends
+there. The lookup is a Crossref call, so `LIBGEN_MCP_ENRICH=false` refuses it.
 
 ## Why a DOI can be missing from the citation
 

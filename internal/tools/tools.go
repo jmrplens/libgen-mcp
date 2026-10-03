@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -80,7 +81,7 @@ func detailsInputSchema() *jsonschema.Schema {
 // fabrication buildCitations refuses.
 const detailsDescription = `Full metadata for one bibliographic record: identifiers, DOI, cover and related edition, plus ready-to-paste BibTeX and RIS exports in its citations field. Use it whenever a citation is requested.
 
-Look up by exactly one of md5, edition/file id, or an article's doi, taken from a prior search result. An md5 the catalog does not carry falls back to Anna's Archive, which answers with a thinner record labeled origin=annas. A DOI reaches the exports only once corroborated against Crossref. Otherwise it is left out and citations.doi_status says why, so relay citations.provenance rather than presenting a citation as verified.
+Look up by exactly one of md5, edition/file id, or an article's doi, taken from a prior search result, or by a pasted reference in citation. A citation resolves through Crossref to a DOI only when one match clearly stands out. Otherwise its candidates come back unchosen, to call again with the right doi. An md5 the catalog does not carry falls back to Anna's Archive, which answers with a thinner record labeled origin=annas. A DOI reaches the exports only once corroborated against Crossref. Otherwise it is left out and citations.doi_status says why, so relay citations.provenance rather than presenting a citation as verified.
 
 Example: {"md5": "<md5 from a search result>", "enrich": true} to add best-effort journal, ISSN, subject and cover metadata.
 
@@ -116,21 +117,23 @@ type SearchOutput struct {
 
 // DetailsInput holds the parameters for the get_details tool.
 type DetailsInput struct {
-	MD5    string `json:"md5,omitempty" jsonschema:"file md5 from a search result's md5 field. Use exactly one of md5, id or doi"`
-	ID     string `json:"id,omitempty" jsonschema:"edition or file id from a result's edition_id/file_id. Use exactly one of md5, id or doi"`
-	DOI    string `json:"doi,omitempty" jsonschema:"article DOI, e.g. 10.1016/j.cell.2011.02.013. Use exactly one of md5, id or doi. The record returned carries the md5 for download"`
-	Object string `json:"object,omitempty" jsonschema:"with id, one value: edition (default) or file"`
-	Enrich bool   `json:"enrich,omitempty" jsonschema:"add best-effort keyless Crossref (by DOI) and OpenLibrary (by ISBN) metadata. Off by default"`
+	MD5      string `json:"md5,omitempty" jsonschema:"file md5 from a search result's md5 field. Use exactly one of md5, id, doi or citation"`
+	ID       string `json:"id,omitempty" jsonschema:"edition or file id from a result's edition_id/file_id. Use exactly one of md5, id, doi or citation"`
+	DOI      string `json:"doi,omitempty" jsonschema:"article DOI, e.g. 10.1016/j.cell.2011.02.013. Use exactly one of md5, id, doi or citation. The record returned carries the md5 for download"`
+	Citation string `json:"citation,omitempty" jsonschema:"a reference pasted as free text, in any style, e.g. LeCun Y, Bengio Y, Hinton G. Deep learning. Nature 2015. Resolved through Crossref to the DOI of the one work that clearly matches, else answered with the candidates and no record. Use exactly one of md5, id, doi or citation"`
+	Object   string `json:"object,omitempty" jsonschema:"with id, one value: edition (default) or file"`
+	Enrich   bool   `json:"enrich,omitempty" jsonschema:"add best-effort keyless Crossref (by DOI) and OpenLibrary (by ISBN) metadata. Off by default"`
 }
 
 // DetailsOutput holds the file and/or edition record returned by get_details.
 // NextSteps leads so the model sees the download follow-up before the payload.
 type DetailsOutput struct {
-	NextSteps  []string           `json:"next_steps,omitempty" jsonschema:"suggested follow-up call for this record"`
-	File       map[string]any     `json:"file,omitempty" jsonschema:"file record, for an md5 lookup or an id lookup with object=file"`
-	Edition    map[string]any     `json:"edition,omitempty" jsonschema:"edition record, the related edition of an md5 lookup, or an id lookup with object=edition"`
-	Citations  *Citations         `json:"citations,omitempty" jsonschema:"BibTeX and RIS exports for this record"`
-	Enrichment *libgen.Enrichment `json:"enrichment,omitempty" jsonschema:"external Crossref/OpenLibrary metadata, only when enrich was requested and found"`
+	NextSteps     []string              `json:"next_steps,omitempty" jsonschema:"suggested follow-up call for this record"`
+	CitationMatch *libgen.CitationMatch `json:"citation_match,omitempty" jsonschema:"for a citation lookup, the DOI it resolved to, or the candidates when none clearly matched. With no match there is no file or edition"`
+	File          map[string]any        `json:"file,omitempty" jsonschema:"file record, for an md5 lookup or an id lookup with object=file"`
+	Edition       map[string]any        `json:"edition,omitempty" jsonschema:"edition record, the related edition of an md5 lookup, or an id lookup with object=edition"`
+	Citations     *Citations            `json:"citations,omitempty" jsonschema:"BibTeX and RIS exports for this record"`
+	Enrichment    *libgen.Enrichment    `json:"enrichment,omitempty" jsonschema:"external Crossref/OpenLibrary metadata, only when enrich was requested and found"`
 }
 
 // ResolvedLink is the result of a resolve-only download: a direct URL the caller
@@ -1483,45 +1486,125 @@ func markdownResult(md string) *mcp.CallToolResult {
 func detailsHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery.MirrorLister) mcp.ToolHandlerFor[DetailsInput, DetailsOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in DetailsInput) (*mcp.CallToolResult, DetailsOutput, error) {
 		var zero DetailsOutput
-		var (
-			out DetailsOutput
-			err error
-		)
-		// Trimmed once, so every arm below agrees with countKeys about which
-		// identifiers were provided. They did not: countKeys trims and the arms
-		// compared against "", so a whitespace-only md5 beside a usable doi
-		// counted as one identifier and then took the md5 arm anyway, failing
-		// on the format of a value the caller never meant to send. The schema's
-		// oneOf reads that same input as one branch matched and accepts it, so
-		// the two disagreed on the one shape neither would ever be asked about
-		// deliberately.
-		in.MD5 = strings.TrimSpace(in.MD5)
-		in.ID = strings.TrimSpace(in.ID)
-		in.DOI = strings.TrimSpace(in.DOI)
-		switch {
-		case countKeys(in.MD5, in.ID, in.DOI) > 1:
-			return nil, zero, errors.New("provide exactly one of md5, id or doi")
-		case in.MD5 != "":
-			out, err = detailsByMD5(ctx, c, in.MD5)
-			if err != nil {
-				out, err = detailsFromAnnas(ctx, annasMirrors, in.MD5, err)
-			}
-		case in.ID != "":
-			out, err = detailsByID(ctx, c, in.Object, in.ID)
-		case in.DOI != "":
-			out, err = detailsByDOI(ctx, c, in.DOI)
-			if err != nil {
-				out, err = detailsFromEnrichment(ctx, c, cfg, in.DOI, err)
-			}
-		default:
-			return nil, zero, errors.New("provide exactly one of md5, id or doi")
-		}
+		out, err := lookupDetails(ctx, c, cfg, annasMirrors, in)
 		if err != nil {
 			return nil, zero, err
 		}
-		out.NextSteps = detailsNextSteps(out)
+		if m := out.CitationMatch; m != nil && !m.IsResolved() {
+			out.NextSteps = unresolvedCitationSteps(m)
+			return markdownResult(renderUnresolvedCitationMarkdown(out)), out, nil
+		}
+		out.NextSteps = append(citationResolvedSteps(out.CitationMatch), detailsNextSteps(out)...)
 		attachCitations(ctx, c, cfg, in.Enrich, &out)
 		return markdownResult(renderDetailsMarkdown(out)), out, nil
+	}
+}
+
+// errOneIdentifier is the refusal for a get_details call naming no identifier
+// or more than one.
+var errOneIdentifier = errors.New("provide exactly one of md5, id, doi or citation")
+
+// lookupDetails finds the record the call names by whichever one identifier it
+// carries.
+func lookupDetails(ctx context.Context, c *libgen.Client, cfg *config.Config, annasMirrors discovery.MirrorLister, in DetailsInput) (DetailsOutput, error) {
+	// Trimmed once, so every arm below agrees with countKeys about which
+	// identifiers were provided. They did not: countKeys trims and the arms
+	// compared against "", so a whitespace-only md5 beside a usable doi
+	// counted as one identifier and then took the md5 arm anyway, failing
+	// on the format of a value the caller never meant to send. The schema's
+	// oneOf reads that same input as one branch matched and accepts it, so
+	// the two disagreed on the one shape neither would ever be asked about
+	// deliberately.
+	in.MD5 = strings.TrimSpace(in.MD5)
+	in.ID = strings.TrimSpace(in.ID)
+	in.DOI = strings.TrimSpace(in.DOI)
+	in.Citation = strings.TrimSpace(in.Citation)
+	switch {
+	case countKeys(in.MD5, in.ID, in.DOI, in.Citation) != 1:
+		return DetailsOutput{}, errOneIdentifier
+	case in.MD5 != "":
+		out, err := detailsByMD5(ctx, c, in.MD5)
+		if err != nil {
+			return detailsFromAnnas(ctx, annasMirrors, in.MD5, err)
+		}
+		return out, nil
+	case in.ID != "":
+		return detailsByID(ctx, c, in.Object, in.ID)
+	case in.DOI != "":
+		return detailsByDOIOrRegistry(ctx, c, cfg, in.DOI)
+	default:
+		return detailsByCitation(ctx, c, cfg, in.Citation)
+	}
+}
+
+// detailsByDOIOrRegistry looks a DOI up in the catalog and, when the catalog
+// has no record of it, in the registry's metadata instead.
+func detailsByDOIOrRegistry(ctx context.Context, c *libgen.Client, cfg *config.Config, doi string) (DetailsOutput, error) {
+	out, err := detailsByDOI(ctx, c, doi)
+	if err != nil {
+		return detailsFromEnrichment(ctx, c, cfg, doi, err)
+	}
+	return out, nil
+}
+
+// detailsByCitation resolves a pasted reference to a DOI and then answers
+// exactly as a lookup by that DOI would, with the match recorded beside the
+// record so the caller can see which DOI the text was taken to mean.
+//
+// A reference with no clear match is not an error. It returns an output that
+// carries only the unresolved match and its candidates, because choosing among
+// near misses is the caller's call and asserting one would put a work the
+// reference never named into a bibliography.
+//
+// The lookup is a Crossref query, so it is refused on a deployment that turned
+// Crossref off with LIBGEN_MCP_ENRICH, rather than calling it anyway.
+func detailsByCitation(ctx context.Context, c *libgen.Client, cfg *config.Config, citation string) (DetailsOutput, error) {
+	if !cfg.EnrichEnabled {
+		return DetailsOutput{}, fmt.Errorf("a citation is resolved through Crossref, which this server has turned off (%s=false). "+
+			"Pass the work's doi instead, or search for its title", config.EnvName("ENRICH"))
+	}
+	if n := utf8.RuneCountInString(citation); n > libgen.CitationMaxRunes {
+		return DetailsOutput{}, fmt.Errorf("citation is %d characters long, and the most accepted is %d. "+
+			"Paste one reference, trimmed to its authors, title, venue and year", n, libgen.CitationMaxRunes)
+	}
+	match, err := c.ResolveCitation(ctx, citation)
+	if err != nil {
+		return DetailsOutput{}, fmt.Errorf("resolve citation: %w", err)
+	}
+	if !match.IsResolved() {
+		return DetailsOutput{CitationMatch: &match}, nil
+	}
+	out, err := detailsByDOIOrRegistry(ctx, c, cfg, match.DOI)
+	if err != nil {
+		return DetailsOutput{}, fmt.Errorf("the citation resolved to doi %s, but no record of it was found: %w", match.DOI, err)
+	}
+	out.CitationMatch = &match
+	return out, nil
+}
+
+// citationResolvedSteps tells the caller which DOI a citation was taken to
+// mean, ahead of every other step, so a model relaying the record says what it
+// looked up rather than presenting the record as the reference itself. It is
+// empty for every lookup that was not by citation.
+func citationResolvedSteps(m *libgen.CitationMatch) []string {
+	if m == nil || !m.IsResolved() {
+		return nil
+	}
+	return []string{fmt.Sprintf("The citation was resolved through Crossref to doi %s (%s). "+
+		"Tell the user which DOI it was matched to, so they can check it is the work they meant.",
+		oneLine(m.DOI), truncateRunes(oneLine(m.Title), 160))}
+}
+
+// unresolvedCitationSteps is the guidance for a citation no candidate clearly
+// matched: choose one and call again by its doi, or refine the reference.
+func unresolvedCitationSteps(m *libgen.CitationMatch) []string {
+	if len(m.Candidates) == 0 {
+		return []string{"Crossref found nothing for this citation. Check it for typos, or search for its title with the search tool."}
+	}
+	return []string{
+		fmt.Sprintf("No candidate was chosen. If one of them is the work the citation names, call get_details with its doi, e.g. {\"doi\":%q}.",
+			m.Candidates[0].DOI),
+		"If none is, the work may have no Crossref DOI (a preprint, a book, a report). Search for its title with the search tool instead.",
 	}
 }
 

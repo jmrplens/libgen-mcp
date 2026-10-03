@@ -133,6 +133,11 @@
           "required": false
         },
         {
+          "name": "citation",
+          "type": "string",
+          "required": false
+        },
+        {
           "name": "object",
           "type": "string",
           "required": false,
@@ -151,6 +156,11 @@
         {
           "name": "next_steps",
           "type": "string[]",
+          "required": false
+        },
+        {
+          "name": "citation_match",
+          "type": "object",
           "required": false
         },
         {

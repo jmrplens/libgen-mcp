@@ -4412,6 +4412,9 @@ func TestDetailsHandlerEnforcesExactlyOneIdentifier(t *testing.T) {
 		{name: "md5 and id", in: DetailsInput{MD5: "00dd2b0b58e81e3c6e7cb9e7b72dee23", ID: "42"}},
 		{name: "id and doi", in: DetailsInput{ID: "42", DOI: "10.1/x"}},
 		{name: "all three", in: DetailsInput{MD5: "00dd2b0b58e81e3c6e7cb9e7b72dee23", ID: "42", DOI: "10.1/x"}},
+		{name: "doi and citation", in: DetailsInput{DOI: "10.1/x", Citation: "Cohen J. A power primer. 1992"}},
+		{name: "md5 and citation", in: DetailsInput{MD5: "00dd2b0b58e81e3c6e7cb9e7b72dee23", Citation: "Cohen J. A power primer"}},
+		{name: "whitespace citation", in: DetailsInput{Citation: " \n "}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -4419,7 +4422,7 @@ func TestDetailsHandlerEnforcesExactlyOneIdentifier(t *testing.T) {
 			if err == nil {
 				t.Fatalf("handler accepted %+v; the schema says exactly one", tc.in)
 			}
-			if !strings.Contains(err.Error(), "exactly one of md5, id or doi") {
+			if !strings.Contains(err.Error(), "exactly one of md5, id, doi or citation") {
 				t.Errorf("error = %q, want it to state the rule", err)
 			}
 		})
@@ -5121,5 +5124,140 @@ func TestBothAudiences_IsANewValueEachTime(t *testing.T) {
 	first.Audience[0] = "nobody"
 	if second.Audience[0] != "user" {
 		t.Errorf("mutating one annotation changed another: %v", second.Audience)
+	}
+}
+
+// Crossref works-search answers for the citation tests: one where the right
+// work leads by far, and one where two works of the same title are too close
+// to call, as a real search for a reprinted paper answers.
+const (
+	citationSearchClear = `{"message":{"items":[
+		{"DOI":"10.1037/0033-2909.112.1.155","score":50.9,"title":["A power primer."],"author":[{"given":"Jacob","family":"Cohen"}],"issued":{"date-parts":[[1992]]},"container-title":["Psychological Bulletin"]},
+		{"DOI":"10.1/other","score":27.7,"title":["Statistical Power Analysis"]}]}}`
+	citationSearchTied = `{"message":{"items":[
+		{"DOI":"10.1017/cbo9780511809477.002","score":86.8,"title":["Judgment under uncertainty: Heuristics | biases"],"author":[{"given":"Amos","family":"Tversky"}],"issued":{"date-parts":[[1982]]},"container-title":["Judgment under Uncertainty"]},
+		{"DOI":"10.1126/science.185.4157.1124","score":86.0,"title":["Judgment under Uncertainty: Heuristics and Biases"],"issued":{"date-parts":[[1974]]}}]}}`
+)
+
+// citationServer stands in for the catalog and Crossref at once: the catalog
+// knows no DOI, the works search answers with search, and a work lookup
+// answers with a record unless missingWork is set.
+func citationServer(t *testing.T, search string, missingWork bool) (*libgen.Client, *config.Config) {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/json.php", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`[]`)) })
+	mux.HandleFunc("/works", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(search)) })
+	mux.HandleFunc("/works/", func(w http.ResponseWriter, _ *http.Request) {
+		if missingWork {
+			http.NotFound(w, nil)
+			return
+		}
+		_, _ = w.Write([]byte(`{"message":{"title":["A power primer."],"container-title":["Psychological Bulletin"]}}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	cfg := &config.Config{
+		DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100,
+		RetryAttempts: 1, EnrichEnabled: true,
+	}
+	return libgen.New(staticMirrors{srv.URL}, cfg, libgen.WithEnrichBaseURLs(srv.URL, srv.URL)), cfg
+}
+
+// TestDetailsByCitation_Resolved continues a clearly matched citation exactly
+// as a lookup by its DOI, and says which DOI it was matched to before anything
+// else, in the structured output and in the Markdown alike.
+func TestDetailsByCitation_Resolved(t *testing.T) {
+	client, cfg := citationServer(t, citationSearchClear, false)
+	res, out, err := detailsHandler(client, cfg, nil)(t.Context(), nil,
+		DetailsInput{Citation: "  Cohen J. A power primer. Psychol Bull. 1992;112(1):155-159. "})
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	if out.CitationMatch == nil || !out.CitationMatch.IsResolved() || out.CitationMatch.DOI != "10.1037/0033-2909.112.1.155" {
+		t.Fatalf("citation_match = %+v", out.CitationMatch)
+	}
+	if got := stringField(out.File, "doi"); got != "10.1037/0033-2909.112.1.155" {
+		t.Errorf("record doi = %q, want the resolved one", got)
+	}
+	if len(out.NextSteps) == 0 || !strings.Contains(out.NextSteps[0], "resolved through Crossref to doi 10.1037/0033-2909.112.1.155") {
+		t.Errorf("first next step = %q", out.NextSteps)
+	}
+	md := res.Content[0].(*mcp.TextContent).Text
+	if !strings.Contains(md, "**Citation resolved to doi (via Crossref)**: `10.1037/0033-2909.112.1.155`") {
+		t.Errorf("markdown lacks the resolved DOI row:\n%s", md)
+	}
+}
+
+// TestDetailsByCitation_Unresolved answers a citation no candidate clearly
+// matches with the candidates and no record, never with the leader.
+func TestDetailsByCitation_Unresolved(t *testing.T) {
+	client, cfg := citationServer(t, citationSearchTied, false)
+	res, out, err := detailsHandler(client, cfg, nil)(t.Context(), nil,
+		DetailsInput{Citation: "Tversky A, Kahneman D. Judgment under uncertainty: heuristics and biases. Science 1974"})
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	if out.File != nil || out.Edition != nil || out.Citations != nil {
+		t.Errorf("an unresolved citation returned a record: %+v", out)
+	}
+	m := out.CitationMatch
+	if m == nil || m.IsResolved() || m.DOI != "" || len(m.Candidates) != 2 {
+		t.Fatalf("citation_match = %+v", m)
+	}
+	if !strings.Contains(out.NextSteps[0], `{"doi":"10.1017/cbo9780511809477.002"}`) {
+		t.Errorf("next steps = %q", out.NextSteps)
+	}
+	md := res.Content[0].(*mcp.TextContent).Text
+	for _, want := range []string{
+		"## Citation not resolved",
+		"| 1 | Judgment under uncertainty: Heuristics \\| biases | Amos Tversky | 1982 |",
+		"`10.1126/science.185.4157.1124`",
+	} {
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(md, want) {
+				t.Errorf("markdown lacks %q:\n%s", want, md)
+			}
+		})
+	}
+}
+
+// TestDetailsByCitation_Refusals covers every way a citation lookup is turned
+// away: a deployment with Crossref off, a reference too long to be one, a
+// registry that does not answer, and a resolved DOI nothing has a record of.
+func TestDetailsByCitation_Refusals(t *testing.T) {
+	tests := []struct {
+		name        string
+		search      string
+		missingWork bool
+		enrichOff   bool
+		citation    string
+		want        string
+	}{
+		{name: "crossref turned off", search: citationSearchClear, enrichOff: true, citation: "Cohen J. A power primer", want: "LIBGEN_MCP_ENRICH=false"},
+		{name: "too long", search: citationSearchClear, citation: strings.Repeat("a", libgen.CitationMaxRunes+1), want: "most accepted is 1000"},
+		{name: "registry garbled", search: "<html>", citation: "Cohen J. A power primer", want: "resolve citation"},
+		{name: "no record of the resolved doi", search: citationSearchClear, missingWork: true, citation: "Cohen J. A power primer", want: "resolved to doi 10.1037/0033-2909.112.1.155"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			client, cfg := citationServer(t, tc.search, tc.missingWork)
+			cfg.EnrichEnabled = !tc.enrichOff
+			_, _, err := detailsHandler(client, cfg, nil)(t.Context(), nil, DetailsInput{Citation: tc.citation})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("err = %v, want it to contain %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestUnresolvedCitationSteps covers the empty answer, which has no candidate
+// to name in the next call.
+func TestUnresolvedCitationSteps(t *testing.T) {
+	steps := unresolvedCitationSteps(&libgen.CitationMatch{Status: libgen.CitationUnresolved})
+	if len(steps) != 1 || !strings.Contains(steps[0], "found nothing") {
+		t.Errorf("steps = %q", steps)
+	}
+	if got := citationResolvedSteps(nil); got != nil {
+		t.Errorf("a lookup not by citation got steps %q", got)
 	}
 }

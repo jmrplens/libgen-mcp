@@ -176,10 +176,13 @@ Cada identificador llega a un registro distinto, y el registro decide cuánto pu
 | `id` con `object: "file"`                     | Solo el registro de archivo del catálogo                                                     | Ninguno                      | Sin campo `citations`: el catálogo guarda el título en la edición |
 | `doi`                                         | La edición del catálogo para ese DOI, por coincidencia exacta, y el primer archivo que lista | La regla del catálogo, abajo | El md5 de ese archivo. El DOI se sigue comprobando con Crossref   |
 | `doi` que el catálogo no tiene                | Los metadatos de Crossref, etiquetados `file.origin: "crossref"`                             | Ninguno                      | Sin campo `citations`. Los metadatos están en `enrichment`        |
+| `citation`                                    | El DOI con el que Crossref empareja el texto, y después como con `doi`                       | Como con `doi`               | Como con `doi`, con `citation_match` indicando el DOI elegido     |
 
 La regla del catálogo: una entrada es `@article` y `JOUR` cuando el catálogo clasifica el registro como artículo o cuando Crossref confirmó su DOI, y `@book` y `BOOK` en cualquier otro caso. La mera presencia de un DOI nunca lo decide. La copia del catálogo de _Antifragile_, de Nassim Nicholas Taleb, un libro de Random House, lleva un DOI que pertenece a un artículo de revista, y decidir el tipo de entrada por ese campo convertiría el libro en un artículo apoyándose en el mismo valor erróneo que la cita omite. Un registro que el catálogo clasifica como artículo sigue siéndolo cuando su DOI no se pudo confirmar, solo que sin el DOI.
 
 Los dos recursos de respaldo se describen en [Registros que el catálogo no tiene](/libgen-mcp/es/tools/#registros-que-el-catálogo-no-tiene). El de Crossref solo se ejecuta cuando el enriquecimiento está permitido (`LIBGEN_MCP_ENRICH`, activado por defecto); si no, un DOI que el catálogo no tiene devuelve el error «no record» del catálogo.
+
+Una `citation` es una referencia pegada como texto, en cualquier estilo. El servidor la envía a la búsqueda bibliográfica de Crossref y acepta el mejor candidato solo cuando su puntuación supera a la del siguiente en al menos un 20 por ciento y al menos el 90 por ciento de las palabras de su título aparecen en el texto. Con menos, vuelven hasta cinco candidatos (título, autores, año, publicación y DOI) sin ningún registro, para volver a llamar con el `doi` correcto. Un libro, un preprint o un informe sin DOI en Crossref se queda ahí. La consulta es una llamada a Crossref, así que `LIBGEN_MCP_ENRICH=false` la rechaza.
 
 ## Por qué puede faltar el DOI en la cita
 
