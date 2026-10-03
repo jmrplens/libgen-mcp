@@ -205,6 +205,12 @@ type session struct {
 	// exit a test was about from one the server took by itself.
 	expectedExit atomic.Bool
 
+	// stderrDone is closed once the copier has read stderr to its end, which
+	// happens only after the process and anything holding its stderr are gone.
+	// It is the one anchor written after every line, so a case asserting what
+	// the last line is waits for it rather than for a line it expects.
+	stderrDone chan struct{}
+
 	mu     sync.Mutex
 	stderr strings.Builder
 	// notifications holds every notification read past while waiting for a
@@ -300,7 +306,10 @@ func startSessionIn(t *testing.T, dir string, env map[string]string, args ...str
 		t.Fatalf("starting the server: %v", startErr)
 	}
 
-	s := &session{cmd: cmd, stdin: stdin, stdout: bufio.NewReader(stdout), exited: make(chan struct{})}
+	s := &session{
+		cmd: cmd, stdin: stdin, stdout: bufio.NewReader(stdout),
+		exited: make(chan struct{}), stderrDone: make(chan struct{}),
+	}
 
 	// The one reaper. Started with the process rather than on demand, because
 	// alive() has to answer before anybody has asked the process to stop, and a
@@ -315,6 +324,7 @@ func startSessionIn(t *testing.T, dir string, env map[string]string, args ...str
 	// server, and the contents are an assertion of their own — logs belong here
 	// and nowhere near stdout.
 	go func() {
+		defer close(s.stderrDone)
 		buf := make([]byte, 4096)
 		for {
 			n, readErr := stderrPipe.Read(buf)
@@ -507,6 +517,20 @@ func (s *session) waitForStderr(t *testing.T, needle string, within time.Duratio
 			t.Fatalf("stderr did not carry %q within %s\nstderr: %s", needle, within, text)
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// completeStderr returns everything the server wrote to stderr once the stream
+// has ended, and fails the test if it does not end within the window. Only an
+// exited process ends it, so it is for a case about what a process left behind.
+func (s *session) completeStderr(t *testing.T, within time.Duration) string {
+	t.Helper()
+	select {
+	case <-s.stderrDone:
+		return s.stderrText()
+	case <-time.After(within):
+		t.Fatalf("stderr did not end within %s\nstderr: %s", within, s.stderrText())
+		return ""
 	}
 }
 

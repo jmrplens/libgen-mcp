@@ -8,6 +8,8 @@ package stdioe2e
 
 import (
 	"encoding/json"
+	"io"
+	"maps"
 	"net"
 	"strings"
 	"testing"
@@ -210,6 +212,69 @@ func TestStderr_AStartupRefusalIsLoggedAsAnError(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("no JSON record named LIBGEN_MCP_TIMEOUT, so the refusal was not checked:\n%s", text)
+	}
+}
+
+// TestStderr_EveryRefusedStartEndsWithItsReasonAtError holds the refusals made
+// before the configuration is read — the command line and the HTTP variables
+// under it — to the promise the one above pins for config.Load: the process
+// exits with its usual status, writes nothing to stdout, and the last line on
+// stderr is a JSON record at ERROR carrying the reason.
+//
+// Those refusals were written with log.Print, which the log package sends
+// through the JSON handler at INFO, so each of them broke the promise while
+// the case above kept passing. One case per kind of check, plus the flag the
+// parser itself refuses, whose usage text comes first and whose status is 2.
+//
+// The last line is read after stderr has ended, not after the line expected
+// to be last has arrived: a record written after the reason would otherwise
+// still be in the pipe when the assertion ran, and the case would pass.
+func TestStderr_EveryRefusedStartEndsWithItsReasonAtError(t *testing.T) {
+	cases := []struct {
+		name     string
+		args     []string
+		env      map[string]string
+		wantCode int
+		wantMsg  string
+	}{
+		{name: "an unknown transport", args: []string{"--transport", "bogus"}, wantCode: 1, wantMsg: `--transport "bogus"`},
+		{name: "half a TLS pair", args: []string{"--tls-cert", "cert.pem"}, wantCode: 1, wantMsg: "--tls-cert was given without --tls-key"},
+		{name: "a drain delay past the cap", args: []string{"--drain-delay", "1h"}, wantCode: 1, wantMsg: "--drain-delay 1h0m0s"},
+		{name: "a path with a query", args: []string{"--http-path", "/a?b"}, wantCode: 1, wantMsg: `--http-path "/a?b"`},
+		{name: "an HTTP variable that does not parse", env: map[string]string{"LIBGEN_MCP_RATE_LIMIT_RPS": "abc"}, wantCode: 1, wantMsg: "LIBGEN_MCP_RATE_LIMIT_RPS"},
+		{name: "a flag nobody defined", args: []string{"--bogus"}, wantCode: 2, wantMsg: "flag provided but not defined: -bogus"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := baseEnv(t, startMirror(t))
+			maps.Copy(env, tc.env)
+			s := startSessionWithArgs(t, env, tc.args...)
+
+			code, exited := s.waitExit(t, 10*time.Second)
+			if !exited {
+				t.Fatalf("the server kept running\nstderr: %s", s.stderrText())
+			}
+			if code != tc.wantCode {
+				t.Errorf("exit code = %d, want %d", code, tc.wantCode)
+			}
+			text := s.completeStderr(t, 10*time.Second)
+			if out, err := io.ReadAll(s.stdout); err != nil || len(out) != 0 {
+				t.Errorf("stdout carried %q (%v), want nothing", out, err)
+			}
+
+			lines := strings.Split(strings.TrimSpace(text), "\n")
+			last := strings.TrimSpace(lines[len(lines)-1])
+			var record map[string]any
+			if err := json.Unmarshal([]byte(last), &record); err != nil {
+				t.Fatalf("the last line on stderr is not a JSON record: %q (%v)\nstderr: %s", last, err, text)
+			}
+			if level, _ := record["level"].(string); level != "ERROR" {
+				t.Errorf("the refusal was logged at %q, want ERROR: %s", level, last)
+			}
+			if msg, _ := record["msg"].(string); !strings.Contains(msg, tc.wantMsg) {
+				t.Errorf("the last record does not carry the reason %q: %s", tc.wantMsg, last)
+			}
+		})
 	}
 }
 
