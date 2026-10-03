@@ -76,7 +76,7 @@ Three checks answer most questions before any entry does:
 | The client shows the server as failed, or lists no tools                       | [The server does not appear](#the-server-does-not-appear-or-its-tools-are-missing)                      |
 | `search`, `get_details` and `download`, but no `read`                          | [`read` is missing](#the-client-lists-three-tools-not-four-read-is-missing)                             |
 | The process exits at once, the last line is an `ERROR`                         | [The server will not start](#what-a-refused-start-looks-like)                                           |
-| `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES is set and --http …`                       | [The private-address hatch](#the-private-address-hatch-on-an-open-listener)                             |
+| `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES is set and --http …`                       | [The private-address hatch](#the-server-will-not-start-the-private-address-hatch-on-an-open-listener)   |
 | `this flag is read by the HTTP transport only …`                               | [A flag "has no effect"](#a-stdio-server-says-a-flag-has-no-effect)                                     |
 | HTTP `400`, `403`, `404`, `405`, `413`, `429` or `503`                         | [HTTP status codes](#http-status-codes)                                                                 |
 | `502 Bad Gateway` from the proxy on a unix socket                              | [`502` on a unix socket](#the-proxy-gets-502-on-a-unix-socket-permission-denied)                        |
@@ -222,7 +222,7 @@ These are the server's own diagnostic logs, written straight to stderr. They are
 | `--rate-limit-rps cannot bound a caller on 127.0.0.1:8080 …`                | Name the proxy with `--trusted-proxy-header` and `--trusted-proxies`, or drop the flag              |
 | `--public-url "…" needs an http:// or https:// scheme …`                    | Give the origin clients type, scheme included                                                       |
 
-### The private-address hatch on an open listener
+### The server will not start: the private-address hatch on an open listener
 
 <Facts>
 	<Fact kind="symptom">
@@ -995,7 +995,7 @@ See [Homebrew](/libgen-mcp/install/homebrew/).
 - **`LIBGEN_MCP_DOWNLOAD_DIR "/downloads" is not writable: … permission denied`.** The container runs as UID `10001`, which must be able to write the directory you mount: `chown 10001:10001` it on the host, or run with `--user "$(id -u):$(id -g)"` and point `LIBGEN_MCP_DOWNLOAD_DIR` at the mount.
 - **`… is not usable: … read-only file system` under `--read-only`.** The download directory is checked at startup on every transport. Mount a writable volume or a `tmpfs` there, and give `/tmp` a `tmpfs` too, since `read` by `md5` or `doi` stages the file it fetches there.
 - **The container exits at once with status `0`.** An argument was added without the defaults: any argument replaces the image's command wholesale, `--transport auto --http 0.0.0.0:8080` included, and with no `-i` and no `--http` a stdio server reads end-of-file and stops. Write the whole command line, `--transport auto --http 0.0.0.0:8080` and your flag.
-- **It exits at once with status `1`, naming `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES`.** The image's default listener is a wildcard bind. See [the private-address hatch](#the-private-address-hatch-on-an-open-listener).
+- **It exits at once with status `1`, naming `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES`.** The image's default listener is a wildcard bind. See [the private-address hatch](#the-server-will-not-start-the-private-address-hatch-on-an-open-listener).
 - **`cosign verify` reports "no signatures found".** Use a cosign 3.x client: 2.x does not find the signatures a 3.x client verifies.
 
 See [Docker](/libgen-mcp/install/docker/) and [Containers](/libgen-mcp/deploy/containers/).

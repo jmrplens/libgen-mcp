@@ -71,35 +71,35 @@ Tres comprobaciones resuelven la mayoría de dudas antes que cualquier entrada:
 
 ## Índice rápido
 
-| Lo que ves                                                                     | Ve a                                                                                                  |
-| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
-| El cliente marca el servidor como fallido, o no lista herramientas             | [El servidor no aparece](#el-servidor-no-aparece-o-faltan-sus-herramientas)                           |
-| `search`, `get_details` y `download`, pero no `read`                           | [Falta `read`](#el-cliente-lista-tres-herramientas-no-cuatro-falta-read)                              |
-| El proceso sale enseguida y la última línea es un `ERROR`                      | [El servidor no arranca](#cómo-es-un-arranque-rechazado)                                              |
-| `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES is set and --http …`                       | [La escotilla de direcciones privadas](#la-escotilla-de-direcciones-privadas-en-un-listener-abierto)  |
-| `this flag is read by the HTTP transport only …`                               | [Un flag sin efecto](#un-servidor-stdio-dice-que-un-flag-no-tiene-efecto)                             |
-| HTTP `400`, `403`, `404`, `405`, `413`, `429` o `503`                          | [Códigos de estado HTTP](#códigos-de-estado-http)                                                     |
-| `502 Bad Gateway` del proxy en un socket unix                                  | [`502` en un socket unix](#el-proxy-da-502-en-un-socket-unix-permission-denied)                       |
-| Las respuestas llegan de golpe, o un stream se corta                           | [Streams retenidos o cortados](#las-respuestas-llegan-de-golpe-o-un-stream-se-corta)                  |
-| Un cliente de navegador informa de un error CORS                               | [CORS detrás de un proxy](#un-cliente-de-navegador-informa-de-un-error-cors)                          |
-| `callers cannot be told apart …`                                               | [Un presupuesto para todos](#todos-los-llamantes-comparten-un-presupuesto-de-rate-limit)              |
-| `unable to get local issuer certificate`                                       | [TLS con una CA privada](#el-handshake-tls-falla-contra-una-ca-privada)                               |
-| Los clientes siguen recibiendo el certificado antiguo                          | [Un certificado renovado](#un-certificado-renovado-no-se-está-sirviendo)                              |
-| `refusing to connect to a private or local address`                            | [Tras un proxy de salida](#tras-un-proxy-de-salida-refusing-to-connect-to-a-private-or-local-address) |
-| `all libgen mirrors unreachable …`                                             | [Todos los mirrors inalcanzables](#todos-los-mirrors-inalcanzables)                                   |
-| Cada búsqueda tarda segundos, o se encolan unas tras otras                     | [Búsquedas lentas](#las-búsquedas-son-lentas-o-se-encolan-unas-tras-otras)                            |
-| `truncated: true` y un `hint`                                                  | [Resultados truncados](#resultados-de-búsqueda-truncados)                                             |
-| Un resultado con `origin: "annas"` que no se descarga                          | [Resultados de Anna's Archive](#un-resultado-que-no-se-descarga-origin-annas)                         |
-| `integrity check failed: MD5 mismatch`, u otro error de descarga               | [Descarga fallida](#descarga-fallida--discrepancia-de-md5)                                            |
-| Un DOI que no se descarga                                                      | [Artículo no encontrado](#artículo-no-encontrado-acceso-abierto-vs-sci-hub)                           |
-| Un ISBN que no se descarga                                                     | [Libro no encontrado por ISBN](#libro-no-encontrado-por-isbn-solo-acceso-abierto)                     |
-| Falta una fuente en los errores de un segundo intento                          | [Una fuente en enfriamiento](#falta-una-fuente-en-los-errores-de-una-descarga-repetida)               |
-| `not enough free disk space in …`                                              | [Espacio en disco](#espacio-en-disco)                                                                 |
-| `download` devuelve un enlace en lugar de un archivo                           | [Enlaces en lugar de archivos](#download-devuelve-un-enlace-en-lugar-de-guardar-un-archivo)           |
-| `… is outside the allowed directories …`                                       | [Una ruta fuera de los directorios permitidos](#una-ruta-está-fuera-de-los-directorios-permitidos)    |
-| `read` responde `extractable: false`                                           | [Un archivo que `read` no puede extraer](#un-archivo-que-read-no-puede-extraer)                       |
-| Nada llega al colector de OpenTelemetry                                        | [La telemetría no llega](#nada-llega-al-colector)                                                     |
-| Una instalación por npm, PyPI, NuGet, Homebrew, Docker, `.mcpb` o `go install` | [Problemas de instalación por canal](#problemas-de-instalación-por-canal)                             |
+| Lo que ves                                                                     | Ve a                                                                                                                        |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| El cliente marca el servidor como fallido, o no lista herramientas             | [El servidor no aparece](#el-servidor-no-aparece-o-faltan-sus-herramientas)                                                 |
+| `search`, `get_details` y `download`, pero no `read`                           | [Falta `read`](#el-cliente-lista-tres-herramientas-no-cuatro-falta-read)                                                    |
+| El proceso sale enseguida y la última línea es un `ERROR`                      | [El servidor no arranca](#cómo-es-un-arranque-rechazado)                                                                    |
+| `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES is set and --http …`                       | [La escotilla de direcciones privadas](#el-servidor-no-arranca-la-escotilla-de-direcciones-privadas-en-un-listener-abierto) |
+| `this flag is read by the HTTP transport only …`                               | [Un flag sin efecto](#un-servidor-stdio-dice-que-un-flag-no-tiene-efecto)                                                   |
+| HTTP `400`, `403`, `404`, `405`, `413`, `429` o `503`                          | [Códigos de estado HTTP](#códigos-de-estado-http)                                                                           |
+| `502 Bad Gateway` del proxy en un socket unix                                  | [`502` en un socket unix](#el-proxy-da-502-en-un-socket-unix-permission-denied)                                             |
+| Las respuestas llegan de golpe, o un stream se corta                           | [Streams retenidos o cortados](#las-respuestas-llegan-de-golpe-o-un-stream-se-corta)                                        |
+| Un cliente de navegador informa de un error CORS                               | [CORS detrás de un proxy](#un-cliente-de-navegador-informa-de-un-error-cors)                                                |
+| `callers cannot be told apart …`                                               | [Un presupuesto para todos](#todos-los-llamantes-comparten-un-presupuesto-de-rate-limit)                                    |
+| `unable to get local issuer certificate`                                       | [TLS con una CA privada](#el-handshake-tls-falla-contra-una-ca-privada)                                                     |
+| Los clientes siguen recibiendo el certificado antiguo                          | [Un certificado renovado](#un-certificado-renovado-no-se-está-sirviendo)                                                    |
+| `refusing to connect to a private or local address`                            | [Tras un proxy de salida](#tras-un-proxy-de-salida-refusing-to-connect-to-a-private-or-local-address)                       |
+| `all libgen mirrors unreachable …`                                             | [Todos los mirrors inalcanzables](#todos-los-mirrors-inalcanzables)                                                         |
+| Cada búsqueda tarda segundos, o se encolan unas tras otras                     | [Búsquedas lentas](#las-búsquedas-son-lentas-o-se-encolan-unas-tras-otras)                                                  |
+| `truncated: true` y un `hint`                                                  | [Resultados truncados](#resultados-de-búsqueda-truncados)                                                                   |
+| Un resultado con `origin: "annas"` que no se descarga                          | [Resultados de Anna's Archive](#un-resultado-que-no-se-descarga-origin-annas)                                               |
+| `integrity check failed: MD5 mismatch`, u otro error de descarga               | [Descarga fallida](#descarga-fallida--discrepancia-de-md5)                                                                  |
+| Un DOI que no se descarga                                                      | [Artículo no encontrado](#artículo-no-encontrado-acceso-abierto-vs-sci-hub)                                                 |
+| Un ISBN que no se descarga                                                     | [Libro no encontrado por ISBN](#libro-no-encontrado-por-isbn-solo-acceso-abierto)                                           |
+| Falta una fuente en los errores de un segundo intento                          | [Una fuente en enfriamiento](#falta-una-fuente-en-los-errores-de-una-descarga-repetida)                                     |
+| `not enough free disk space in …`                                              | [Espacio en disco](#espacio-en-disco)                                                                                       |
+| `download` devuelve un enlace en lugar de un archivo                           | [Enlaces en lugar de archivos](#download-devuelve-un-enlace-en-lugar-de-guardar-un-archivo)                                 |
+| `… is outside the allowed directories …`                                       | [Una ruta fuera de los directorios permitidos](#una-ruta-está-fuera-de-los-directorios-permitidos)                          |
+| `read` responde `extractable: false`                                           | [Un archivo que `read` no puede extraer](#un-archivo-que-read-no-puede-extraer)                                             |
+| Nada llega al colector de OpenTelemetry                                        | [La telemetría no llega](#nada-llega-al-colector)                                                                           |
+| Una instalación por npm, PyPI, NuGet, Homebrew, Docker, `.mcpb` o `go install` | [Problemas de instalación por canal](#problemas-de-instalación-por-canal)                                                   |
 
 ## Subir el nivel de log
 
@@ -222,7 +222,7 @@ Son los logs de diagnóstico del propio servidor, escritos directamente en stder
 | `--rate-limit-rps cannot bound a caller on 127.0.0.1:8080 …`                | Nombra el proxy con `--trusted-proxy-header` y `--trusted-proxies`, o quita el flag                          |
 | `--public-url "…" needs an http:// or https:// scheme …`                    | Da el origen que escriben los clientes, con esquema                                                          |
 
-### La escotilla de direcciones privadas en un listener abierto
+### El servidor no arranca: la escotilla de direcciones privadas en un listener abierto
 
 <Facts>
 	<Fact kind="symptom">
@@ -995,7 +995,7 @@ Consulta [Homebrew](/libgen-mcp/es/install/homebrew/).
 - **`LIBGEN_MCP_DOWNLOAD_DIR "/downloads" is not writable: … permission denied`.** El contenedor corre como UID `10001`, que tiene que poder escribir en el directorio que montas: haz `chown 10001:10001` en el host, o ejecuta con `--user "$(id -u):$(id -g)"` y apunta `LIBGEN_MCP_DOWNLOAD_DIR` al montaje.
 - **`… is not usable: … read-only file system` con `--read-only`.** El directorio de descargas se comprueba al arrancar en todos los transportes. Monta ahí un volumen escribible o un `tmpfs`, y da también un `tmpfs` a `/tmp`, porque `read` por `md5` o `doi` deja ahí el archivo que trae.
 - **El contenedor sale enseguida con estado `0`.** Se añadió un argumento sin los valores por defecto: cualquier argumento sustituye entera la orden de la imagen, `--transport auto --http 0.0.0.0:8080` incluido, y sin `-i` y sin `--http` un servidor stdio lee fin de fichero y se detiene. Escribe la línea de órdenes completa, `--transport auto --http 0.0.0.0:8080` y tu flag.
-- **Sale enseguida con estado `1`, nombrando `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES`.** El listener por defecto de la imagen es un bind comodín. Consulta [la escotilla de direcciones privadas](#la-escotilla-de-direcciones-privadas-en-un-listener-abierto).
+- **Sale enseguida con estado `1`, nombrando `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES`.** El listener por defecto de la imagen es un bind comodín. Consulta [la escotilla de direcciones privadas](#el-servidor-no-arranca-la-escotilla-de-direcciones-privadas-en-un-listener-abierto).
 - **`cosign verify` informa "no signatures found".** Usa un cliente cosign 3.x: el 2.x no encuentra las firmas que verifica un cliente 3.x.
 
 Consulta [Docker](/libgen-mcp/es/install/docker/) y [Contenedores](/libgen-mcp/es/deploy/containers/).

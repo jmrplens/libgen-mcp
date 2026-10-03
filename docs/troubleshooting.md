@@ -27,7 +27,7 @@ Three checks answer most questions before any entry does:
 | The client shows the server as failed, or lists no tools                       | [The server does not appear](#the-server-does-not-appear-or-its-tools-are-missing)                      |
 | `search`, `get_details` and `download`, but no `read`                          | [`read` is missing](#the-client-lists-three-tools-not-four-read-is-missing)                             |
 | The process exits at once, the last line is an `ERROR`                         | [The server will not start](#what-a-refused-start-looks-like)                                           |
-| `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES is set and --http …`                       | [The private-address hatch](#the-private-address-hatch-on-an-open-listener)                             |
+| `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES is set and --http …`                       | [The private-address hatch](#the-server-will-not-start-the-private-address-hatch-on-an-open-listener)   |
 | `this flag is read by the HTTP transport only …`                               | [A flag "has no effect"](#a-stdio-server-says-a-flag-has-no-effect)                                     |
 | HTTP `400`, `403`, `404`, `405`, `413`, `429` or `503`                         | [HTTP status codes](#http-status-codes)                                                                 |
 | `502 Bad Gateway` from the proxy on a unix socket                              | [`502` on a unix socket](#the-proxy-gets-502-on-a-unix-socket-permission-denied)                        |
@@ -189,7 +189,7 @@ its type rejects. The most common refusals:
 lists every refusal and why each one is a refusal rather than a warning, and the
 [command-line reference](cli.md#exit-codes) has the exit codes.
 
-### The private-address hatch on an open listener
+### The server will not start: the private-address hatch on an open listener
 
 **Symptom.** After an upgrade, a deployment that had been running for months exits immediately
 instead of serving, saying `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES is set and --http 0.0.0.0:8080
@@ -1098,7 +1098,7 @@ See [Homebrew](install/homebrew.md).
   flag.
 - **It exits at once with status `1`, naming `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES`.** The
   image's default listener is a wildcard bind. See
-  [the private-address hatch](#the-private-address-hatch-on-an-open-listener).
+  [the private-address hatch](#the-server-will-not-start-the-private-address-hatch-on-an-open-listener).
 - **`cosign verify` reports "no signatures found".** Use a cosign 3.x client: 2.x does not
   find the signatures a 3.x client verifies.
 
