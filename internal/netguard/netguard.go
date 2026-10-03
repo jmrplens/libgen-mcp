@@ -345,10 +345,32 @@ func stripSensitiveHeaders(req *http.Request, previous *url.URL) {
 	// sides are the same origin, which is precisely the case a reader is trying
 	// to understand. A port is not a secret; a path or a query string is, and
 	// neither is here.
-	slog.Info("dropped request headers on an off-origin redirect",
+	slog.Log(req.Context(), strippedHeadersLevel(dropped), "dropped request headers on an off-origin redirect",
 		"headers", dropped,
 		"from", previous.Scheme+"://"+previous.Host,
 		"to", req.URL.Scheme+"://"+req.URL.Host)
+}
+
+// strippedHeadersLevel says how loudly a strip is reported: INFO when a
+// credential was on its way off the origin, DEBUG when the only casualty was
+// Referer.
+//
+// Referer is on the list because it can carry the previous URL's query string,
+// and it reaches nearly every redirect without anyone setting it: net/http adds
+// the previous hop's URL to every redirected request (refererForURL), so a DOI
+// resolved through doi.org to a publisher dropped one at INFO per hop, seven to a
+// get_details citation lookup. That said nothing an operator can act on, and it
+// buried the drop that does mean something: an Authorization, a cookie or a
+// proxy credential that a source sent, which an off-origin redirect then tried
+// to carry away. The strip itself is unconditional either way. Only the log
+// level depends on what was stripped.
+func strippedHeadersLevel(dropped []string) slog.Level {
+	for _, h := range dropped {
+		if h != "Referer" {
+			return slog.LevelInfo
+		}
+	}
+	return slog.LevelDebug
 }
 
 // sameOrigin reports whether two URLs address the same service, comparing scheme,

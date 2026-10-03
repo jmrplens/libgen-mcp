@@ -45,8 +45,10 @@ const openAlexSelect = "doi,display_name,publication_year,authorships,open_acces
 // before every search and steps aside when a keyless search would eat into the
 // reserve kept for one-credit filtered lookups.
 type OpenAlexProvider struct {
-	client  *http.Client
-	limiter *rate.Limiter
+	client *http.Client
+	// pace is the provider's request rate, drawn from a process-wide bucket (see
+	// pacers) so it holds across searches.
+	pace pace
 	// key is the optional OpenAlex API key. With one, the search draws on the key's
 	// own allowance and the keyless reserve does not apply.
 	key string
@@ -57,16 +59,17 @@ type OpenAlexProvider struct {
 	now func() time.Time
 }
 
-// NewOpenAlex constructs an OpenAlexProvider with its own http.Client, a limiter of
-// one request a second (burst 2) and the process-wide OpenAlex budget. key is the
-// optional API key (LIBGEN_MCP_OPENALEX_KEY); pass "" to stay keyless.
+// NewOpenAlex constructs an OpenAlexProvider with its own http.Client, a
+// process-wide pace of one request a second (burst 2) and the process-wide
+// OpenAlex budget. key is the optional API key (LIBGEN_MCP_OPENALEX_KEY); pass ""
+// to stay keyless.
 func NewOpenAlex(key string) *OpenAlexProvider {
 	return &OpenAlexProvider{
-		client:  newDiscoveryClient(),
-		limiter: rate.NewLimiter(rate.Every(time.Second), 2),
-		key:     strings.TrimSpace(key),
-		budget:  openalex.Shared(),
-		now:     time.Now,
+		client: newDiscoveryClient(),
+		pace:   pace{limit: rate.Every(time.Second), burst: 2},
+		key:    strings.TrimSpace(key),
+		budget: openalex.Shared(),
+		now:    time.Now,
 	}
 }
 
@@ -99,7 +102,7 @@ func (p *OpenAlexProvider) SearchYears(ctx context.Context, query string, limit 
 	if charged && !p.budget.Spend(openalex.SearchCost, openalex.KeylessReserve, p.now()) {
 		return nil, nil
 	}
-	if err := p.limiter.Wait(ctx); err != nil {
+	if err := p.pace.wait(ctx, p.Name(), openAlexBase); err != nil {
 		p.refund(charged)
 		return nil, ctx.Err()
 	}

@@ -27,19 +27,20 @@ const (
 // EuropePMCProvider is a keyless discovery source backed by the Europe PMC search
 // endpoint: EMBL-EBI's index of PubMed, PubMed Central, preprint servers and
 // Agricola, with the open-access full text of the PMC subset it may redistribute.
-// Its limiter and http.Client are its own.
+// Its http.Client is its own, and its pacing is process-wide (see pacers).
 type EuropePMCProvider struct {
-	client  *http.Client
-	limiter *rate.Limiter
+	client *http.Client
+	pace   pace
 }
 
-// NewEuropePMC constructs a EuropePMCProvider with its own http.Client and a
-// limiter of one request a second, burst 2. Europe PMC publishes no rate limit for
-// its REST API, so this is the pace the other index providers keep.
+// NewEuropePMC constructs a EuropePMCProvider with its own http.Client, paced to
+// one request a second with a burst of 2 across every search this process runs.
+// Europe PMC publishes no rate limit for its REST API, so this is the pace the
+// other index providers keep.
 func NewEuropePMC() *EuropePMCProvider {
 	return &EuropePMCProvider{
-		client:  newDiscoveryClient(),
-		limiter: rate.NewLimiter(rate.Every(time.Second), 2),
+		client: newDiscoveryClient(),
+		pace:   pace{limit: rate.Every(time.Second), burst: 2},
 	}
 }
 
@@ -61,7 +62,7 @@ func (p *EuropePMCProvider) SearchYears(ctx context.Context, query string, limit
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 
-	if err := p.limiter.Wait(ctx); err != nil {
+	if err := p.pace.wait(ctx, p.Name(), europePMCBase); err != nil {
 		return nil, ctx.Err()
 	}
 	status, body, err := boundedGet(ctx, p.client, europePMCSearchURL(query, limit, years))

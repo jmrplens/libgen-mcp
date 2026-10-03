@@ -70,20 +70,20 @@ const ericSolrSpecials = `+-&|!(){}[]^"~*?:\/`
 // It is a discovery provider only, with no matching DownloadSource. ERIC's hosted full
 // texts live at a URL derived from the accession number with no lookup step, so a
 // record that has one is surfaced with its pdf_url already filled in and there is
-// nothing for a Resolve to resolve. Its limiter and http.Client are self-contained, so
-// it never shares state with libgen's client.
+// nothing for a Resolve to resolve. Its http.Client is its own, so it never shares
+// state with libgen's client, and its pacing is process-wide (see pacers).
 type ERICProvider struct {
-	client  *http.Client
-	limiter *rate.Limiter
+	client *http.Client
+	pace   pace
 }
 
-// NewERIC constructs an ERICProvider with its own http.Client and a rate limiter
-// pacing requests to one per second (burst 1, so the first request goes through
-// immediately and only back-to-back requests wait).
+// NewERIC constructs an ERICProvider with its own http.Client, paced to one
+// request per second across every search this process runs (burst 1, so the
+// first request goes through immediately and only back-to-back requests wait).
 func NewERIC() *ERICProvider {
 	return &ERICProvider{
-		client:  newDiscoveryClient(),
-		limiter: rate.NewLimiter(rate.Every(ericRate), 1),
+		client: newDiscoveryClient(),
+		pace:   pace{limit: rate.Every(ericRate), burst: 1},
 	}
 }
 
@@ -118,7 +118,7 @@ func (p *ERICProvider) SearchYears(ctx context.Context, query string, limit int,
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 
-	if err := p.limiter.Wait(ctx); err != nil {
+	if err := p.pace.wait(ctx, p.Name(), ericBase); err != nil {
 		return nil, ctx.Err()
 	}
 

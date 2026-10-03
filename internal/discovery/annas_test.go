@@ -18,6 +18,21 @@ type staticMirrors []string
 // Mirrors returns the fixed base URLs.
 func (s staticMirrors) Mirrors(context.Context) []string { return s }
 
+// countingMirrors is a MirrorLister that counts how often it was asked, standing
+// in for a lister whose every call may fetch the mirror directory.
+type countingMirrors struct {
+	// list is what the lister answers.
+	list staticMirrors
+	// calls counts the Mirrors calls.
+	calls *atomic.Int32
+}
+
+// Mirrors records the call and returns the fixed list.
+func (c countingMirrors) Mirrors(ctx context.Context) []string {
+	c.calls.Add(1)
+	return c.list.Mirrors(ctx)
+}
+
 // annasFixture loads the captured Anna's search page.
 func annasFixture(t *testing.T) []byte {
 	t.Helper()
@@ -126,7 +141,11 @@ func TestAnnasProviderStopsAtAChallengeAndTriesOnWithoutOne(t *testing.T) {
 		}))
 		defer second.Close()
 
-		p := &AnnasProvider{mirrors: staticMirrors{first.URL, second.URL}, http: first.Client()}
+		p := &AnnasProvider{
+			mirrors:  staticMirrors{first.URL, second.URL},
+			http:     first.Client(),
+			refusals: &refusalWindows{}, // the challenge must silence no other test
+		}
 		got, err := p.Search(context.Background(), "dune", 3)
 		if err != nil {
 			t.Fatalf("Search: %v", err)
@@ -190,14 +209,24 @@ func TestAnnasProviderStaysQuietAfterAChallengeAndComesBack(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	// Every search builds its own provider, as ExtraProviders does in production,
+	// so the window can only hold if it outlives the provider value. They share
+	// one window, as production providers share annasRefusals, and the lister
+	// counts its calls: a quiet search must not even ask for the mirror list,
+	// which in production can fetch the mirror directory.
 	now := time.Now()
-	p := &AnnasProvider{
-		mirrors: staticMirrors{srv.URL},
-		http:    srv.Client(),
-		now:     func() time.Time { return now },
+	window := &refusalWindows{}
+	var listed atomic.Int32
+	fresh := func() *AnnasProvider {
+		return &AnnasProvider{
+			mirrors:  countingMirrors{list: staticMirrors{srv.URL}, calls: &listed},
+			http:     srv.Client(),
+			now:      func() time.Time { return now },
+			refusals: window,
+		}
 	}
 
-	if _, err := p.Search(context.Background(), "dune", 3); err != nil {
+	if _, err := fresh().Search(context.Background(), "dune", 3); err != nil {
 		t.Fatalf("Search: %v", err)
 	}
 	if n := hits.Load(); n != 1 {
@@ -207,17 +236,20 @@ func TestAnnasProviderStaysQuietAfterAChallengeAndComesBack(t *testing.T) {
 	// Inside the window: the site is answering again, and must not be asked.
 	challenge.Store(false)
 	for i := range 3 {
-		if _, err := p.Search(context.Background(), "dune", 3); err != nil {
+		if _, err := fresh().Search(context.Background(), "dune", 3); err != nil {
 			t.Fatalf("Search %d during the cooldown: %v", i, err)
 		}
 	}
 	if n := hits.Load(); n != 1 {
 		t.Errorf("the cooldown made %d request(s) in total, want the original 1", n)
 	}
+	if n := listed.Load(); n != 1 {
+		t.Errorf("the mirror list was asked for %d time(s), want only by the first search", n)
+	}
 
 	// Past the window: exactly one request, and the results come back.
 	now = now.Add(challengeCooldown + time.Second)
-	got, err := p.Search(context.Background(), "dune", 3)
+	got, err := fresh().Search(context.Background(), "dune", 3)
 	if err != nil {
 		t.Fatalf("Search after the cooldown: %v", err)
 	}
@@ -229,23 +261,24 @@ func TestAnnasProviderStaysQuietAfterAChallengeAndComesBack(t *testing.T) {
 	}
 }
 
-// TestBeQuietOnlyEverMovesTheDeadlineLater pins the rule a plain Swap breaks: a
-// goroutine that computed its deadline, was descheduled, and woke up after a
-// later one had been stored must not shorten the window.
-//
-// Concurrent challenges are ordinary — Federate runs providers in their own
-// goroutines and a server answers several searches at once — and a shortened
-// window is the one failure the cooldown exists to prevent. The stale deadline
-// is applied deliberately here rather than raced for, so the case fails every
-// time against a Swap instead of once in a thousand runs.
+// TestBeQuietOnlyEverMovesTheDeadlineLater pins the window's life through the
+// provider: it outlives the provider value, a challenge inside it says
+// nothing, a goroutine that computed its deadline from an older clock reading
+// does not shorten it, and once it lapses a challenge opens and announces a new
+// one.
 func TestBeQuietOnlyEverMovesTheDeadlineLater(t *testing.T) {
 	now := time.Now()
-	p := &AnnasProvider{now: func() time.Time { return now }}
+	window := &refusalWindows{}
+	p := &AnnasProvider{now: func() time.Time { return now }, refusals: window}
 
 	if !p.beQuiet() {
 		t.Fatal("the first challenge did not report itself as opening the window")
 	}
-	opened := p.quietUntil.Load()
+	// The window is the provider's, not the value's: a provider built for the
+	// next search sees it.
+	if next := (&AnnasProvider{now: p.now, refusals: window}); !next.quiet() {
+		t.Error("a provider built for the next search did not see the window")
+	}
 
 	// A second challenge a minute later extends the window and says nothing,
 	// because the window it belongs to has already been announced.
@@ -253,26 +286,33 @@ func TestBeQuietOnlyEverMovesTheDeadlineLater(t *testing.T) {
 	if p.beQuiet() {
 		t.Error("a challenge inside an open window reported itself as opening one")
 	}
-	extended := p.quietUntil.Load()
-	if extended <= opened {
-		t.Errorf("the deadline did not move later: %d then %d", opened, extended)
-	}
 
-	// The descheduled goroutine: its clock still reads the original instant, so
-	// the deadline it computes is earlier than the one already stored.
+	// The descheduled goroutine: its clock still reads the original instant.
 	stale := now.Add(-time.Minute)
 	p.now = func() time.Time { return stale }
 	if p.beQuiet() {
 		t.Error("a stale challenge reported itself as opening a window")
 	}
-	if got := p.quietUntil.Load(); got != extended {
-		t.Errorf("a stale deadline overwrote a later one: %d, want %d", got, extended)
+	p.now = func() time.Time { return now.Add(challengeCooldown - time.Second) }
+	if !p.quiet() {
+		t.Error("a stale deadline shortened the window")
 	}
 
 	// Past the window, a challenge opens a new one and says so again.
 	p.now = func() time.Time { return now.Add(challengeCooldown + time.Minute) }
+	if p.quiet() {
+		t.Error("the window outlived its deadline")
+	}
 	if !p.beQuiet() {
 		t.Error("a challenge after the window lapsed did not report a fresh one")
+	}
+}
+
+// TestAnnasProviderDefaultsToTheProcessWindow pins the production wiring: a
+// provider built by NewAnnas reads and writes the process-wide annasRefusals.
+func TestAnnasProviderDefaultsToTheProcessWindow(t *testing.T) {
+	if got := NewAnnas(staticMirrors{}).window(); got != &annasRefusals {
+		t.Error("NewAnnas built a provider with a window of its own")
 	}
 }
 

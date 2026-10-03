@@ -46,20 +46,20 @@ var dblpRefusals refusalWindows
 // bibliography search API. It contributes precise CS bibliographic data — the venue,
 // year and full author list that arXiv and Crossref match poorly for conference
 // papers — never full text: dblp is an index, so its results carry no PDF URL and
-// are never marked open access. Its limiter and http.Client are self-contained, so it
-// never shares state with libgen's client.
+// are never marked open access. Its http.Client is its own, so it never shares
+// state with libgen's client, and its pacing is process-wide (see pacers).
 type DBLPProvider struct {
-	client  *http.Client
-	limiter *rate.Limiter
+	client *http.Client
+	pace   pace
 }
 
-// NewDBLP constructs a DBLPProvider with its own http.Client and a rate limiter
-// pacing requests to one per second (burst 1, so the first request goes through
-// immediately and only back-to-back requests wait).
+// NewDBLP constructs a DBLPProvider with its own http.Client, paced to one request
+// per second across every search this process runs (burst 1, so the first request
+// goes through immediately and only back-to-back requests wait).
 func NewDBLP() *DBLPProvider {
 	return &DBLPProvider{
-		client:  newDiscoveryClient(),
-		limiter: rate.NewLimiter(rate.Every(dblpRate), 1),
+		client: newDiscoveryClient(),
+		pace:   pace{limit: rate.Every(dblpRate), burst: 1},
 	}
 }
 
@@ -83,7 +83,7 @@ func (p *DBLPProvider) Search(ctx context.Context, query string, limit int) ([]D
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 
-	if err := p.limiter.Wait(ctx); err != nil {
+	if err := p.pace.wait(ctx, p.Name(), base); err != nil {
 		return nil, ctx.Err()
 	}
 
@@ -110,16 +110,22 @@ func (p *DBLPProvider) Search(ctx context.Context, query string, limit int) ([]D
 }
 
 // dblpRefused reports whether a response is dblp declining to answer rather than
-// answering: a 429, or a 200 whose body is not a JSON object. The search API is
-// asked for format=json, so a 200 opening with anything but "{" is a page put in
-// front of it (the Anubis bot check observed since 2026-10), and parsing it would
-// only report "no results" for a search nobody ran.
+// answering: a 403 (Anubis's deny verdict), a 429 (dblp's documented rate limit),
+// a 503 (what a bot wall or an overloaded front end answers), or a 200 whose body
+// is not a JSON object. The search API is asked for format=json, so a 200 opening
+// with anything but "{" (after whitespace and a UTF-8 byte order mark) is a page
+// put in front of it (the Anubis bot check observed since 2026-10), and parsing
+// it would only report "no results" for a search nobody ran.
 func dblpRefused(status int, body []byte) bool {
-	if status == http.StatusTooManyRequests {
+	switch status {
+	case http.StatusForbidden, http.StatusTooManyRequests, http.StatusServiceUnavailable:
 		return true
+	case http.StatusOK:
+		trimmed := bytes.TrimSpace(bytes.TrimPrefix(bytes.TrimSpace(body), []byte("\xef\xbb\xbf")))
+		return len(trimmed) == 0 || trimmed[0] != '{'
+	default:
+		return false
 	}
-	trimmed := bytes.TrimSpace(body)
-	return status == http.StatusOK && (len(trimmed) == 0 || trimmed[0] != '{')
 }
 
 // dblpSearchURL assembles the publication-search request URL: the free-text query on
