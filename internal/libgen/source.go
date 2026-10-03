@@ -69,7 +69,7 @@ var pdfProbeRange = "bytes=0-" + strconv.Itoa(pdfProbeSniff-1)
 // is safe to point at a file/CDN URL whose credentials must stay on the API host.
 // A transport error, a non-2xx status, or a non-PDF body yields false so the caller
 // can fall through. It is shared by the DOI sources that must confirm a resolved
-// PDF endpoint is live before returning it (Europe PMC's render fallback, CORE's
+// PDF endpoint is live before returning it (Europe PMC's dataset copy, CORE's
 // often-stale download URLs).
 //
 // The requested range covers the whole marker on purpose: a server that honors

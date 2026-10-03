@@ -308,11 +308,11 @@ by registering the tools and prompts for real and walking the tree, and
 | Discovery providers      |    10 |
 | `LIBGEN_MCP_*` variables |    58 |
 | Go packages              |    53 |
-| Test files               |   274 |
+| Test files               |   275 |
 
 | Test surface         | Files |
 | -------------------- | ----: |
-| unit (internal)      |   115 |
+| unit (internal)      |   116 |
 | unit (cmd)           |   102 |
 | HTTP end-to-end      |    33 |
 | stdio end-to-end     |    11 |

@@ -314,8 +314,8 @@ The open-access article sources are all **keyless** (except `core`, which needs 
   best open-access location's PDF link. It reads the same index as Unpaywall but needs no
   contact email, so it is the prefix-agnostic open-access resolver a keyless deployment has.
 - `europepmc` maps a DOI to its PubMed Central record via the [Europe PMC](https://europepmc.org)
-  API and fetches the PDF from the PMC render backend (falling back to the article render
-  endpoint), serving only articles whose open-access full text Europe PMC actually holds.
+  API and fetches the PDF from the PMC Article Datasets NCBI publishes on AWS Open Data,
+  serving only articles whose open-access full text Europe PMC actually holds.
 - `biorxiv` resolves preprint DOIs (the `10.1101` prefix) through the
   [bioRxiv/medRxiv](https://api.biorxiv.org) details API to the versioned `.full.pdf`.
 - `rfc` turns the RFC number in a `10.17487` DOI into the
