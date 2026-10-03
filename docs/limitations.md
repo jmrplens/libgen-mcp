@@ -133,6 +133,16 @@ stands:
 Defeating the challenge is out of scope by decision: it would mean running Anna's anti-bot
 code to impersonate a browser. See [Sources → `annas`](sources.md#annas).
 
+**dblp's search API is behind a bot check, so dblp contributes no search results.** As
+measured on 2026-10-03, dblp.org and its two mirrors answer the search API with an Anubis
+"Making sure you're not a bot!" page (HTTP 200, HTML in place of the requested JSON), and
+sometimes with a 429. The block was seen from a consumer ISP address, so it is not reserved
+for datacenter ranges. While it stands, the dblp provider returns nothing, logs the reason
+once at INFO, and asks nothing more for fifteen minutes. The other providers are unaffected,
+and Crossref indexes most of the same computer-science papers by DOI. Passing the
+check would mean running its proof of work as a browser does, which is out of scope for the
+same reason as Anna's. See [How search works](how-search-works.md).
+
 **Some DOIs are reachable by no source.** The chain reaches only what its sources hold and
 will serve to an automated client. SciELO's oldest articles are HTML-only, and no source
 reaches the 1998 article the sources page names. Of fourteen SciELO DOIs sampled, three were
