@@ -1390,7 +1390,16 @@ Three things about it are easy to get wrong:
   the `sh -c` it runs the launcher through. So on POSIX `cli.js` passes
   SIGTERM, SIGINT and SIGHUP on, and, only when `npm_lifecycle_event` says npm
   started it, sends the server SIGTERM once its parent changes; anywhere else a
-  server left running after its parent is the operator's choice. Windows is left
+  server left running after its parent is the operator's choice. The parent is
+  read as the module's first statement, and a launcher that is already init's
+  when the watch starts stops the server at once, because npm's shell can die
+  while Node boots. **The server is told to stop at most once**: it drains on
+  its first SIGINT/SIGTERM and dies outright on a second, so a relayed copy of
+  a Ctrl+C the terminal already delivered, a repeated SIGTERM or the watch's
+  SIGTERM after a signal would each skip `--drain-delay`. Only the first
+  terminating signal is acted on, and SIGINT/SIGHUP are not relayed when stdin
+  is a terminal. A cgroup-wide kill (systemd's default `KillMode`) still
+  delivers twice; the launcher cannot tell it apart. Windows is left
   alone (the console's Ctrl+C reaches the server itself). After the server
   starts, the launcher writes to fd 2 with `writeSync`, never through
   `process.stderr`, which would switch the shared pipe to non-blocking.

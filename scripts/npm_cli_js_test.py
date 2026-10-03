@@ -30,27 +30,47 @@ Run with:
 import os
 import shutil
 import signal
+import socket
 import subprocess
 import tempfile
 import time
 import unittest
+import urllib.error
+import urllib.request
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 LAUNCHER = os.path.join(ROOT, "npm", "libgen-mcp", "cli.js")
 
 # A stand-in for the server binary. It writes its PID and its parent's, then
 # one line per argument and one per signal it traps, to the files the case
-# names, and behaves as STUB_MODE says: exit with a code, die by a signal, or
-# wait until a signal arrives.
+# names, and behaves as STUB_MODE says: exit with a code, die by a signal,
+# wait until a signal arrives, or, like the real server, drain for a while
+# after the first signal and keep logging any that arrive meanwhile.
 STUB = """#!/bin/sh
 printf '%s %s\\n' "$$" "$PPID" > "$STUB_PIDS.tmp" && mv "$STUB_PIDS.tmp" "$STUB_PIDS"
 for a in "$@"; do
   printf 'arg=[%s]\\n' "$a" >> "$STUB_LOG"
 done
-trap 'echo TERM >> "$STUB_LOG"; exit 0' TERM
-trap 'echo INT >> "$STUB_LOG"; exit 0' INT
-trap 'echo HUP >> "$STUB_LOG"; exit 0' HUP
+draining=
+on_signal() {
+  echo "$1" >> "$STUB_LOG"
+  [ "$STUB_MODE" = drain ] || exit 0
+  draining=1
+}
+trap 'on_signal TERM' TERM
+trap 'on_signal INT' INT
+trap 'on_signal HUP' HUP
 case "$STUB_MODE" in
+  drain)
+    ticks=0
+    while :; do
+      sleep 0.05
+      if [ -n "$draining" ]; then
+        ticks=$((ticks + 1))
+        [ "$ticks" -ge "${STUB_DRAIN_TICKS:-20}" ] && exit 0
+      fi
+    done
+    ;;
   exit)
     printf 'out from the server\\n'
     exit "$STUB_CODE"
@@ -69,6 +89,31 @@ esac
 # the parent watch, which checks once a second.
 SOON = 5.0
 WATCH_PERIOD = 1.0
+
+# The real server binary for the one case that needs it, built by
+# `make check-npm-launcher`. Without it that case is skipped.
+REAL_SERVER_ENV = "NPM_LAUNCHER_TEST_SERVER"
+DRAIN_SECONDS = 2
+
+
+def free_port():
+    """A loopback port nothing listens on right now."""
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+def health(port):
+    """The status /health answers on port, or None when nothing answers."""
+    direct = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with direct.open("http://127.0.0.1:{}/health".format(port), timeout=1) as res:
+            return res.status
+    except urllib.error.HTTPError as err:
+        err.close()
+        return err.code
+    except OSError:
+        return None
 
 
 def node_key():
@@ -160,10 +205,10 @@ class NpmLauncherTest(unittest.TestCase):
         except ProcessLookupError:
             pass
 
-    def start(self, mode, **kwargs):
+    def start(self, mode, stdin=subprocess.DEVNULL, args=("--http", "a b", ""), **kwargs):
         proc = subprocess.Popen(
-            ["node", self.cli, "--http", "a b", ""],
-            env=self.env(mode, **kwargs), stdin=subprocess.DEVNULL,
+            ["node", self.cli, *args],
+            env=self.env(mode, **kwargs), stdin=stdin,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
         )
         self.addCleanup(self.reap, proc)
@@ -216,17 +261,103 @@ class NpmLauncherTest(unittest.TestCase):
                 stdout, _ = proc.communicate()
                 self.assertEqual(stdout, b"")
 
-    def shell_around_the_launcher(self, npm):
+    def shell_around_the_launcher(self, npm, mode="wait", stdin=subprocess.DEVNULL, wait=True, **extra):
         """Runs the launcher under a shell that does not exec it, as npm does."""
         script = "node \"$0\"; :"
         proc = subprocess.Popen(
             ["/bin/sh", "-c", script, self.cli],
-            env=self.env("wait", npm=npm), stdin=subprocess.DEVNULL,
+            env=self.env(mode, npm=npm, **extra), stdin=stdin,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
         )
         self.addCleanup(self.reap, proc)
+        if not wait:
+            return proc, None, None
         server, launcher = self.stub_pids()
         return proc, server, launcher
+
+    def terminal(self):
+        """A pseudo-terminal's slave end, to stand for a launcher run from a terminal."""
+        master, slave = os.openpty()
+        self.addCleanup(os.close, master)
+        self.addCleanup(os.close, slave)
+        return slave
+
+    def signals_logged(self):
+        return [line for line in self.logged() if not line.startswith("arg=")]
+
+    def test_acts_on_the_first_of_repeated_signals_only(self):
+        # The real server restores the default action after its first signal,
+        # so a second one relayed during its drain would end it outright.
+        proc = self.start("drain")
+        self.stub_pids()
+        for name in ("TERM", "TERM", "INT", "HUP", "TERM"):
+            os.kill(proc.pid, getattr(signal, "SIG" + name))
+            time.sleep(0.1)
+        proc.wait(timeout=SOON)
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(self.signals_logged(), ["TERM"])
+
+    def test_a_terminal_signal_reaches_the_server_once(self):
+        # A Ctrl+C reaches the terminal's whole foreground process group, the
+        # server included, so the launcher must not relay a copy of it.
+        for name in ("INT", "HUP"):
+            with self.subTest(name):
+                open(self.log, "w", encoding="utf-8").close()
+                if os.path.exists(self.pids):
+                    os.remove(self.pids)
+                proc = self.start("drain", stdin=self.terminal())
+                server, _ = self.stub_pids()
+                self.assertEqual(os.getpgid(server), proc.pid, "the stand-in left the launcher's process group")
+                os.killpg(proc.pid, getattr(signal, "SIG" + name))
+                proc.wait(timeout=SOON)
+                self.assertEqual(proc.returncode, 0)
+                self.assertEqual(self.signals_logged(), [name])
+
+    def test_the_parent_watch_stays_quiet_once_the_server_was_signalled(self):
+        # npx run from a terminal: Ctrl+C reaches npm's shell, the launcher and
+        # the server together, the shell goes, and the watch must not add a
+        # SIGTERM to the SIGINT the server is already draining on.
+        shell, server, _ = self.shell_around_the_launcher(
+            npm=True, mode="drain", stdin=self.terminal(), STUB_DRAIN_TICKS="50",
+        )
+        os.killpg(shell.pid, signal.SIGINT)
+        time.sleep(0.2)
+        if shell.poll() is None:
+            shell.send_signal(signal.SIGTERM)
+        shell.wait(timeout=SOON)
+        self.assertTrue(wait_for(lambda: not alive(server), WATCH_PERIOD + SOON), "the server never finished its drain")
+        self.assertEqual(self.signals_logged(), ["INT"])
+
+    def test_stops_the_server_when_the_npm_shell_dies_while_the_launcher_starts(self):
+        # The shell can die while Node is still booting, before the launcher's
+        # code runs. The launcher is then already init's, and a parent read
+        # later than its first statement would never change.
+        gate = os.path.join(self.work, "gate.js")
+        opened = os.path.join(self.work, "gate-open")
+        started = os.path.join(self.work, "gate-pid")
+        with open(gate, "w", encoding="utf-8") as fh:
+            fh.write(
+                "const fs = require('fs');\n"
+                "fs.writeFileSync(%r, String(process.pid));\n"
+                "const nap = new Int32Array(new SharedArrayBuffer(4));\n"
+                "while (!fs.existsSync(%r)) Atomics.wait(nap, 0, 0, 20);\n" % (started, opened)
+            )
+        shell, _, _ = self.shell_around_the_launcher(npm=True, wait=False, NODE_OPTIONS="--require " + gate)
+        self.assertTrue(wait_for(lambda: os.path.exists(started), SOON), "the launcher never started")
+        with open(started, encoding="utf-8") as fh:
+            launcher = int(fh.read())
+        self.addCleanup(self.kill_quietly, launcher)
+        shell.send_signal(signal.SIGTERM)
+        shell.wait(timeout=SOON)
+        reaper = subprocess.run(["ps", "-o", "ppid=", "-p", str(launcher)], capture_output=True, text=True, check=False)
+        if reaper.stdout.strip() != "1":
+            self.skipTest("an orphan here is reaped by {} rather than init".format(reaper.stdout.strip() or "nothing"))
+        open(opened, "w", encoding="utf-8").close()
+        self.assertTrue(wait_for(lambda: not alive(launcher), SOON), "the server outlived the shell it was started under")
+        if os.path.exists(self.pids):
+            with open(self.pids, encoding="utf-8") as fh:
+                server = int(fh.read().split()[0])
+            self.assertFalse(alive(server))
 
     def test_stops_the_server_when_the_shell_npm_runs_it_through_dies(self):
         shell, server, launcher = self.shell_around_the_launcher(npm=True)
@@ -251,6 +382,30 @@ class NpmLauncherTest(unittest.TestCase):
         self.assertNotIn("TERM", self.logged())
         os.kill(launcher, signal.SIGTERM)
         self.assertTrue(wait_for(lambda: not alive(server), SOON), "a SIGTERM to the launcher did not reach the server")
+
+    @unittest.skipUnless(os.environ.get(REAL_SERVER_ENV), REAL_SERVER_ENV + " names no server binary")
+    def test_the_real_server_drains_under_a_terminal_sigint(self):
+        # The case the stand-in only models: a Ctrl+C to `libgen-mcp --http
+        # --drain-delay` must give the same drain through the launcher as it
+        # does to the binary run directly, /health answering 503 meanwhile, and
+        # the same exit status, 0.
+        shutil.copyfile(os.environ[REAL_SERVER_ENV], self.binary)
+        os.chmod(self.binary, 0o755)
+        port = free_port()
+        proc = self.start(
+            "unused", stdin=self.terminal(),
+            args=("--http", "127.0.0.1:{}".format(port), "--drain-delay", "{}s".format(DRAIN_SECONDS)),
+        )
+        self.assertTrue(wait_for(lambda: health(port) == 200, SOON * 2), "the server never answered /health")
+        began = time.monotonic()
+        os.killpg(proc.pid, signal.SIGINT)
+        self.assertTrue(wait_for(lambda: health(port) == 503, SOON), "the server did not drain")
+        proc.wait(timeout=DRAIN_SECONDS + SOON)
+        elapsed = time.monotonic() - began
+        stdout, stderr = proc.communicate()
+        self.assertEqual(proc.returncode, 0, stderr.decode(errors="replace")[-2000:])
+        self.assertGreaterEqual(elapsed, DRAIN_SECONDS * 0.9, "the drain was cut short")
+        self.assertEqual(stdout, b"")
 
     def test_reports_a_binary_it_cannot_start(self):
         os.chmod(self.binary, 0o644)

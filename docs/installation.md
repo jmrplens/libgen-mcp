@@ -150,6 +150,14 @@ stopped it. Started any other way, a server that outlives its parent is left
 alone, as the binary run directly would be. On Windows the console's Ctrl+C
 reaches the server itself, and the launcher only waits for it.
 
+The server drains on its first SIGINT or SIGTERM and ends outright on a second,
+so the launcher tells it to stop once: later signals are not passed on, and a
+Ctrl+C from a terminal, which already reaches the server, is not passed on at
+all. A signal sent to every process at once by other means reaches the server
+twice and skips its drain, which is what systemd's default
+`KillMode=control-group` does. Under systemd run the binary directly, or set
+`KillMode=mixed`.
+
 ## PyPI
 
 **What you get.** [`libgen-mcp`](https://pypi.org/project/libgen-mcp/), one wheel

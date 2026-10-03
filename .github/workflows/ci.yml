@@ -198,8 +198,13 @@ jobs:
       # the launcher through. So the launcher is run here, with the runner's
       # node, against a stand-in server, and held to passing argv and stdout
       # through, mirroring the exit code or signal, passing SIGTERM, SIGINT and
-      # SIGHUP on, and stopping the server when npm's shell dies. A missing
-      # node fails here rather than skipping, since GitHub sets CI.
+      # SIGHUP on, telling the server to stop at most once, and stopping it when
+      # npm's shell dies. One case runs the real server, built by the target,
+      # to show a Ctrl+C through the launcher keeps its --drain-delay, hence Go.
+      # A missing node fails here rather than skipping, since GitHub sets CI.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
       - name: The npm launcher stops the server it started
         run: make check-npm-launcher
       # The pr-description job and the site audit judge text that is not in the
