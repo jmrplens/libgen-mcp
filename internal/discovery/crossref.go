@@ -55,23 +55,23 @@ var crossrefReaderApplications = map[string]bool{
 }
 
 // CrossrefProvider is a keyless open-access discovery source backed by the Crossref
-// works-search endpoint. Its limiter and http.Client are self-contained, so it
-// never shares state with libgen's enrichment client.
+// works-search endpoint. Its http.Client is its own, so it never shares state
+// with libgen's enrichment client, and its pacing is process-wide (see pacers).
 type CrossrefProvider struct {
-	client  *http.Client
-	limiter *rate.Limiter
-	email   string // optional polite-pool contact (mailto); empty disables it
+	client *http.Client
+	pace   pace
+	email  string // optional polite-pool contact (mailto); empty disables it
 }
 
-// NewCrossref constructs a CrossrefProvider with its own http.Client and a rate
-// limiter pacing requests to Crossref's generous allowance (2 requests/second,
-// burst 2). The email is the optional polite-pool contact used as the mailto query
-// parameter; pass "" to omit it.
+// NewCrossref constructs a CrossrefProvider with its own http.Client, paced to one
+// request per second with a burst of two, well inside Crossref's allowance, across
+// every search this process runs. The email is the optional polite-pool contact used as the
+// mailto query parameter; pass "" to omit it.
 func NewCrossref(email string) *CrossrefProvider {
 	return &CrossrefProvider{
-		client:  newDiscoveryClient(),
-		limiter: rate.NewLimiter(rate.Every(time.Second), 2),
-		email:   strings.TrimSpace(email),
+		client: newDiscoveryClient(),
+		pace:   pace{limit: rate.Every(time.Second), burst: 2},
+		email:  strings.TrimSpace(email),
 	}
 }
 
@@ -93,7 +93,7 @@ func (p *CrossrefProvider) SearchYears(ctx context.Context, query string, limit 
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 
-	if err := p.limiter.Wait(ctx); err != nil {
+	if err := p.pace.wait(ctx, p.Name(), crossrefBase); err != nil {
 		return nil, ctx.Err()
 	}
 

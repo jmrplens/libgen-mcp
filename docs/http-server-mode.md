@@ -194,6 +194,13 @@ confusingly similar name — `LIBGEN_MCP_RATE_RPS` and `LIBGEN_MCP_RATE_BURST`, 
 by the whole process, defaulting to one request per second — and it is what the mirrors get from
 you whatever the inbound limit says.
 
+The extra searchers are paced the same way, each against its own upstream and each for the
+whole process: arXiv at one request every three seconds, PubMed at three per second, OpenLibrary
+at one per second (three with a contact address), Crossref and OpenAlex at one per second with a
+burst of two, and dblp, ERIC and Gutenberg at one per second. Concurrent searches share those buckets rather than each starting with a full one, so a
+provider whose token cannot arrive within the search's budget is skipped for that search, and
+the upstream never sees more than its stated rate from this process.
+
 They are not the same guarantee and neither derives from the other: raise the inbound limit and
 callers queue on the outbound one instead of being refused, which is slower rather than faster.
 The inbound defaults are the sibling project's HTTP figures; what they should be against *this*

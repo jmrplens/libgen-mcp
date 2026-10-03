@@ -449,8 +449,13 @@ func TestDblpRefused(t *testing.T) {
 		{name: "malformed json is an answer", status: http.StatusOK, body: `{not json`, want: false},
 		{name: "html page", status: http.StatusOK, body: "<!doctype html><title>Making sure you're not a bot!</title>", want: true},
 		{name: "empty 200", status: http.StatusOK, body: "  ", want: true},
+		{name: "json after a byte order mark", status: http.StatusOK, body: "\xef\xbb\xbf\n{\"result\":{}}", want: false},
+		{name: "html after a byte order mark", status: http.StatusOK, body: "\xef\xbb\xbf<html></html>", want: true},
+		{name: "403", status: http.StatusForbidden, body: "<html></html>", want: true},
 		{name: "429", status: http.StatusTooManyRequests, body: "", want: true},
+		{name: "503", status: http.StatusServiceUnavailable, body: "", want: true},
 		{name: "500 html", status: http.StatusInternalServerError, body: "<html></html>", want: false},
+		{name: "404", status: http.StatusNotFound, body: "", want: false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

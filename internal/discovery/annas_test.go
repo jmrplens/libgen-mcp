@@ -190,14 +190,18 @@ func TestAnnasProviderStaysQuietAfterAChallengeAndComesBack(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	// Every search builds its own provider, as ExtraProviders does in production,
+	// so the window can only hold if it outlives the provider value.
 	now := time.Now()
-	p := &AnnasProvider{
-		mirrors: staticMirrors{srv.URL},
-		http:    srv.Client(),
-		now:     func() time.Time { return now },
+	fresh := func() *AnnasProvider {
+		return &AnnasProvider{
+			mirrors: staticMirrors{srv.URL},
+			http:    srv.Client(),
+			now:     func() time.Time { return now },
+		}
 	}
 
-	if _, err := p.Search(context.Background(), "dune", 3); err != nil {
+	if _, err := fresh().Search(context.Background(), "dune", 3); err != nil {
 		t.Fatalf("Search: %v", err)
 	}
 	if n := hits.Load(); n != 1 {
@@ -207,7 +211,7 @@ func TestAnnasProviderStaysQuietAfterAChallengeAndComesBack(t *testing.T) {
 	// Inside the window: the site is answering again, and must not be asked.
 	challenge.Store(false)
 	for i := range 3 {
-		if _, err := p.Search(context.Background(), "dune", 3); err != nil {
+		if _, err := fresh().Search(context.Background(), "dune", 3); err != nil {
 			t.Fatalf("Search %d during the cooldown: %v", i, err)
 		}
 	}
@@ -217,7 +221,7 @@ func TestAnnasProviderStaysQuietAfterAChallengeAndComesBack(t *testing.T) {
 
 	// Past the window: exactly one request, and the results come back.
 	now = now.Add(challengeCooldown + time.Second)
-	got, err := p.Search(context.Background(), "dune", 3)
+	got, err := fresh().Search(context.Background(), "dune", 3)
 	if err != nil {
 		t.Fatalf("Search after the cooldown: %v", err)
 	}
@@ -229,49 +233,48 @@ func TestAnnasProviderStaysQuietAfterAChallengeAndComesBack(t *testing.T) {
 	}
 }
 
-// TestBeQuietOnlyEverMovesTheDeadlineLater pins the rule a plain Swap breaks: a
-// goroutine that computed its deadline, was descheduled, and woke up after a
-// later one had been stored must not shorten the window.
-//
-// Concurrent challenges are ordinary — Federate runs providers in their own
-// goroutines and a server answers several searches at once — and a shortened
-// window is the one failure the cooldown exists to prevent. The stale deadline
-// is applied deliberately here rather than raced for, so the case fails every
-// time against a Swap instead of once in a thousand runs.
+// TestBeQuietOnlyEverMovesTheDeadlineLater pins the window's life through the
+// provider: it covers every mirror of the search, a challenge inside it says
+// nothing, a goroutine that computed its deadline from an older clock reading
+// does not shorten it, and once it lapses a challenge opens and announces a new
+// one.
 func TestBeQuietOnlyEverMovesTheDeadlineLater(t *testing.T) {
 	now := time.Now()
 	p := &AnnasProvider{now: func() time.Time { return now }}
+	mirrors := []string{"https://annas-a.invalid/", " https://annas-b.invalid"}
 
-	if !p.beQuiet() {
+	if !p.beQuiet(mirrors) {
 		t.Fatal("the first challenge did not report itself as opening the window")
 	}
-	opened := p.quietUntil.Load()
+	// The window covers every mirror of the search, spelled however it was listed.
+	if !p.quiet([]string{"https://annas-b.invalid/"}) {
+		t.Error("a challenge on one mirror left its sibling unguarded")
+	}
 
 	// A second challenge a minute later extends the window and says nothing,
 	// because the window it belongs to has already been announced.
 	now = now.Add(time.Minute)
-	if p.beQuiet() {
+	if p.beQuiet(mirrors) {
 		t.Error("a challenge inside an open window reported itself as opening one")
 	}
-	extended := p.quietUntil.Load()
-	if extended <= opened {
-		t.Errorf("the deadline did not move later: %d then %d", opened, extended)
-	}
 
-	// The descheduled goroutine: its clock still reads the original instant, so
-	// the deadline it computes is earlier than the one already stored.
+	// The descheduled goroutine: its clock still reads the original instant.
 	stale := now.Add(-time.Minute)
 	p.now = func() time.Time { return stale }
-	if p.beQuiet() {
+	if p.beQuiet(mirrors) {
 		t.Error("a stale challenge reported itself as opening a window")
 	}
-	if got := p.quietUntil.Load(); got != extended {
-		t.Errorf("a stale deadline overwrote a later one: %d, want %d", got, extended)
+	p.now = func() time.Time { return now.Add(challengeCooldown - time.Second) }
+	if !p.quiet(mirrors) {
+		t.Error("a stale deadline shortened the window")
 	}
 
 	// Past the window, a challenge opens a new one and says so again.
 	p.now = func() time.Time { return now.Add(challengeCooldown + time.Minute) }
-	if !p.beQuiet() {
+	if p.quiet(mirrors) {
+		t.Error("the window outlived its deadline")
+	}
+	if !p.beQuiet(mirrors) {
 		t.Error("a challenge after the window lapsed did not report a fresh one")
 	}
 }

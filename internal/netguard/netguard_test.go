@@ -450,6 +450,46 @@ func TestCheckRedirectLogsWithoutTheURL(t *testing.T) {
 	}
 }
 
+// TestCheckRedirectLogLevelFollowsWhatWasStripped pins the two levels. A
+// Referer alone, which net/http adds to every redirect by itself, is DEBUG, so
+// a doi.org resolution does not log once per hop. A credential that a source
+// set and a redirect tried to carry off the origin stays INFO, with or without
+// a Referer beside it.
+func TestCheckRedirectLogLevelFollowsWhatWasStripped(t *testing.T) {
+	cases := []struct {
+		name    string
+		headers map[string]string
+		want    string
+	}{
+		{name: "referer only", headers: map[string]string{"Referer": "https://doi.org/10.1/x"}, want: `"level":"DEBUG"`},
+		{name: "a credential", headers: map[string]string{"Authorization": "Bearer k"}, want: `"level":"INFO"`},
+		{
+			name:    "a credential beside a referer",
+			headers: map[string]string{"Referer": "https://doi.org/10.1/x", "Cookie": "a=b"},
+			want:    `"level":"INFO"`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			previous := slog.Default()
+			t.Cleanup(func() { slog.SetDefault(previous) })
+			slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+
+			req := &http.Request{URL: mustParse(t, "https://publisher.invalid/article"), Header: http.Header{}}
+			for k, v := range tc.headers {
+				req.Header.Set(k, v)
+			}
+			if err := CheckRedirect(false)(req, []*http.Request{{URL: mustParse(t, "https://doi.org/10.1/x")}}); err != nil {
+				t.Fatalf("CheckRedirect() error = %v", err)
+			}
+			if !strings.Contains(buf.String(), tc.want) {
+				t.Errorf("logged %s, want a line at %s", buf.String(), tc.want)
+			}
+		})
+	}
+}
+
 // TestClientForKeepsTheGuardUnderAnObserver is the regression this seam is one
 // refactor away from.
 //
