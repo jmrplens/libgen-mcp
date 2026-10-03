@@ -25,6 +25,14 @@ SITE_DIR="${SITE_DIR:-$(cd "$(dirname "$0")/../site" && pwd)}"
 output=$(cd "$SITE_DIR" && "$PNPM" audit --audit-level=high 2>&1)
 status=$?
 printf '%s\n' "$output"
+# pnpm colours its summary on a terminal even with its output captured, which
+# splits "2 vulnerabilities found" with escape sequences and turned a real
+# finding into "no report" on a developer's machine. The verdict is read from
+# the text with the colour taken off; what was printed above is left as it was.
+# A parameter expansion cannot match the run of digits and semicolons inside an
+# escape sequence, so sed it is.
+# shellcheck disable=SC2001
+output=$(sed $'s/\x1b\\[[0-9;]*m//g' <<< "$output")
 
 if [[ "$status" -eq 0 ]]; then
 	exit 0

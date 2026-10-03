@@ -99,6 +99,19 @@ class AuditSiteDepsTest(unittest.TestCase):
         self.assertEqual(status, 1, output)
         self.assertNotIn(WARNING, output)
 
+    def test_a_coloured_report_is_still_a_finding(self):
+        # pnpm colours the summary on a terminal: "\x1b[31m2\x1b[39m
+        # vulnerabilities found" is the line a developer's run printed.
+        with tempfile.TemporaryDirectory() as tmp:
+            coloured = os.path.join(tmp, "coloured.txt")
+            with open(coloured, "w", encoding="utf-8") as fh:
+                fh.write("\x1b[31;1mhigh\x1b[0m advisory\n"
+                         "\x1b[31m2\x1b[39m vulnerabilities found\n"
+                         "Severity: \x1b[1m1 low\x1b[0m | \x1b[31;1m1 high\x1b[0m\n")
+            status, output, _ = audit(coloured, 1)
+        self.assertEqual(status, 1, output)
+        self.assertIn("FAIL: pnpm audit reports an advisory", output)
+
     def test_an_unrecognised_failure_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             other = os.path.join(tmp, "other.txt")
