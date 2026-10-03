@@ -106,7 +106,7 @@ func UnrecognizedReason(ext string) string {
 // when it matches nothing supported.
 func sniffFormat(d document) string {
 	head := make([]byte, sniffLen)
-	n, _ := io.ReadFull(d.section(), head)
+	n, _ := io.ReadFull(d.prefix(sniffLen), head)
 	head = head[:n]
 	switch {
 	case bytes.HasPrefix(head, []byte("%PDF-")):

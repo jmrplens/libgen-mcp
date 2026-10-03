@@ -21,7 +21,7 @@ func extractTXT(ctx context.Context, d document, r Req) (Chunk, error) {
 	}
 	// Read one byte past the cap so a saturated LimitReader is detectable, then
 	// clip back to the cap before paginating.
-	data, err := io.ReadAll(io.LimitReader(d.section(), maxTextFileBytes+1))
+	data, err := io.ReadAll(d.prefix(maxTextFileBytes + 1))
 	if err != nil {
 		return Chunk{Format: "txt", Reason: cannotReadTextReason(err)}, nil
 	}

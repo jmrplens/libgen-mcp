@@ -185,7 +185,7 @@ func searchTXT(ctx context.Context, d document, query string, o SearchOpts) (Sea
 	if e := ctx.Err(); e != nil {
 		return SearchResult{}, e
 	}
-	data, err := io.ReadAll(io.LimitReader(d.section(), maxTextFileBytes))
+	data, err := io.ReadAll(d.prefix(maxTextFileBytes))
 	if err != nil {
 		return SearchResult{Format: "txt", Reason: cannotReadTextReason(err)}, nil
 	}

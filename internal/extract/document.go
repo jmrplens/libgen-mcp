@@ -37,7 +37,20 @@ func newDocument(f *os.File) (document, error) {
 }
 
 // section returns a fresh reader over the whole document, positioned at its
-// start, for readers that want a stream or a seeker rather than ReadAt.
+// start, for readers that want a seeker of the document's recorded size.
 func (d document) section() *io.SectionReader {
 	return io.NewSectionReader(d.r, 0, d.size)
+}
+
+// prefix returns a fresh stream of at most limit bytes from the document's
+// start, read until the file itself reports its end.
+//
+// It is bounded by limit rather than by the recorded size on purpose. A size
+// is what the descriptor's Stat reported, and a descriptor that is not a
+// regular file can report zero: a directory does on Windows. A reader bounded
+// by that zero never calls ReadAt, so a file that cannot be read at all would
+// read as an empty one. Reading to the file's own end lets the read fail the
+// way it fails, on every platform.
+func (d document) prefix(limit int64) io.Reader {
+	return io.NewSectionReader(d.r, 0, limit)
 }
