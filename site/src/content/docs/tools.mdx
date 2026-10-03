@@ -283,6 +283,14 @@ A hit may also carry a `venue`: the publication venue exactly as the provider st
 	<Fragment slot="object">
 		Used with `id`: `edition` (default) or `file`.
 	</Fragment>
+	<Fragment slot="related">
+		`references` (works this record cites) or `cited_by` (works citing it, most
+		cited first), from OpenAlex by the record's DOI. Off by default. See
+		[Related works](#related-works).
+	</Fragment>
+	<Fragment slot="related_limit">
+		With `related`, how many works to list: 1 to 25, default 10.
+	</Fragment>
 	<Fragment slot="cite_as">
 		Extra citation styles beside BibTeX and RIS: any of `apa`, `mla`, `chicago`,
 		`harvard`, `vancouver`, `ieee`, `csl-json`. Off by default. See
@@ -304,6 +312,7 @@ A hit may also carry a `venue`: the publication venue exactly as the provider st
 
 <SchemaTable name="get_details" part="output">
 	<Fragment slot="next_steps">Suggested follow-up tool calls given this result — e.g. a `download` call using this record's `md5` (book) or `doi` (article). Present to guide the model; safe to ignore.</Fragment>
+	<Fragment slot="related">Present when `related` was set: `kind`, the `total` OpenAlex counts, up to `related_limit` `works` (title, year, DOI, open access, citation count) and a `note` when the list is empty or partial. See [Related works](#related-works).</Fragment>
 	<Fragment slot="citation_match">Present for a `citation` lookup: `status` `resolved` with the `doi` and `title` it matched, or `unresolved` with the `reason` and up to five `candidates` (title, authors, year, venue, DOI, Crossref score) and no `file` or `edition`.</Fragment>
 	<Fragment slot="file">The file record (present for an `md5` lookup, or an `id` lookup with `object: file`).</Fragment>
 	<Fragment slot="edition">The edition record (present for an `md5` lookup's related edition, or an `id` lookup with `object: edition`).</Fragment>
@@ -350,6 +359,18 @@ Set `enrich: true` to add a best-effort `enrichment` object with keyless data fr
 	but it may add bounded latency — up to the ~6s budget — before the response
 	returns. No API key is required; both APIs are used keyless.
 </Aside>
+
+### Related works
+
+Set `related` to `references` for the works a record cites, or to `cited_by` for the works citing it, and `related_limit` for how many (1 to 25, default 10):
+
+```json
+{ "doi": "10.1038/nature12373", "related": "cited_by", "related_limit": 5 }
+```
+
+The list comes from [OpenAlex](https://openalex.org), the most cited first, with the title, year, DOI, an open-access flag and the citation count of each work, and `total` is how many there are in all. The work is found by its DOI (a single-record lookup, which OpenAlex does not charge for) and the list is one filtered query, so a call costs one credit of the allowance described under [`LIBGEN_MCP_OPENALEX_KEY`](/libgen-mcp/configuration/#libgen_mcp_openalex_key). References are ranked from the first 100 a work lists, the most one query can name, and `note` says so when a work lists more.
+
+The DOI used is the one the [citation styles](/libgen-mcp/citations/#other-citation-styles) may send to doi.org: a DOI Crossref confirmed, or the DOI of a record Crossref or the registry answered. A record without one gets `related` with a `note` saying the list is not available, because a catalog DOI that failed the check belongs to another work. Every other failure (an unknown DOI, OpenAlex not answering, the allowance spent) is also a `note`, never an error, and `LIBGEN_MCP_ENRICH=false` turns the lookup off with the rest of the outbound metadata.
 
 ## download
 
