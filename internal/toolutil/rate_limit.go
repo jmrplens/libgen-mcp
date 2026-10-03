@@ -40,12 +40,6 @@ const (
 	rateLimitRetrySuffix   = "; retry after a short backoff"
 )
 
-// defaultThrottleWindow is how often a refusal is reported.
-//
-// Long enough that a sustained flood costs six lines a minute, short enough that
-// a burst is visible while it is happening.
-const defaultThrottleWindow = 10 * time.Second
-
 // The methods this limiter meters, and the bucket each draws on.
 //
 // tools/call and prompts/get reach a mirror or an open-access provider with the
@@ -98,6 +92,8 @@ type RateLimiter struct {
 	reportMu       sync.Mutex
 	windowStart    time.Time
 	windowRefusals int
+	// throttleWindow overrides the reporting window; zero means the default,
+	// which [RateLimiter.window] holds.
 	throttleWindow time.Duration
 
 	// catalogOnce guards the bucket tools/list draws on. It is derived once and
@@ -116,10 +112,7 @@ func NewRateLimiter(rps float64, burst int) *RateLimiter {
 		return nil
 	}
 	burst = max(burst, 1)
-	return &RateLimiter{
-		limiter:        rate.NewLimiter(rate.Limit(rps), burst),
-		throttleWindow: defaultThrottleWindow,
-	}
+	return &RateLimiter{limiter: rate.NewLimiter(rate.Limit(rps), burst)}
 }
 
 // allow reports whether a token was available. A nil limiter allows everything.
@@ -168,12 +161,8 @@ func (r *RateLimiter) reportRefusal(ctx context.Context, what string) {
 	}
 
 	r.reportMu.Lock()
-	window := r.throttleWindow
-	if window <= 0 {
-		window = defaultThrottleWindow
-	}
 	now := time.Now()
-	if !r.windowStart.IsZero() && now.Sub(r.windowStart) < window {
+	if !r.windowStart.IsZero() && now.Sub(r.windowStart) < r.window() {
 		r.windowRefusals++
 		r.reportMu.Unlock()
 		return
@@ -192,6 +181,18 @@ func (r *RateLimiter) reportRefusal(ctx context.Context, what string) {
 		"burst", r.limiter.Burst(),
 		"also_refused_since_last_report", alsoRefused,
 	)
+}
+
+// window is how often a refusal is reported: ten seconds, unless the limiter
+// was given a window of its own.
+//
+// Long enough that a sustained flood costs six lines a minute, short enough that
+// a burst is visible while it is happening.
+func (r *RateLimiter) window() time.Duration {
+	if r.throttleWindow > 0 {
+		return r.throttleWindow
+	}
+	return 10 * time.Second
 }
 
 // AttachRateLimit registers the metering middleware on server, resolving the

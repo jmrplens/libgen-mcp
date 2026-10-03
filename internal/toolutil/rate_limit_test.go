@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
@@ -273,19 +275,180 @@ func TestRefusalsAreReportedOncePerWindow(t *testing.T) {
 // TestASecondWindowReportsAgain is the other half: the suppression is a window,
 // not a one-shot, or a flood that outlasts the first line would go unreported
 // for the life of the process.
+//
+// It runs in a synctest bubble, so the sleep moves a fake clock by exactly the
+// amount asked rather than racing the real one.
 func TestASecondWindowReportsAgain(t *testing.T) {
-	limiter := NewRateLimiter(frozenRPS, 1)
-	limiter.throttleWindow = time.Millisecond
+	synctest.Test(t, func(t *testing.T) {
+		limiter := NewRateLimiter(frozenRPS, 1)
+		limiter.throttleWindow = time.Millisecond
 
-	lines := captureWarnings(t)
-	_, _, _ = drive(t, limiter, methodToolsCall, callRequest("search")) // allowed
-	_, _, _ = drive(t, limiter, methodToolsCall, callRequest("search")) // refused, reported
-	time.Sleep(5 * time.Millisecond)
-	_, _, _ = drive(t, limiter, methodToolsCall, callRequest("search")) // refused, new window
+		lines := captureWarnings(t)
+		_, _, _ = drive(t, limiter, methodToolsCall, callRequest("search")) // allowed
+		_, _, _ = drive(t, limiter, methodToolsCall, callRequest("search")) // refused, reported
+		time.Sleep(5 * time.Millisecond)
+		_, _, _ = drive(t, limiter, methodToolsCall, callRequest("search")) // refused, new window
 
-	if got := lines(); got < 2 {
-		t.Errorf("%d refusal lines across two windows, want at least 2", got)
+		if got := lines(); got != 2 {
+			t.Errorf("%d refusal lines across two windows, want 2", got)
+		}
+	})
+}
+
+// TestRefusalReportsFollowTheDefaultWindow drives the report of a limiter that
+// was given no window of its own, on a fake clock.
+//
+// Refusals inside the ten-second window are held back and counted, the line
+// that opens the next window carries that count, a window that has fully
+// elapsed opens the next one, and a refusal that names nothing is reported as
+// the tools/call it is.
+func TestRefusalReportsFollowTheDefaultWindow(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		limiter := NewRateLimiter(frozenRPS, 1)
+		recorder := captureRefusals(t)
+
+		limiter.reportRefusal(t.Context(), "")
+		time.Sleep(10*time.Second - time.Nanosecond)
+		for range 3 {
+			limiter.reportRefusal(t.Context(), "search")
+		}
+		time.Sleep(time.Nanosecond)
+		limiter.reportRefusal(t.Context(), "search")
+
+		want := []refusalLine{
+			{what: methodToolsCall, alsoRefused: 0},
+			{what: "search", alsoRefused: 3},
+		}
+		if got := recorder.lines(); !slices.Equal(got, want) {
+			t.Errorf("refusal lines = %+v, want %+v", got, want)
+		}
+	})
+}
+
+// TestADisabledLimiterReportsNothing verifies the report on the two disabled
+// shapes, a nil limiter and one with no bucket: neither has a rate to report,
+// and neither may fail for being asked.
+func TestADisabledLimiterReportsNothing(t *testing.T) {
+	testCases := []struct {
+		name    string
+		limiter *RateLimiter
+	}{
+		{name: "nil limiter", limiter: nil},
+		{name: "no bucket", limiter: &RateLimiter{}},
 	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			lines := captureWarnings(t)
+			tc.limiter.reportRefusal(t.Context(), methodToolsCall)
+			if got := lines(); got != 0 {
+				t.Errorf("a disabled limiter wrote %d refusal lines, want 0", got)
+			}
+		})
+	}
+}
+
+// TestRateLimitedErrorCodeIsThePublishedNumber pins the code a refused
+// flagless method carries. Clients match on the number, so it is a wire
+// contract rather than a detail.
+func TestRateLimitedErrorCodeIsThePublishedNumber(t *testing.T) {
+	if RateLimitedErrorCode != -42900 {
+		t.Errorf("RateLimitedErrorCode = %d, want -42900", RateLimitedErrorCode)
+	}
+}
+
+// TestToolNameOfReadsBothParamShapes verifies the tool name is read from the
+// raw params a receiving middleware sees and from the decoded ones a handler
+// sees, trimmed, and that anything else, typed nils included, names no tool.
+func TestToolNameOfReadsBothParamShapes(t *testing.T) {
+	testCases := []struct {
+		name string
+		req  mcp.Request
+		want string
+	}{
+		{name: "raw params", req: callRequest(" search "), want: "search"},
+		{name: "decoded params", req: &mcp.ServerRequest[*mcp.CallToolParams]{Params: &mcp.CallToolParams{Name: " download "}}, want: "download"},
+		{name: "typed nil raw params", req: &mcp.CallToolRequest{Params: (*mcp.CallToolParamsRaw)(nil)}, want: ""},
+		{name: "typed nil decoded params", req: &mcp.ServerRequest[*mcp.CallToolParams]{}, want: ""},
+		{name: "another method's params", req: &mcp.ListToolsRequest{Params: &mcp.ListToolsParams{}}, want: ""},
+		{name: "no request", req: nil, want: ""},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ToolNameOf(tc.req); got != tc.want {
+				t.Errorf("ToolNameOf() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestAttachRateLimitMetersAServer drives the registration end to end: a
+// server given a limiter refuses the call its bucket cannot pay for, and a
+// registration missing either half leaves the server unmetered rather than
+// failing.
+func TestAttachRateLimitMetersAServer(t *testing.T) {
+	AttachRateLimit(nil, func(context.Context) *RateLimiter { return nil })
+
+	limited := NewRateLimiter(frozenRPS, 1)
+	testCases := []struct {
+		name        string
+		resolve     func(context.Context) *RateLimiter
+		wantRefused bool
+	}{
+		{name: "a limiter refuses the second call", resolve: func(context.Context) *RateLimiter { return limited }, wantRefused: true},
+		{name: "no resolver meters nothing", resolve: nil, wantRefused: false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			session := servedSession(t, tc.resolve)
+
+			first := callTool(t, session)
+			if first.IsError {
+				t.Fatalf("the first call was refused: %+v", first.Content)
+			}
+			second := callTool(t, session)
+			if second.IsError != tc.wantRefused {
+				t.Errorf("the second call's IsError = %v, want %v", second.IsError, tc.wantRefused)
+			}
+		})
+	}
+}
+
+// servedSession starts a server with one tool, attaches the limiter resolve
+// names, and returns a client session connected to it in memory.
+func servedSession(t *testing.T, resolve func(context.Context) *RateLimiter) *mcp.ClientSession {
+	t.Helper()
+	server := mcp.NewServer(&mcp.Implementation{Name: "metered", Version: "0"}, nil)
+	mcp.AddTool(server, &mcp.Tool{Name: "served"}, func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, any, error) {
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "served"}}}, nil, nil
+	})
+	AttachRateLimit(server, resolve)
+
+	serverEnd, clientEnd := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(t.Context(), serverEnd, nil)
+	if err != nil {
+		t.Fatalf("connect the server: %v", err)
+	}
+	t.Cleanup(func() { _ = serverSession.Close() })
+	client := mcp.NewClient(&mcp.Implementation{Name: "caller", Version: "0"}, nil)
+	session, err := client.Connect(t.Context(), clientEnd, nil)
+	if err != nil {
+		t.Fatalf("connect the client: %v", err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+	return session
+}
+
+// callTool calls the one tool servedSession registers.
+func callTool(t *testing.T, session *mcp.ClientSession) *mcp.CallToolResult {
+	t.Helper()
+	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "served"})
+	if err != nil {
+		t.Fatalf("call the tool: %v", err)
+	}
+	return result
 }
 
 // TestDescribeReadsBackWhatWasConfigured covers the startup line, which is the
@@ -339,6 +502,68 @@ func (c *warningCounter) count() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.n
+}
+
+// refusalLine is what one refusal line said: what was refused, and how many
+// earlier refusals it stands for.
+type refusalLine struct {
+	what        string
+	alsoRefused int64
+}
+
+// refusalRecorder is a slog.Handler that keeps what each refusal line said.
+type refusalRecorder struct {
+	mu   sync.Mutex
+	seen []refusalLine
+}
+
+// captureRefusals installs a refusalRecorder for the test and puts the
+// previous logger back afterwards.
+func captureRefusals(t *testing.T) *refusalRecorder {
+	t.Helper()
+
+	recorder := &refusalRecorder{}
+	previous := slog.Default()
+	slog.SetDefault(slog.New(recorder))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	return recorder
+}
+
+// Enabled accepts every level, so the recorder filters by message alone.
+func (r *refusalRecorder) Enabled(context.Context, slog.Level) bool { return true }
+
+// Handle keeps the two fields of a refusal line and ignores every other line.
+func (r *refusalRecorder) Handle(_ context.Context, record slog.Record) error {
+	if !strings.Contains(record.Message, "rate limit exceeded") {
+		return nil
+	}
+	var line refusalLine
+	record.Attrs(func(attr slog.Attr) bool {
+		switch attr.Key {
+		case "what":
+			line.what = attr.Value.String()
+		case "also_refused_since_last_report":
+			line.alsoRefused = attr.Value.Int64()
+		}
+		return true
+	})
+	r.mu.Lock()
+	r.seen = append(r.seen, line)
+	r.mu.Unlock()
+	return nil
+}
+
+// WithAttrs returns the recorder itself: the limiter adds no logger attributes.
+func (r *refusalRecorder) WithAttrs([]slog.Attr) slog.Handler { return r }
+
+// WithGroup returns the recorder itself: the limiter opens no groups.
+func (r *refusalRecorder) WithGroup(string) slog.Handler { return r }
+
+// lines returns what every refusal line written so far said, in order.
+func (r *refusalRecorder) lines() []refusalLine {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.seen)
 }
 
 // modernCallRequest is a tools/call as a client of revision version sends it,

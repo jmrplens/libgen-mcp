@@ -408,13 +408,14 @@ func WrapQuotedBody(body string) string {
 // its own rather than continuing the last line as a lazy paragraph.
 func EndBlock(b *strings.Builder) {
 	written := b.String()
-	switch {
-	case written == "" || strings.HasSuffix(written, "\n\n"):
-	case strings.HasSuffix(written, "\n"):
-		b.WriteString("\n")
-	default:
-		b.WriteString("\n\n")
+	if written == "" || strings.HasSuffix(written, "\n\n") {
+		return
 	}
+	if strings.HasSuffix(written, "\n") {
+		b.WriteString("\n")
+		return
+	}
+	b.WriteString("\n\n")
 }
 
 // longestBacktickRun returns the length of the longest run of consecutive

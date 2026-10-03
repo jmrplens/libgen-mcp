@@ -197,6 +197,42 @@ func TestCard_SeparatesItselfFromWhatItDidNotWrite(t *testing.T) {
 	}
 }
 
+// TestCard_SeparatesItselfFromAOneByteWrite pins the smallest foreign write: a
+// single character the caller left on the builder is still not this card's,
+// so the first row opens a block rather than continuing that line.
+func TestCard_SeparatesItselfFromAOneByteWrite(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("x")
+	card := NewCard(&b, "")
+	card.Field("Publisher", "Taylor")
+
+	if got, want := b.String(), "x\n\n- **Publisher**: Taylor\n"; got != want {
+		t.Errorf("card = %q, want %q", got, want)
+	}
+}
+
+// TestCard_EndKeepsTheCallersStepsWithoutASecret verifies the ordinary close
+// of a card: the caller's steps are written, and nothing claims a value was
+// shown once when none was.
+func TestCard_EndKeepsTheCallersStepsWithoutASecret(t *testing.T) {
+	var b strings.Builder
+	card := NewCard(&b, "")
+	card.Field("Title", "Notes")
+	card.End("Call get_details with this md5.", "Call download to fetch it.")
+	got := b.String()
+
+	for _, step := range []string{"- Call get_details with this md5.", "- Call download to fetch it."} {
+		t.Run(step, func(t *testing.T) {
+			if !strings.Contains(got, step) {
+				t.Errorf("card = %q, want the step %q", got, step)
+			}
+		})
+	}
+	if strings.Contains(got, "not stored") {
+		t.Errorf("card = %q, which announces a secret the card never showed", got)
+	}
+}
+
 // TestCard_SecretIsShownOnceAndSaysSo verifies the member nothing calls yet:
 // the value is contained in a code span, and the card's guidance says it is
 // not stored. It is here so the safe form is the easy form the day something
