@@ -53,7 +53,7 @@ Hay tres formas de despliegue y dan tres respuestas distintas. Averigua cuál es
 
 ### Un listener TCP detrás de un proxy
 
-Es la forma habitual, es la que recomienda [Primeros pasos](/libgen-mcp/es/getting-started/#remoto-http-en-streaming), y es la que corre el endpoint hospedado en `mcp.jmrp.io/libgen`.
+Es la forma habitual, es la que recomienda [Primeros pasos](/libgen-mcp/es/getting-started/#remoto-http-en-streaming), y es la que corre el endpoint alojado en `mcp.jmrp.io/libgen`.
 
 Sin `--trusted-proxies`, **todas las peticiones llegan desde el proxy**, así que todos los llamantes son el mismo llamante: el límite de tasa es un solo cubo para el mundo entero, el techo de llamadas en vuelo es un segundo techo de proceso disfrazado de techo por llamante, y `user.hash` es una constante. No hay nada sutil ni raro en ello: es el resultado por defecto de la forma que se recomienda.
 
@@ -109,7 +109,7 @@ Una vez sabes en qué forma estás, tres comportamientos se siguen de ella:
 
 Quien despliegue detrás de un proxy y lea solo el párrafo del socket concluirá que nada de esto le afecta, que es justo lo contrario de la verdad.
 
-## El endpoint hospedado, escrito entero
+## El endpoint alojado, escrito entero
 
 La instancia pública en `https://mcp.jmrp.io/libgen` es la primera forma: tres contenedores que abren cada uno `0.0.0.0:8080`, publicados en el loopback del host, alcanzados por un nginx en otra máquina, con `--public-url`, los dos flags del proxy nombrando la pasarela de su bridge de Docker y `X-Real-IP`, y `--rate-limit-rps 60`. La orden exacta, por qué la dirección de la pasarela no es para copiar y la única variable de entorno que aparta su superficie de herramientas del valor por defecto están en [Endpoint alojado → Monta lo mismo por tu cuenta](/libgen-mcp/es/hosted/#monta-lo-mismo-por-tu-cuenta).
 

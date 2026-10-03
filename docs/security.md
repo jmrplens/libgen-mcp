@@ -195,8 +195,8 @@ catalog cannot name a directory.
 are different machines — any HTTP listener, or a stdio server with
 `LIBGEN_MCP_REMOTE_DOWNLOADS` set — no caller-supplied path is accepted, and `read` takes an md5
 or a DOI instead. On top of that, `LIBGEN_MCP_SERVER_FETCH` defaults to off for a remote
-deployment: `read` is not registered and `download` returns a link instead of a file, so no
-file body crosses the server's own connection. The default is about a shared egress address, not
+deployment: `read` is not registered, and `download` — link-only on any remote deployment,
+whatever this is set to — saves nothing, so no file body crosses the server's own connection. The default is about a shared egress address, not
 secrecy, and an explicit value wins either way; see
 [Configuration](configuration.md#libgen_mcp_server_fetch) and
 [the hosted-fetch ADR](decisions/2026-09-08-a-hosted-server-does-not-fetch-file-bodies.md).

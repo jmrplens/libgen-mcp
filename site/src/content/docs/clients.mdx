@@ -21,7 +21,7 @@ import { Tabs, TabItem, Aside } from "@astrojs/starlight/components";
 Every MCP client keeps a list of servers, and every one of them spells that list a little differently: a different file, a different top-level key, a different name for the URL field. This page has one complete entry per client, in two forms:
 
 - **Local, over stdio.** The client starts the server as a child process and talks to it over standard input and output. This is the full server: all four tools, and `download` saves the file to your disk.
-- **Remote, over streamable HTTP.** The client connects to a server somebody already runs — the public endpoint at `https://mcp.jmrp.io/libgen`, or your own `--http` deployment. Nothing is installed, but `read` is not registered there and `download` returns a link instead of a file. [What changes on a remote server](#what-changes-on-a-remote-server) says why.
+- **Remote, over streamable HTTP.** The client connects to a server somebody already runs — the public endpoint at `https://mcp.jmrp.io/libgen`, or your own `--http` deployment. Nothing is installed, but `download` returns a link instead of a file, and `read` is present only where the operator has turned it on, as the public endpoint has. [What changes on a remote server](#what-changes-on-a-remote-server) says why.
 
 Every entry below names the server `libgen`. The name is yours to choose; it only changes how the client labels the tools.
 
@@ -80,10 +80,10 @@ A local client that supports MCP elicitation can also be asked for an Unpaywall 
 
 A remote server is configured by whoever runs it, not by your client: there is no `env` block to send, and the keys above are the deployment's. Two differences follow from the server not being on your machine:
 
-- **`read` is not registered.** It is absent from `tools/list` rather than present and failing, so the client sees three tools.
-- **`download` returns a link** — a `resource_link` plus a `resolved` object — instead of writing a file, and your client or browser fetches the bytes.
+- **`download` returns a link** — a `resource_link` plus a `resolved` object — instead of writing a file, and your client or browser fetches the bytes. That holds on every remote deployment, whatever it is configured with: the server cannot write to your disk.
+- **`read` is absent by default.** `LIBGEN_MCP_SERVER_FETCH` is off by default on an HTTP deployment, so that the server's shared egress address never carries file bodies, and with it off `read` is not registered: it is absent from `tools/list` rather than present and failing, and the client sees three tools. An operator who sets it to `1` brings `read` back — `download` stays link-only — and the public endpoint does: it serves all four tools, with `read` taking an `md5` or a `doi` but no `path`.
 
-Both come from `LIBGEN_MCP_SERVER_FETCH`, which is off by default on an HTTP deployment so that the server's shared egress address never carries file bodies; see [`LIBGEN_MCP_SERVER_FETCH`](/libgen-mcp/configuration/#libgen_mcp_server_fetch) and [Where the file goes](/libgen-mcp/tools/#where-the-file-goes-local-vs-remote). An operator who sets it to `1` on their own deployment gets both back.
+See [`LIBGEN_MCP_SERVER_FETCH`](/libgen-mcp/configuration/#libgen_mcp_server_fetch) and [Where the file goes](/libgen-mcp/tools/#where-the-file-goes-local-vs-remote).
 
 The URL is the endpoint itself: `https://mcp.jmrp.io/libgen` for the public instance ([Hosted endpoint](/libgen-mcp/hosted/) describes it), or the address your own deployment serves, where the mount and its `/mcp` alias are the same endpoint. Running one is covered in [HTTP server mode](/libgen-mcp/http-server-mode/). The transport is stateless streamable HTTP; a client offering only the older SSE transport cannot connect.
 

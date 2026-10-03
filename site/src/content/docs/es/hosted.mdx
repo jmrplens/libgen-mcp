@@ -116,7 +116,7 @@ Usar el endpoint significa que tus llamadas a herramientas — los títulos, aut
 
 Lo que el propio servidor escribe en su log es el registro operativo: el nombre y la duración de cada llamada, qué fuente de descarga se probó y si resolvió (con cualquier credencial tachada del error), y los rechazos contados. No registra el texto de tu consulta ni tus argumentos. Las peticiones pasan por Cloudflare y por un proxy nginx antes de llegar al servidor, y esos tienen sus propios logs: la instancia se opera como parte de [mcp.jmrp.io](https://mcp.jmrp.io/) y su tratamiento de las peticiones se rige por [las políticas de ese servicio](https://mcp.jmrp.io/policies/).
 
-Si un despliegue exporta telemetría se publica en su propia tarjeta: la tarjeta well-known lleva un bloque `observability` cuando lo hace, y la de este no lleva ninguno. La declaración completa está en la [Política de privacidad → Endpoint hospedado](/libgen-mcp/es/privacy/#endpoint-hospedado).
+Si un despliegue exporta telemetría se publica en su propia tarjeta: la tarjeta well-known lleva un bloque `observability` cuando lo hace, y la de este no lleva ninguno. La declaración completa está en la [Política de privacidad → Endpoint alojado](/libgen-mcp/es/privacy/#endpoint-alojado).
 
 <Aside type="tip">
 	Si lo que buscas es delicado para ti, ejecuta el servidor en local. [Primeros
