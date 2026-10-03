@@ -10,7 +10,7 @@ needed by any of them.
 This page is the long form — per channel, what you get, how to install it, how
 to check it is what this project published, how to upgrade and how to remove it.
 For the shortest path to a working client, see
-[Getting started](getting-started.md).
+[Getting started](../getting-started.md).
 
 ## Pick a channel
 
@@ -38,7 +38,7 @@ otherwise.** Neither installs anything you have to remember to update.
   network fetch beyond the package itself.
 - **No credential.** Library Genesis needs none, and neither does any of the
   open-access providers the server falls back to. Keys exist for two optional
-  sources and are opt-in; see [Configuration](configuration.md).
+  sources and are opt-in; see [Configuration](../configuration.md).
 - **No libc.** The binary is built `CGO_ENABLED=0` and **without**
   `-buildmode=pie`, so it names no dynamic loader at all: the same file runs on
   glibc and on musl, in a distroless image and on `scratch`. That is also why
@@ -317,7 +317,7 @@ The host directory you mount has to be writable by UID `10001`. And note that
 auto` included — harmless, since naming a listener is deciding the transport,
 but a flag you add is the whole command line rather than an addition to it. What
 each shape needs behind a proxy is in
-[HTTP server mode](http-server-mode.md).
+[HTTP server mode](../http-server-mode.md).
 
 **Verify.** The index and both platform manifests are signed keylessly with
 cosign and carry SLSA build provenance. Verify the signature with a **cosign
@@ -484,10 +484,10 @@ having and also why it carries no release signature.
 
 ## Where to go next
 
-| For                                                | See                                     |
-| -------------------------------------------------- | --------------------------------------- |
-| Wiring it into a client and running a first search | [Getting started](getting-started.md)   |
-| Every setting, with its default and range          | [Configuration](configuration.md)       |
-| Deploying it centrally over HTTP                   | [HTTP server mode](http-server-mode.md) |
-| What the four tools take and return                | [Tools](tools.md)                       |
-| An install that did not go the way this page says  | [Troubleshooting](troubleshooting.md)   |
+| For                                                | See                                        |
+| -------------------------------------------------- | ------------------------------------------ |
+| Wiring it into a client and running a first search | [Getting started](../getting-started.md)   |
+| Every setting, with its default and range          | [Configuration](../configuration.md)       |
+| Deploying it centrally over HTTP                   | [HTTP server mode](../http-server-mode.md) |
+| What the four tools take and return                | [Tools](../tools.md)                       |
+| An install that did not go the way this page says  | [Troubleshooting](../troubleshooting.md)   |

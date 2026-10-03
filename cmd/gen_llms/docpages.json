@@ -5,9 +5,64 @@
     "es": { "title": "Primeros pasos", "description": "Guía de instalación y primera ejecución" }
   },
   {
-    "slug": "installation/",
+    "slug": "clients/",
+    "en": { "title": "Connect a client", "description": "How to register the server in each MCP client, over stdio or over HTTP, with a complete configuration per client" },
+    "es": { "title": "Conectar un cliente", "description": "Cómo registrar el servidor en cada cliente MCP, por stdio o por HTTP, con una configuración completa para cada cliente" }
+  },
+  {
+    "slug": "hosted/",
+    "en": { "title": "Hosted endpoint", "description": "The public endpoint: how to connect a client to it, what it serves, and what it leaves out compared with a server you run" },
+    "es": { "title": "Endpoint alojado", "description": "El endpoint público: cómo conectarle un cliente, qué sirve y qué deja fuera frente a un servidor que ejecutas tú" }
+  },
+  {
+    "slug": "install/overview/",
     "en": { "title": "Installation", "description": "Every channel the server is published to: what you get, how to install and verify it, how to upgrade it and how to remove it" },
     "es": { "title": "Instalación", "description": "Todos los canales en los que se publica el servidor: qué obtienes, cómo instalarlo y verificarlo, cómo actualizarlo y cómo quitarlo" }
+  },
+  {
+    "slug": "install/npm/",
+    "en": { "title": "Install with npm", "description": "The @jmrp.io/libgen-mcp launcher package: run it with npx or install it globally, verify what npm installed, upgrade it and remove it" },
+    "es": { "title": "Instalar con npm", "description": "El paquete lanzador @jmrp.io/libgen-mcp: ejecútalo con npx o instálalo de forma global, verifica lo que instaló npm, actualízalo y quítalo" }
+  },
+  {
+    "slug": "install/pypi/",
+    "en": { "title": "Install with PyPI", "description": "The libgen-mcp wheels: run the server with uvx or install it with pipx, verify what was installed, upgrade it and remove it" },
+    "es": { "title": "Instalar con PyPI", "description": "Las wheels de libgen-mcp: ejecuta el servidor con uvx o instálalo con pipx, verifica lo instalado, actualízalo y quítalo" }
+  },
+  {
+    "slug": "install/nuget/",
+    "en": { "title": "Install with NuGet", "description": "The libgen-mcp .NET tool: run it with dnx or install it with dotnet tool, verify the packages, upgrade it and remove it" },
+    "es": { "title": "Instalar con NuGet", "description": "La herramienta .NET libgen-mcp: ejecútala con dnx o instálala con dotnet tool, verifica los paquetes, actualízala y quítala" }
+  },
+  {
+    "slug": "install/homebrew/",
+    "en": { "title": "Install with Homebrew", "description": "The formula in the jmrplens/tap tap: install it, see what it puts on disk, verify it, upgrade it and remove it" },
+    "es": { "title": "Instalar con Homebrew", "description": "La fórmula del tap jmrplens/tap: instálala, mira qué deja en el disco, verifícala, actualízala y quítala" }
+  },
+  {
+    "slug": "install/docker/",
+    "en": { "title": "Run with Docker", "description": "The image on GitHub Container Registry and Docker Hub: stdio or HTTP, verifying its signature and provenance, upgrading and removing it" },
+    "es": { "title": "Ejecutar con Docker", "description": "La imagen en GitHub Container Registry y Docker Hub: stdio o HTTP, cómo verificar su firma y su procedencia, actualizarla y quitarla" }
+  },
+  {
+    "slug": "install/binary/",
+    "en": { "title": "Release binaries and go install", "description": "The static binaries on every GitHub release: pick one, verify it against the signed checksums, upgrade or remove it, or build it with go install" },
+    "es": { "title": "Binarios de la release y go install", "description": "Los binarios estáticos de cada release de GitHub: elige uno, verifícalo con los checksums firmados, actualízalo o quítalo, o compílalo con go install" }
+  },
+  {
+    "slug": "install/claude-desktop/",
+    "en": { "title": "Claude Desktop extension", "description": "The one-click .mcpb bundle for Claude Desktop on macOS, Windows and Linux: install it, set it up, upgrade it and remove it" },
+    "es": { "title": "Extensión de Claude Desktop", "description": "El paquete .mcpb de un clic para Claude Desktop en macOS, Windows y Linux: instálalo, configúralo, actualízalo y quítalo" }
+  },
+  {
+    "slug": "install/agent-plugin/",
+    "en": { "title": "Agent plugin", "description": "The Open Plugins and Agent Plugins manifests: which tools read them and how to install the server through them" },
+    "es": { "title": "Plugin para agentes", "description": "Los manifiestos Open Plugins y Agent Plugins: qué herramientas los leen y cómo instalar el servidor a través de ellos" }
+  },
+  {
+    "slug": "install/winget/",
+    "en": { "title": "Install with winget", "description": "The Windows Package Manager manifest, pending review, and the channels that work on Windows until it is accepted" },
+    "es": { "title": "Instalar con winget", "description": "El manifiesto del Windows Package Manager, pendiente de revisión, y los canales que funcionan en Windows mientras no se acepta" }
   },
   {
     "slug": "download-a-paper/",
@@ -20,14 +75,44 @@
     "es": { "title": "Citas BibTeX y RIS", "description": "BibTeX y RIS listos para pegar desde get_details, y por qué un DOI solo aparece cuando Crossref lo confirma" }
   },
   {
-    "slug": "configuration/",
-    "en": { "title": "Configuration", "description": "Full environment-variable configuration reference" },
-    "es": { "title": "Configuración", "description": "Referencia completa de configuración por variables de entorno" }
+    "slug": "use-cases/",
+    "en": { "title": "Use cases", "description": "Worked requests to an assistant with the server connected: what to ask, which tools it calls in what order, and what comes back" },
+    "es": { "title": "Casos de uso", "description": "Peticiones resueltas a un asistente con el servidor conectado: qué pedir, qué herramientas llama y en qué orden, y qué se recibe" }
   },
   {
     "slug": "http-server-mode/",
     "en": { "title": "HTTP server mode", "description": "Deploying over streamable HTTP: the declared host, trusted proxies, per-caller limits, TLS renewal, the drain delay and the health probes" },
     "es": { "title": "Modo servidor HTTP", "description": "Desplegar sobre HTTP en streaming: el nombre declarado, los proxies de confianza, los límites por llamante, TLS, el drenaje y las sondas" }
+  },
+  {
+    "slug": "deploy/reverse-proxy/",
+    "en": { "title": "Behind a reverse proxy", "description": "Complete reverse-proxy configurations for the HTTP transport: trusted proxies, the public URL, unbuffered streaming and TLS" },
+    "es": { "title": "Detrás de un proxy inverso", "description": "Configuraciones completas de proxy inverso para el transporte HTTP: proxies de confianza, la URL pública, streaming sin búfer y TLS" }
+  },
+  {
+    "slug": "deploy/service/",
+    "en": { "title": "Run as a service", "description": "Running the HTTP server as a system service: a unit file, a TCP port or a unix socket, graceful drain and the health check" },
+    "es": { "title": "Ejecutarlo como servicio", "description": "Ejecutar el servidor HTTP como servicio del sistema: un fichero de unidad, un puerto TCP o un socket unix, el drenaje ordenado y la comprobación de salud" }
+  },
+  {
+    "slug": "deploy/containers/",
+    "en": { "title": "Containers and orchestration", "description": "Deploying the image with Compose or an orchestrator: ports, the download volume, the non-root user, the health check and stop signals" },
+    "es": { "title": "Contenedores y orquestación", "description": "Desplegar la imagen con Compose o con un orquestador: puertos, el volumen de descargas, el usuario sin privilegios, la comprobación de salud y las señales de parada" }
+  },
+  {
+    "slug": "deploy/scaling/",
+    "en": { "title": "Scaling and capacity", "description": "What bounds one process, how the per-caller limits and the outbound budget interact, and when more replicas help" },
+    "es": { "title": "Escalado y capacidad", "description": "Qué acota un proceso, cómo interactúan los límites por llamante y el presupuesto de salida, y cuándo ayudan más réplicas" }
+  },
+  {
+    "slug": "security/",
+    "en": { "title": "Security model", "description": "What the server trusts and what it refuses: local paths, outbound destinations, untrusted third-party text, HTTP hardening and per-call keys" },
+    "es": { "title": "Modelo de seguridad", "description": "En qué confía el servidor y qué rechaza: rutas locales, destinos salientes, texto no fiable de terceros, el endurecimiento HTTP y las claves por llamada" }
+  },
+  {
+    "slug": "telemetry/",
+    "en": { "title": "Telemetry", "description": "OpenTelemetry: off by default, exported to a collector the operator runs, and what each signal records and never records" },
+    "es": { "title": "Telemetría", "description": "OpenTelemetry: apagada por defecto, exportada a un colector que ejecuta quien opera el servidor, y qué registra y qué no registra nunca cada señal" }
   },
   {
     "slug": "troubleshooting/",
@@ -40,9 +125,14 @@
     "es": { "title": "Herramientas", "description": "Referencia por herramienta de {tools}" }
   },
   {
-    "slug": "architecture/",
-    "en": { "title": "Architecture", "description": "Internal architecture, mirror discovery and download sources" },
-    "es": { "title": "Arquitectura", "description": "Arquitectura interna, descubrimiento de mirrors y fuentes de descarga" }
+    "slug": "configuration/",
+    "en": { "title": "Configuration", "description": "Full environment-variable configuration reference" },
+    "es": { "title": "Configuración", "description": "Referencia completa de configuración por variables de entorno" }
+  },
+  {
+    "slug": "cli/",
+    "en": { "title": "Command-line flags", "description": "Every flag the binary accepts, with its default, its environment variable, the transport it applies to and what it refuses" },
+    "es": { "title": "Opciones de la línea de órdenes", "description": "Todas las opciones que acepta el binario, con su valor por defecto, su variable de entorno, el transporte al que se aplican y lo que rechazan" }
   },
   {
     "slug": "sources/",
@@ -50,14 +140,14 @@
     "es": { "title": "Fuentes de descarga", "description": "Referencia por fuente de cada fuente de descarga: corpus, mecánica de resolución, trampas medidas y claves" }
   },
   {
+    "slug": "architecture/",
+    "en": { "title": "Architecture", "description": "Internal architecture, mirror discovery and download sources" },
+    "es": { "title": "Arquitectura", "description": "Arquitectura interna, descubrimiento de mirrors y fuentes de descarga" }
+  },
+  {
     "slug": "how-search-works/",
     "en": { "title": "How search works", "description": "Catalog-first search, and when and how it escalates to the extra sources" },
     "es": { "title": "Cómo funciona la búsqueda", "description": "Búsqueda con el catálogo primero, y cuándo y cómo escala a las fuentes extra" }
-  },
-  {
-    "slug": "telemetry/",
-    "en": { "title": "Telemetry", "description": "OpenTelemetry: off by default, exported to a collector the operator runs, and what each signal records and never records" },
-    "es": { "title": "Telemetría", "description": "OpenTelemetry: apagada por defecto, exportada a un colector que ejecuta quien opera el servidor, y qué registra y qué no registra nunca cada señal" }
   },
   {
     "slug": "limitations/",
@@ -65,14 +155,24 @@
     "es": { "title": "Limitaciones conocidas", "description": "Qué no hace el servidor o hace solo en parte, por qué, y dónde se documenta cada límite" }
   },
   {
-    "slug": "eval-results/",
-    "en": { "title": "LLM eval results", "description": "Results of driving a real model over MCP against the live site, scenario by scenario" },
-    "es": { "title": "Resultados de la evaluación con LLM", "description": "Resultados de conducir un modelo real sobre MCP contra el sitio en vivo, escenario a escenario" }
+    "slug": "compatibility/",
+    "en": { "title": "Compatibility", "description": "The platforms and architectures the server is built for, the MCP protocol versions it negotiates, and what each install channel needs" },
+    "es": { "title": "Compatibilidad", "description": "Las plataformas y arquitecturas para las que se compila el servidor, las versiones del protocolo MCP que negocia y lo que necesita cada canal de instalación" }
   },
   {
     "slug": "benchmarks/",
     "en": { "title": "What it costs to run", "description": "Measured, not estimated: memory and latency on both transports, what each extra caller adds, and what bounds a shared deployment" },
     "es": { "title": "Lo que cuesta ejecutarlo", "description": "Medido, no estimado: memoria y latencia en cada transporte, lo que añade cada llamante y qué acota un despliegue compartido" }
+  },
+  {
+    "slug": "eval-results/",
+    "en": { "title": "LLM eval results", "description": "Results of driving a real model over MCP against the live site, scenario by scenario" },
+    "es": { "title": "Resultados de la evaluación con LLM", "description": "Resultados de conducir un modelo real sobre MCP contra el sitio en vivo, escenario a escenario" }
+  },
+  {
+    "slug": "glossary/",
+    "en": { "title": "Glossary", "description": "The terms the documentation uses, from mirror and catalog to source chain and held call, each defined once" },
+    "es": { "title": "Glosario", "description": "Los términos que usa la documentación, desde mirror y catálogo hasta cadena de fuentes y llamada retenida, cada uno definido una vez" }
   },
   {
     "slug": "comparison/",
@@ -88,5 +188,10 @@
     "slug": "privacy/",
     "en": { "title": "Privacy policy", "description": "Nothing reaches the maintainer; requests go only to the Library Genesis mirrors and the search and download sources a call invokes, and an operator may export telemetry to a collector of their own" },
     "es": { "title": "Política de privacidad", "description": "Nada llega a quien mantiene el proyecto; las peticiones van solo a los mirrors de Library Genesis y a las fuentes que invoca cada llamada, y quien opera el servidor puede exportar telemetría a su propio colector" }
+  },
+  {
+    "slug": "changelog/",
+    "en": { "title": "Versions and upgrades", "description": "How releases are versioned, and how to upgrade, pin a version and roll back on each install channel" },
+    "es": { "title": "Versiones y actualizaciones", "description": "Cómo se versionan las releases y cómo actualizar, fijar una versión y volver atrás en cada canal de instalación" }
   }
 ]

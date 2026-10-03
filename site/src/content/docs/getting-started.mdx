@@ -121,7 +121,7 @@ import { Tabs, TabItem, LinkCard, Aside } from "@astrojs/starlight/components";
 
 Every channel below ends in the same single static binary: nothing is compiled, nothing runs at install time. If you already have Node 18 or newer, **npm** is the shortest path — one command, and your MCP client can launch the server through `npx` without installing anything. Otherwise pick whichever package manager you already use, or take the **prebuilt binary**, which needs no runtime of any kind.
 
-What follows is one command per channel. **[Installation](/libgen-mcp/installation/)** is the long form: a section per channel with what you get, how to verify it is what this project published, how to upgrade it and how to remove it.
+What follows is one command per channel. **[Installation](/libgen-mcp/install/overview/)** is the long form: a section per channel with what you get, how to verify it is what this project published, how to upgrade it and how to remove it.
 
 <Tabs>
 	<TabItem label="npm / npx">
@@ -174,7 +174,7 @@ What follows is one command per channel. **[Installation](/libgen-mcp/installati
 
     	The binary is fully static (built with `CGO_ENABLED=0` and no `-buildmode=pie`), so it names no dynamic loader, depends on nothing on the host and runs straight away — on glibc, on musl, and in a distroless or `scratch` container.
 
-    	Every release also ships a `checksums.txt` **and a Sigstore bundle signing it**, so you can check the bytes came from this project's release workflow rather than only that they match a hash published beside them. The recipe is two commands, and the first — the signature over the manifest — is the one that matters and the one usually skipped: [Installation → Verifying what you install](/libgen-mcp/installation/#verifying-what-you-install).
+    	Every release also ships a `checksums.txt` **and a Sigstore bundle signing it**, so you can check the bytes came from this project's release workflow rather than only that they match a hash published beside them. The recipe is two commands, and the first — the signature over the manifest — is the one that matters and the one usually skipped: [Installation → Verifying what you install](/libgen-mcp/install/overview/#verifying-what-you-install).
     </TabItem>
     <TabItem label="Docker">
     	Prefer containers, or want a zero-install command your client pulls on first run? A multi-arch image is published to the GitHub Container Registry:
@@ -318,7 +318,7 @@ Add the server to your project's `.mcp.json` (or run `claude mcp add`):
 
 ### Claude Desktop
 
-The easiest path is the one-click **`.mcpb`** desktop extension from the [latest release](https://github.com/jmrplens/libgen-mcp/releases/latest) (macOS, Windows and Linux, no Docker): download the bundle for your system (see [Installation → Claude Desktop](/libgen-mcp/installation/#claude-desktop-mcpb)) and open it with Claude Desktop, then confirm the settings. On Linux, install it from **Extensions > Install Extension…**, since the Linux app does not open `.mcpb` files itself.
+The easiest path is the one-click **`.mcpb`** desktop extension from the [latest release](https://github.com/jmrplens/libgen-mcp/releases/latest) (macOS, Windows and Linux, no Docker): download the bundle for your system (see [Claude Desktop extension](/libgen-mcp/install/claude-desktop/)) and open it with Claude Desktop, then confirm the settings. On Linux, install it from **Extensions > Install Extension…**, since the Linux app does not open `.mcpb` files itself.
 
 To wire it up by hand instead, edit `claude_desktop_config.json` (`~/Library/Application Support/Claude/` on macOS, `%APPDATA%\Claude\` on Windows, `~/.config/Claude/` on Linux) and add the same `mcpServers` block, then restart Claude Desktop:
 

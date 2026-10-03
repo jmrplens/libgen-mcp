@@ -573,26 +573,41 @@ func TestParseDocPages(t *testing.T) {
 	}
 }
 
-// sitePageSlugs returns the slug of every page in one locale's directory, less
-// the two that are not documentation: the landing page, which llms.txt already
-// links as the documentation site, and the 404.
+// sitePageSlugs returns the slug of every page in one locale's directory and
+// the section directories below it (`install/npm`), less the two that are not
+// documentation: the landing page, which llms.txt already links as the
+// documentation site, and the 404. The English tree holds the Spanish one, so
+// the walk skips a directory named `es` directly under the root.
 func sitePageSlugs(t *testing.T, dir string) map[string]bool {
 	t.Helper()
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatalf("read %s: %v", dir, err)
-	}
 	slugs := map[string]bool{}
-	for _, entry := range entries {
-		name := entry.Name()
-		if entry.IsDir() || (!strings.HasSuffix(name, ".md") && !strings.HasSuffix(name, ".mdx")) {
-			continue
+	err := filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
-		slug := strings.TrimSuffix(strings.TrimSuffix(name, ".mdx"), ".md")
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if entry.IsDir() {
+			if rel == "es" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(rel, ".md") && !strings.HasSuffix(rel, ".mdx") {
+			return nil
+		}
+		slug := strings.TrimSuffix(strings.TrimSuffix(rel, ".mdx"), ".md")
 		if slug == "index" || slug == "404" {
-			continue
+			return nil
 		}
 		slugs[slug] = true
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk %s: %v", dir, err)
 	}
 	return slugs
 }
