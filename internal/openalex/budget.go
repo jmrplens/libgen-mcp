@@ -28,12 +28,6 @@ const (
 	KeylessReserve = 100
 )
 
-// refusedBackoff is how long a refusal (429) that states no wait of its own keeps
-// the budget closed. OpenAlex answers 429 both for an exhausted allowance and for
-// more than a hundred requests a second, so a refusal with nothing to go on is
-// treated as the shorter of the two rather than as the end of the day.
-const refusedBackoff = time.Minute
-
 // newWindowSlack is how far a reported reset may move before it is read as a new
 // window. The header counts whole seconds to a fixed instant, so two responses in
 // the same window disagree by rounding only, while the next day's is a day later.
@@ -69,18 +63,25 @@ var shared Budget
 func Shared() *Budget { return &shared }
 
 // Observe records the rate-limit state a response reports, given its status code
-// and headers. A response carrying both rate-limit headers updates the daily
-// window. A 429 also closes the budget, for its Retry-After, else until the reset
-// it states, else for [refusedBackoff]: an exhausted allowance reports a
-// remaining count of zero with its reset, and that closes the window on its own.
+// and headers.
+//
+// A response that was answered updates the daily window from its two rate-limit
+// headers. A 429 never does: measured on 2026-10-03, OpenAlex answers a burst of
+// requests with 429, Retry-After: 1 and X-RateLimit-Remaining: 0 while the
+// allowance still holds hundreds of credits (a plain request two seconds later
+// reported 748), so its remaining count describes the refusal, not the day.
+// Recording it would pin the window at zero until midnight, since within a window
+// the count only goes down. A 429 instead closes the budget for as long as
+// [ClassifyRefusal] says.
 func (b *Budget) Observe(status int, header http.Header, now time.Time) {
+	if kind, wait := ClassifyRefusal(status, header); kind != RefusalNone {
+		b.close(now.Add(wait))
+		return
+	}
 	remaining, haveRemaining := headerWhole(header, "X-RateLimit-Remaining")
 	reset, haveReset := headerWhole(header, "X-RateLimit-Reset")
 	if haveRemaining && haveReset {
 		b.record(remaining, now.Add(time.Duration(reset)*time.Second), now)
-	}
-	if status == http.StatusTooManyRequests {
-		b.close(now.Add(refusalWait(header)))
 	}
 }
 
@@ -148,18 +149,6 @@ func (b *Budget) Remaining(now time.Time) (credits int, resetAt time.Time, ok bo
 		return 0, time.Time{}, false
 	}
 	return b.remaining, b.resetAt, true
-}
-
-// refusalWait is how long a 429 keeps the budget closed: its Retry-After when that
-// is a whole number of seconds, else the X-RateLimit-Reset it states, else
-// [refusedBackoff].
-func refusalWait(h http.Header) time.Duration {
-	for _, name := range []string{"Retry-After", "X-RateLimit-Reset"} {
-		if s, ok := headerWhole(h, name); ok {
-			return time.Duration(s) * time.Second
-		}
-	}
-	return refusedBackoff
 }
 
 // headerWhole reads a header holding a non-negative whole number.

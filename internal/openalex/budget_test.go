@@ -44,7 +44,7 @@ func TestBudget_Observe(t *testing.T) {
 		{name: "remaining only", status: http.StatusOK, header: headers("968", "", "")},
 		{name: "a malformed count", status: http.StatusOK, header: headers("lots", "60", "")},
 		{name: "a negative count", status: http.StatusOK, header: headers("-1", "60", "")},
-		{name: "an exhausted allowance", status: http.StatusTooManyRequests, header: headers("0", "300", "5"), wantKnown: true, wantReset: 300 * time.Second},
+		{name: "a refusal's count is not recorded", status: http.StatusTooManyRequests, header: headers("0", "300", "5")},
 		{name: "a bare refusal leaves the window unknown", status: http.StatusTooManyRequests, header: headers("", "", "42")},
 	}
 	for _, tc := range cases {
@@ -79,7 +79,8 @@ func TestBudget_RefusalClosesForItsOwnWait(t *testing.T) {
 	}{
 		{name: "Retry-After", header: headers("", "", "42"), wait: 42 * time.Second},
 		{name: "Retry-After wins over the reset", header: headers("0", "300", "5"), wait: 5 * time.Second},
-		{name: "the reset when no Retry-After", header: headers("", "90", ""), wait: 90 * time.Second},
+		{name: "the reset is not a wait", header: headers("", "90", ""), wait: refusedBackoff},
+		{name: "a long Retry-After", header: headers("", "", "3600"), wait: time.Hour},
 		{name: "nothing to go on", header: headers("", "", ""), wait: refusedBackoff},
 		{name: "a date Retry-After", header: headers("", "", "Sat, 03 Oct 2026 20:00:00 GMT"), wait: refusedBackoff},
 	}
@@ -92,6 +93,70 @@ func TestBudget_RefusalClosesForItsOwnWait(t *testing.T) {
 			}
 			if !b.Spend(0, 0, t0.Add(tc.wait)) {
 				t.Error("a spend at the refusal's deadline was refused")
+			}
+		})
+	}
+}
+
+// TestBudget_MeasuredBurstRefusals replays what OpenAlex answered 250 parallel
+// free lookups with on 2026-10-03: 196 refusals carrying Retry-After: 1,
+// X-RateLimit-Remaining: 0 and X-RateLimit-Reset: 4704, then, two seconds later,
+// a 200 reporting 748 remaining. The refusals' zero must not stick: once the
+// second has passed, a search and a one-credit lookup are both granted.
+func TestBudget_MeasuredBurstRefusals(t *testing.T) {
+	var b Budget
+	b.Observe(http.StatusOK, headers("760", "4706", ""), t0)
+	for range 196 {
+		b.Observe(http.StatusTooManyRequests, headers("0", "4704", "1"), t0.Add(time.Second))
+	}
+	if b.Spend(1, 0, t0.Add(1500*time.Millisecond)) {
+		t.Error("a spend inside the burst refusal was granted")
+	}
+	later := t0.Add(3 * time.Second)
+	b.Observe(http.StatusOK, headers("748", "4702", ""), later)
+	if credits, _, ok := b.Remaining(later); !ok || credits != 748 {
+		t.Fatalf("remaining = %d (known %v), want the 748 the plain request reported", credits, ok)
+	}
+	if !b.Spend(SearchCost, KeylessReserve, later) {
+		t.Error("a search was refused after the burst ended")
+	}
+	if !b.Spend(1, 0, later) {
+		t.Error("a one-credit lookup was refused after the burst ended")
+	}
+}
+
+// TestClassifyRefusal pins the one reading of a 429 every caller shares: only
+// Retry-After decides, a short one or none is a burst, a long one is a spent day.
+func TestClassifyRefusal(t *testing.T) {
+	cases := []struct {
+		name     string
+		status   int
+		header   http.Header
+		wantKind Refusal
+		wantWait time.Duration
+	}{
+		{name: "an answer", status: http.StatusOK, header: headers("0", "60", ""), wantKind: RefusalNone},
+		{name: "the measured burst", status: http.StatusTooManyRequests, header: headers("0", "4704", "1"), wantKind: RefusalBurst, wantWait: time.Second},
+		{name: "a minute is still a burst", status: http.StatusTooManyRequests, header: headers("", "", "60"), wantKind: RefusalBurst, wantWait: time.Minute},
+		{name: "longer than a minute is a spent day", status: http.StatusTooManyRequests, header: headers("0", "4704", "4704"), wantKind: RefusalSpent, wantWait: 4704 * time.Second},
+		{name: "no Retry-After", status: http.StatusTooManyRequests, header: headers("0", "4704", ""), wantKind: RefusalBurst, wantWait: refusedBackoff},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			kind, wait := ClassifyRefusal(tc.status, tc.header)
+			if kind != tc.wantKind || wait != tc.wantWait {
+				t.Errorf("ClassifyRefusal() = %s, %v; want %s, %v", kind, wait, tc.wantKind, tc.wantWait)
+			}
+		})
+	}
+}
+
+// TestRefusal_String names each kind.
+func TestRefusal_String(t *testing.T) {
+	for kind, want := range map[Refusal]string{RefusalNone: "none", RefusalBurst: "burst", RefusalSpent: "spent"} {
+		t.Run(want, func(t *testing.T) {
+			if got := kind.String(); got != want {
+				t.Errorf("String() = %q, want %q", got, want)
 			}
 		})
 	}
