@@ -151,7 +151,7 @@ Tres ajustes tienen que cuadrar para que una réplica se vaya sin hacer fallar u
 
 ## Detectar deriva de configuración
 
-Las réplicas detrás de un balanceador tienen que servir el mismo catálogo, o un cliente ve herramientas distintas según a cuál llegue y nada más lo avisa. `GET /health` lleva `config_digest`, doce caracteres hexadecimales sobre los ajustes que deciden la superficie servida: las fuentes configuradas, `extra_sources`, `server_fetch`, `remote_downloads`, `enrich`, `confirm_downloads`, la ruta base, el modo sin estado y los tres límites que cambian lo que devuelve una llamada idéntica. No depende del orden donde el ajuste es un conjunto, y es una huella, no un secreto. Compáralo, junto con `build`, en toda la flota:
+Las réplicas detrás de un balanceador tienen que servir el mismo catálogo, o un cliente ve herramientas distintas según a cuál llegue y nada más lo avisa. `GET /health` lleva `config_digest`, doce caracteres hexadecimales sobre los ajustes que deciden la superficie servida: las fuentes habilitadas, `extra_sources`, `server_fetch`, `remote_downloads`, `enrich`, `confirm_downloads`, la ruta base, el modo sin estado y los tres límites que cambian lo que devuelve una llamada idéntica. No depende del orden donde el ajuste es un conjunto, y es una huella, no un secreto. Compáralo, junto con `build`, en toda la flota:
 
 ```bash
 for replica in 10.0.0.11:8080 10.0.0.12:8080 10.0.0.13:8080; do
@@ -161,7 +161,9 @@ done | sort -u
 
 Una sola línea de salida significa que las réplicas coinciden. Durante una actualización progresiva se esperan dos líneas, una por build.
 
-**El digest no cubre las credenciales.** `LIBGEN_MCP_UNPAYWALL_EMAIL` y `LIBGEN_MCP_CORE_KEY` habilitan cada una una fuente de descarga, y una fuente sin su credencial no aparece en el enum `source` de `download`. Dos réplicas con la misma configuración donde solo una tiene la clave publican el mismo digest y esquemas de herramienta distintos. La tarjeta enumeradora lo cubre: lleva la salida completa de `tools/list`, y su `ETag` fuerte se calcula sobre sus bytes, así que las réplicas que sirven el mismo catálogo publican el mismo validador.
+**El digest ve qué credenciales están puestas, nunca cuáles son.** `LIBGEN_MCP_UNPAYWALL_EMAIL` y `LIBGEN_MCP_CORE_KEY` habilitan cada una una fuente de descarga, y una fuente sin su credencial no aparece en el enum `source` de `download`. El digest cubre las fuentes realmente habilitadas, así que dos réplicas donde solo una tiene la clave de CORE publican digests distintos. Dos réplicas con claves distintas publican el mismo, porque sirven el mismo catálogo: los valores nunca entran en el digest, ni con hash ni de ninguna otra forma. Una clave puesta en todas las réplicas pero equivocada en una es, por tanto, invisible aquí, y solo se nota en que fallan las descargas de esa réplica.
+
+La tarjeta enumeradora es la segunda comprobación, y la exacta. Lleva la salida completa de `tools/list`, y su `ETag` fuerte se calcula sobre sus bytes, así que las réplicas que sirven el mismo catálogo publican el mismo validador, sea lo que sea lo que lo produjo.
 
 ```bash
 for replica in 10.0.0.11:8080 10.0.0.12:8080 10.0.0.13:8080; do
