@@ -13,7 +13,7 @@ first one where the variable is **set** wins, which is not quite the same as the
 that has a value:
 
 1. **The process environment**, which is what your MCP client passed. Set these in the
-   client's `env` block (see [Getting started](getting-started.md)), in your shell, or with
+   client's `env` block (see [Connect a client](clients.md)), in your shell, or with
    `-e` flags on `docker run`. A handful also have flags; see below.
 2. **The file `LIBGEN_MCP_ENV_FILE` names**, if you named one. Give it an absolute path.
 3. **`~/.libgen-mcp.env`**, a dotenv file in your home directory.

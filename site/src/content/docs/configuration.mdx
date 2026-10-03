@@ -74,7 +74,7 @@ import { Aside } from "@astrojs/starlight/components";
 
 There are three places a setting can come from, and they are tried in this order — the first one where the variable is **set** wins, which is not quite the same as the first one that has a value:
 
-1. **The process environment**, which is what your MCP client passed. Set these in the client's `env` block (see [Getting started](/libgen-mcp/getting-started/)), in your shell, or with `-e` flags on `docker run`. A handful also have flags; see below.
+1. **The process environment**, which is what your MCP client passed. Set these in the client's `env` block (see [Connect a client](/libgen-mcp/clients/)), in your shell, or with `-e` flags on `docker run`. A handful also have flags; see below.
 2. **The file `LIBGEN_MCP_ENV_FILE` names**, if you named one. Give it an absolute path.
 3. **`~/.libgen-mcp.env`**, a dotenv file in your home directory.
 

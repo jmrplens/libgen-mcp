@@ -294,19 +294,11 @@ que describe esta documentación es siempre la de
 
 Apunta tu cliente al binario. El comando es `libgen-mcp` (o la ruta absoluta al binario `server` si mantuviste el nombre por defecto de `go install`). Sobre stdio no hacen falta argumentos adicionales.
 
-Los clientes difieren en dónde vive la configuración y en la clave bajo la que va la entrada del servidor:
-
-| Cliente                 | Dónde se configura                                                                           | Clave            | Transporte        |
-| ----------------------- | -------------------------------------------------------------------------------------------- | ---------------- | ----------------- |
-| Claude Code             | `.mcp.json` en el proyecto, o `claude mcp add`                                               | `mcpServers`     | stdio             |
-| Claude Desktop          | la extensión `.mcpb`, o `claude_desktop_config.json`                                         | `mcpServers`     | stdio             |
-| Cursor                  | `.cursor/mcp.json` en el proyecto, o `~/.cursor/mcp.json`                                    | `mcpServers`     | stdio             |
-| VS Code, GitHub Copilot | `.vscode/mcp.json`, con `"type": "stdio"` en la entrada                                      | `servers`        | stdio             |
-| Otro cliente con HTTP   | el [endpoint hospedado](#endpoint-hospedado-sin-instalar-nada) o tu propio servidor `--http` | según el cliente | HTTP en streaming |
+Aquí el ejemplo es Claude Code. **[Conectar un cliente](/libgen-mcp/es/clients/)** tiene la entrada completa para todos los demás clientes (Claude Desktop, VS Code, Cursor, Windsurf, Zed, JetBrains, Kiro, OpenCode, Cline, Continue, LM Studio, Gemini CLI, Codex y Goose) en su forma local y en la remota, los botones de instalación en un clic y dónde van las claves opcionales.
 
 ### Claude Code
 
-Añade el servidor al `.mcp.json` de tu proyecto (o ejecuta `claude mcp add`):
+Ejecuta `claude mcp add libgen -- libgen-mcp`, o añade el servidor al `.mcp.json` de tu proyecto:
 
 ```json
 {
@@ -318,44 +310,13 @@ Añade el servidor al `.mcp.json` de tu proyecto (o ejecuta `claude mcp add`):
 }
 ```
 
-### Claude Desktop
-
-La vía más sencilla es la extensión **`.mcpb`** de un clic de la [última release](https://github.com/jmrplens/libgen-mcp/releases/latest) (macOS, Windows y Linux, sin Docker): descarga el paquete de tu sistema (ver [Extensión de Claude Desktop](/libgen-mcp/es/install/claude-desktop/)), ábrelo con Claude Desktop y confirma los ajustes. En Linux, instálala desde **Extensions > Install Extension…**, porque la app de Linux no abre los ficheros `.mcpb` por sí misma.
-
-Para configurarlo a mano, edita `claude_desktop_config.json` (`~/Library/Application Support/Claude/` en macOS, `%APPDATA%\Claude\` en Windows, `~/.config/Claude/` en Linux) y añade el mismo bloque `mcpServers`, luego reinicia Claude Desktop:
-
-```json
-{
-	"mcpServers": {
-		"libgen": {
-			"command": "/absolute/path/to/libgen-mcp",
-			"env": {
-				"LIBGEN_MCP_DOWNLOAD_DIR": "/absolute/path/to/downloads"
-			}
-		}
-	}
-}
-```
-
 <Aside type="caution">
-	Los clientes de escritorio no heredan el `PATH` de tu shell, así que usa una
-	ruta `command` absoluta.
+	En Claude Desktop, la [extensión
+	`.mcpb`](/libgen-mcp/es/install/claude-desktop/) de un clic no necesita ningún
+	archivo de configuración. Los clientes de escritorio no heredan el `PATH` de
+	tu shell, así que un archivo de configuración ahí lleva una ruta `command`
+	absoluta.
 </Aside>
-
-### VS Code
-
-El soporte MCP de VS Code (o las extensiones Continue / Cline) lee un `mcp.json` con la misma forma. En el formato propio de VS Code:
-
-```json
-{
-	"servers": {
-		"libgen": {
-			"command": "libgen-mcp",
-			"type": "stdio"
-		}
-	}
-}
-```
 
 ### Endpoint hospedado (sin instalar nada)
 

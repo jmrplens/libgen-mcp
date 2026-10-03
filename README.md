@@ -38,7 +38,7 @@ You talk to your AI assistant; it does the searching and fetching. You don't nee
 
 ## Quick start
 
-The lowest-friction paths are **`npx` and Docker — no install, no Go, nothing to manage**. If you already have Node 18 or newer, [`npx @jmrp.io/libgen-mcp`](#run-it-with-npx-no-install) is a single command. Otherwise pick your client below and paste the snippet; each one runs the published image `ghcr.io/jmrplens/libgen-mcp:latest` (auto-pulled on first run — you only need [Docker](https://www.docker.com/) installed). Prefer a native binary? See [Install a native binary](#install-a-native-binary).
+The lowest-friction paths are **`npx` and Docker — no install, no Go, nothing to manage**. If you already have Node 18 or newer, [`npx @jmrp.io/libgen-mcp`](#run-it-with-npx-no-install) is a single command. Otherwise use a one-click button below: each one registers the published image `ghcr.io/jmrplens/libgen-mcp:latest` (auto-pulled on first run — you only need [Docker](https://www.docker.com/) installed). Prefer a native binary? See [Install a native binary](#install-a-native-binary).
 
 Then just ask your assistant: _"Search for the Rust book."_
 
@@ -100,116 +100,23 @@ The endpoint is **stateless streamable HTTP**: `POST` is the transport, `GET` on
   </tr>
 </table>
 
-Or **copy-paste the config** for your client — every snippet runs the container, so there is nothing to install first:
-
-<details>
-<summary><b>Claude Code</b> (CLI)</summary>
+Or register it by hand. In Claude Code that is one command:
 
 ```bash
-claude mcp add libgen -- docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest
+claude mcp add libgen -- npx -y @jmrp.io/libgen-mcp
 ```
 
-Using a native binary already on your `PATH` instead:
-
-```bash
-claude mcp add libgen -- libgen-mcp
-```
-
-</details>
-
-<details>
-<summary><b>Claude Desktop</b></summary>
-
-Easiest: download the native [`.mcpb` extension](https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp.mcpb) (macOS, Windows and Linux, no Docker), open it with Claude Desktop, and confirm. On Linux, install it from **Extensions > Install Extension…** instead.
-
-Or edit `claude_desktop_config.json` (Settings → Developer → Edit Config):
+Most other clients take the same entry in an `mcpServers` object:
 
 ```json
 {
   "mcpServers": {
-    "libgen": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "ghcr.io/jmrplens/libgen-mcp:latest"]
-    }
+    "libgen": { "command": "npx", "args": ["-y", "@jmrp.io/libgen-mcp"] }
   }
 }
 ```
 
-</details>
-
-<details>
-<summary><b>Cursor</b></summary>
-
-Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (per project):
-
-```json
-{
-  "mcpServers": {
-    "libgen": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "ghcr.io/jmrplens/libgen-mcp:latest"]
-    }
-  }
-}
-```
-
-</details>
-
-<details>
-<summary><b>VS Code</b> / GitHub Copilot</summary>
-
-Add to `.vscode/mcp.json` (workspace) or your user `mcp.json`. VS Code uses a `servers` key:
-
-```json
-{
-  "servers": {
-    "libgen": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "ghcr.io/jmrplens/libgen-mcp:latest"]
-    }
-  }
-}
-```
-
-</details>
-
-<details>
-<summary><b>LM Studio</b></summary>
-
-Add to `mcp.json` (Program → Edit `mcp.json`):
-
-```json
-{
-  "mcpServers": {
-    "libgen": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "ghcr.io/jmrplens/libgen-mcp:latest"]
-    }
-  }
-}
-```
-
-</details>
-
-<details>
-<summary><b>Any other client</b> (generic <code>mcp.json</code>)</summary>
-
-Most MCP clients accept the standard `mcpServers` shape:
-
-```json
-{
-  "mcpServers": {
-    "libgen": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "ghcr.io/jmrplens/libgen-mcp:latest"]
-    }
-  }
-}
-```
-
-To use a native binary instead, set `"command"` to the binary path and drop the `docker` `args`. To pass configuration, add an `"env"` object (or `-e NAME=value` before the image) — see [Configuration](#configuration).
-
-</details>
+**[Connect a client](https://jmrp.io/docs/libgen-mcp/clients/)** has the complete entry for each client — Claude Desktop, VS Code, Cursor, Windsurf, Zed, JetBrains, Kiro, OpenCode, Cline, Continue, LM Studio, Gemini CLI, Codex and Goose — in its local form and its remote one, with the file path on each operating system and where optional keys go ([`docs/clients.md`](docs/clients.md) in this repository).
 
 ## Run with Docker
 
@@ -243,7 +150,7 @@ curl -L -o libgen-mcp \
 chmod +x libgen-mcp && sudo mv libgen-mcp /usr/local/bin/
 ```
 
-The binary is fully static (`CGO_ENABLED=0`, no `-buildmode=pie`), so it names no dynamic loader and runs anywhere for that OS/arch with nothing else installed — glibc, musl, or a `scratch` container. Then register `libgen-mcp` with your client using the binary variant of any snippet [above](#add-to-your-mcp-client), or see the [getting-started guide](docs/getting-started.md). **No token or account is required** — Library Genesis needs no credentials.
+The binary is fully static (`CGO_ENABLED=0`, no `-buildmode=pie`), so it names no dynamic loader and runs anywhere for that OS/arch with nothing else installed — glibc, musl, or a `scratch` container. Then register `libgen-mcp` with your client: use the absolute path of the binary as the `command` in any entry from [Connect a client](docs/clients.md). **No token or account is required** — Library Genesis needs no credentials.
 
 Every release also ships a `checksums.txt` **and a Sigstore bundle signing it**, so you can check the bytes came from this project's release workflow rather than only that they match a hash published beside them:
 
