@@ -38,7 +38,7 @@ const (
 
 // Config groups the server configuration read from the environment.
 type Config struct {
-	Mirror      string // LIBGEN_MIRROR: forced mirror, e.g. https://libgen.li
+	Mirror      string // LIBGEN_MIRROR: mirror tried first, e.g. https://libgen.li
 	DownloadDir string // LIBGEN_MCP_DOWNLOAD_DIR: download destination
 	// Timeout is the deadline for ONE HTTP request that asks a question — a catalog
 	// search, a details lookup, a mirror health probe, a single hop made by a
