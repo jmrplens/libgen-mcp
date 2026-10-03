@@ -174,7 +174,7 @@ Lo que sigue es una orden por canal. **[Instalación](/libgen-mcp/es/install/ove
 
     	El binario es totalmente estático (compilado con `CGO_ENABLED=0` y sin `-buildmode=pie`), así que no nombra ningún cargador dinámico, no depende de nada del host y arranca sin más — en glibc, en musl y en un contenedor distroless o `scratch`.
 
-    	Cada release publica además un `checksums.txt` **y un bundle Sigstore que lo firma**, así que puedes comprobar que los bytes salieron del workflow de release de este proyecto y no solo que coinciden con un hash publicado a su lado. La receta son dos órdenes, y la primera — la firma sobre el manifiesto — es la que importa y la que se suele saltar: [Instalación → Verificar lo que instalas](/libgen-mcp/es/install/overview/#verificar-lo-que-instalas).
+    	Cada release publica además un `checksums.txt` **y un bundle Sigstore que lo firma**, así que puedes comprobar que los bytes salieron del workflow de release de este proyecto y no solo que coinciden con un hash publicado a su lado. La receta son dos órdenes, y la primera — la firma sobre el manifiesto — es la que importa y la que se suele saltar: [Binarios de la release → Verificar lo que instalaste](/libgen-mcp/es/install/binary/#verificar-lo-que-instalaste).
     </TabItem>
     <TabItem label="Docker">
     	¿Prefieres contenedores, o un comando sin instalación que tu cliente descarga en el primer arranque? Se publica una imagen multi-arch en el GitHub Container Registry:

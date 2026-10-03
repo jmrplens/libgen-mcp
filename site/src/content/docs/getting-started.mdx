@@ -174,7 +174,7 @@ What follows is one command per channel. **[Installation](/libgen-mcp/install/ov
 
     	The binary is fully static (built with `CGO_ENABLED=0` and no `-buildmode=pie`), so it names no dynamic loader, depends on nothing on the host and runs straight away — on glibc, on musl, and in a distroless or `scratch` container.
 
-    	Every release also ships a `checksums.txt` **and a Sigstore bundle signing it**, so you can check the bytes came from this project's release workflow rather than only that they match a hash published beside them. The recipe is two commands, and the first — the signature over the manifest — is the one that matters and the one usually skipped: [Installation → Verifying what you install](/libgen-mcp/install/overview/#verifying-what-you-install).
+    	Every release also ships a `checksums.txt` **and a Sigstore bundle signing it**, so you can check the bytes came from this project's release workflow rather than only that they match a hash published beside them. The recipe is two commands, and the first — the signature over the manifest — is the one that matters and the one usually skipped: [Release binaries → Verify what you installed](/libgen-mcp/install/binary/#verify-what-you-installed).
     </TabItem>
     <TabItem label="Docker">
     	Prefer containers, or want a zero-install command your client pulls on first run? A multi-arch image is published to the GitHub Container Registry:

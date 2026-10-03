@@ -1,6 +1,129 @@
 ---
 title: Instalar con Homebrew
-description: "La fórmula de libgen-mcp en el tap jmrplens/tap: instálala, mira qué deja en el disco, verifícala, actualízala y quítala."
+description: "La fórmula libgen-mcp del tap jmrplens/tap: instálala en macOS o Linux, mira qué deja en el disco, verifícala, actualízala, fíjala y quítala."
+datePublished: "2026-10-03"
+mentions:
+  - name: "Homebrew"
+    wikidata: Q11223506
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+chips:
+  - text: "macOS y Linux"
+  - text: "Hashes del manifiesto firmado"
+  - text: "Todos los canales"
+    href: "/libgen-mcp/es/install/overview/"
 ---
 
-Esta página cubrirá la fórmula del tap `jmrplens/tap`: instalarla, qué deja la fórmula en el disco, cómo verificarla, actualizarla, fijar una versión y quitarla. Mientras tanto, los pasos están en la [sección Homebrew de la instalación](/libgen-mcp/es/install/overview/#homebrew).
+`libgen-mcp` tiene una fórmula en el tap propio de este proyecto, [`jmrplens/homebrew-tap`](https://github.com/jmrplens/homebrew-tap). Instala el binario de la release para tu máquina, con su licencia y los avisos de terceros, y deja que `brew upgrade` lo mantenga al día.
+
+## Qué obtienes
+
+La fórmula `libgen-mcp` descarga un asset de la release, el de tu sistema y tu arquitectura, y lo instala como `bin/libgen-mcp`:
+
+| Sistema | Apple Silicon o arm64     | Intel o x86_64            |
+| ------- | ------------------------- | ------------------------- |
+| macOS   | `libgen-mcp-darwin-arm64` | `libgen-mcp-darwin-amd64` |
+| Linux   | `libgen-mcp-linux-arm64`  | `libgen-mcp-linux-amd64`  |
+
+Junto al binario instala `LICENSE` y `THIRD_PARTY_NOTICES` en el keg, porque el binario enlaza módulos cuyas licencias piden que sus textos viajen con él. No se compila nada: no hay paso de compilación y no hace falta bottle.
+
+La fórmula la genera el workflow de release a partir del `checksums.txt` de la release y la empuja al tap, así que una versión nueva está en el tap minutos después de la release.
+
+## Requisitos
+
+| Requisito      | Detalle                                       |
+| -------------- | --------------------------------------------- |
+| Homebrew       | En macOS, o Homebrew en Linux                 |
+| Una plataforma | macOS o Linux, en arm64 o x86_64. Sin Windows |
+
+## Instalar
+
+```bash
+brew install jmrplens/tap/libgen-mcp
+```
+
+El nombre completo añade el tap `jmrplens/tap` por el camino. Lo equivalente en dos pasos es `brew tap jmrplens/tap` seguido de `brew install libgen-mcp`.
+
+```bash
+libgen-mcp --version
+# libgen-mcp 2.1.0 (commit 5493887)
+```
+
+La instalación termina con un aviso (caveat) que nombra la orden que debes dar a tu cliente, `$(brew --prefix)/bin/libgen-mcp`.
+
+## Verificar lo que instalaste
+
+**La fórmula fija el asset de cada plataforma por su SHA256, y `brew` rechaza una descarga que no coincide.** La comprobación ya está hecha cuando la orden termina. Esos hashes se copian del `checksums.txt` de la release, el manifiesto que la release firma, no se calculan sobre una descarga nueva, así que la fórmula es tan fiable como ese manifiesto firmado.
+
+El binario instalado es el asset de la release byte a byte, así que su procedencia de compilación también lo verifica:
+
+```bash
+gh attestation verify "$(brew --prefix libgen-mcp)/bin/libgen-mcp" -R jmrplens/libgen-mcp \
+  --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
+```
+
+Lo que añade `--signer-workflow` se explica en la [instalación](/libgen-mcp/es/install/overview/#verificar-lo-que-instalas).
+
+## Dónde queda en el disco
+
+| Ruta                                                | Qué es                           |
+| --------------------------------------------------- | -------------------------------- |
+| `$(brew --prefix)/bin/libgen-mcp`                   | La orden, un enlace al keg       |
+| `$(brew --prefix)/Cellar/libgen-mcp/<version>/bin/` | El binario                       |
+| `$(brew --prefix)/Cellar/libgen-mcp/<version>/`     | `LICENSE`, `THIRD_PARTY_NOTICES` |
+
+`brew --prefix` es `/opt/homebrew` en Apple Silicon, `/usr/local` en los Mac Intel y `/home/linuxbrew/.linuxbrew` en Linux. Lo que escribe el servidor cuando se ejecuta está en la [instalación](/libgen-mcp/es/install/overview/#lo-que-comparten-todos-los-canales).
+
+## Configurar un cliente
+
+```json
+{
+	"mcpServers": {
+		"libgen": { "command": "/opt/homebrew/bin/libgen-mcp" }
+	}
+}
+```
+
+Usa tu propio prefijo. La ruta completa importa aquí más que en otros canales: un cliente de escritorio arrancado desde el Dock o un lanzador no lee el perfil de tu shell, así que a menudo no tiene el directorio de Homebrew en su `PATH`. Dónde guarda cada cliente este archivo está en [Conectar un cliente](/libgen-mcp/es/clients/).
+
+## Actualizar
+
+```bash
+brew update
+brew upgrade libgen-mcp
+```
+
+`brew update` descarga la fórmula nueva del tap; `brew upgrade` por sí solo lo ejecuta antes, salvo que la actualización automática esté desactivada. Un cliente que ya tiene el servidor en marcha conserva el proceso viejo hasta que lo reinicia; `libgen-mcp --shutdown` pide a todas las instancias en marcha que terminen.
+
+## Fijar una versión
+
+```bash
+brew pin libgen-mcp     # brew upgrade la deja donde está
+brew unpin libgen-mcp   # vuelve a seguir las releases
+```
+
+El tap solo guarda la fórmula más reciente, así que fijar conserva la versión que tienes en lugar de instalar una anterior. Para ejecutar una release anterior concreta, usa su [binario de la release](/libgen-mcp/es/install/binary/).
+
+## Desinstalar
+
+```bash
+brew uninstall libgen-mcp
+brew untap jmrplens/tap   # si no usas nada más de él
+```
+
+Los ajustes, las cachés y las descargas no se tocan; la instalación dice [dónde están](/libgen-mcp/es/install/overview/#lo-que-comparten-todos-los-canales).
+
+## Notas por plataforma
+
+- **Sin aviso de Gatekeeper.** Homebrew no pone el atributo de cuarentena a lo que instala una fórmula, así que macOS no detiene la primera ejecución de un binario que no está notarizado.
+- **Linux en arm64** lo sirve la rama `on_arm` de la fórmula, igual que Apple Silicon.
+
+## Problemas habituales
+
+**`Error: No available formula with the name "libgen-mcp"`.** Usa el nombre completo `jmrplens/tap/libgen-mcp`; la fórmula no está en homebrew-core.
+
+**`brew upgrade` dice que ya está al día justo después de una release.** El tap local está desfasado. `brew update` lo descarga.
+
+**El cliente no encuentra `libgen-mcp`.** Dale la ruta completa que imprime `command -v libgen-mcp`, por lo explicado en [Configurar un cliente](#configurar-un-cliente).
+
+Los demás canales se comparan en la [instalación](/libgen-mcp/es/install/overview/).

@@ -1,9 +1,134 @@
 # Agent plugin
 
-**How-to guide** — for anyone whose agent tool installs MCP servers as plugins.
+**How-to guide** — for anyone whose agent host installs MCP servers as plugins.
 
-This page will cover the two plugin manifests this repository publishes — the
-Open Plugins one under `.plugin/` and the Agent Plugins one at the root — which
-tools read each, how to install the server through them, and how that differs
-from registering the server by hand. Until then, the
-[installation overview](overview.md) lists every other channel.
+A plugin host can install an MCP server from a repository when the repository describes itself in a manifest the host understands. This repository carries three files for that, in the two formats hosts read today. They do not contain the server: they tell a host how to start it, and what they start is the [Docker image](docker.md).
+
+## What you get
+
+| File                  | Format                                                                  | What it says                                                                                          |
+| --------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `plugin.json`         | [Agent Plugins](https://agent-plugins.org/) 1.0, at the repository root | The plugin's name, version, description, author, licence and keywords. Its schema allows nothing else |
+| `.plugin/plugin.json` | Open Plugins, validated by `.plugin/plugin.schema.json` beside it       | The same identity, plus a `logo` and `"mcpServers": "./mcp.json"`, the pointer to the server entry    |
+| `mcp.json`            | The MCP server configuration both point at                              | One stdio entry, `libgen`, that runs the image                                                        |
+
+The two manifests are separate files rather than one copy, because the formats disagree: Agent Plugins 1.0 sets `additionalProperties: false` and has no field for a logo or for the server entry, while Open Plugins expects both. An Agent Plugins host finds `mcp.json` by its fixed place at the plugin root; an Open Plugins host follows the pointer. Both manifests carry the release version, stamped by the release workflow.
+
+## Which hosts read them
+
+A host that implements **Agent Plugins** reads `plugin.json` at the root of the plugin directory and `mcp.json` beside it. A host that implements **Open Plugins** reads `.plugin/plugin.json` and follows its `mcpServers` pointer. Neither specification defines how a plugin is distributed or installed, so the command belongs to your host and its version: typically you give it the repository, `jmrplens/libgen-mcp`, through its plugin installer, and it copies the directory into its own plugin store.
+
+## Prerequisites
+
+| Requirement | Detail                                                                                       |
+| ----------- | -------------------------------------------------------------------------------------------- |
+| A host      | One that installs Agent Plugins or Open Plugins packages with MCP servers                    |
+| Docker      | Installed and running: the entry starts `docker run`. The image is pulled on the first start |
+
+## What the plugin runs
+
+The entry in `mcp.json`, shortened here to three of its sixteen variables:
+
+```json
+{
+  "mcpServers": {
+    "libgen": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-e", "LIBGEN_MIRROR",
+        "-e", "LIBGEN_MCP_DOWNLOAD_DIR",
+        "-e", "LIBGEN_MCP_TIMEOUT",
+        "ghcr.io/jmrplens/libgen-mcp:latest"
+      ],
+      "env": {
+        "LIBGEN_MIRROR": "${LIBGEN_MIRROR:-}",
+        "LIBGEN_MCP_DOWNLOAD_DIR": "${LIBGEN_MCP_DOWNLOAD_DIR:-}",
+        "LIBGEN_MCP_TIMEOUT": "${LIBGEN_MCP_TIMEOUT:-10s}"
+      }
+    }
+  }
+}
+```
+
+The real file forwards `LIBGEN_MIRROR`, `LIBGEN_MCP_DOWNLOAD_DIR`, `LIBGEN_MCP_TIMEOUT`, `LIBGEN_MCP_RESOLVE_BUDGET`, `LIBGEN_MCP_LOG_LEVEL`, `LIBGEN_MCP_RATE_RPS`, `LIBGEN_MCP_RATE_BURST`, `LIBGEN_MCP_MAX_DOWNLOAD_BYTES`, `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS`, `LIBGEN_MCP_RETRY_ATTEMPTS`, `LIBGEN_MCP_UNPAYWALL_EMAIL`, `LIBGEN_MCP_SCIHUB_HOSTS`, `LIBGEN_MCP_SOURCES`, `LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS`, `LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT` and `LIBGEN_MCP_REMOTE_DOWNLOADS` the same way. Three details of it matter:
+
+- **The `-i`.** It gives the container a pipe on standard input, which is what makes the image serve stdio. Without it the container starts an HTTP listener and the host waits forever.
+- **`-e NAME` with no value** copies the variable from the environment `docker` runs in into the container. The `env` block is what sets that environment, each value written `${NAME:-default}`: the variable from the host's own environment, or the default.
+- **No volume.** The download directory is inside the container, and `--rm` discards it when the session ends. `download` still answers, but the file does not survive. To keep files, edit the entry as under [Configure a client](#configure-a-client).
+
+> **The `${NAME:-default}` values depend on the host.** That form is shell
+> syntax, and it works only in a host that expands it the way a shell does. The
+> Agent Plugins 1.0 specification expands exactly two placeholders,
+> `${PLUGIN_ROOT}` and `${PLUGIN_DATA}`, and requires every other one to stay
+> literal; it also requires a `$schema` field in `mcp.json`, which this file does
+> not carry, and a conformant host disables an `mcp.json` without one. A host
+> that passes the values through literally starts the server with
+> `LIBGEN_MCP_TIMEOUT` set to the text `${LIBGEN_MCP_TIMEOUT:-10s}`, and the
+> server refuses to start: `LIBGEN_MCP_TIMEOUT: time: invalid duration`. If the
+> plugin installs but the server never comes up, that is the reason, and the
+> entry under [Configure a client](#configure-a-client) is the way around it.
+
+## Verify what you installed
+
+The manifests are configuration, so there is nothing signed in them; what runs is the image, and the image is what to verify. The [Docker page](docker.md#verify-what-you-installed) has the cosign and attestation commands.
+
+## Where it lands on disk
+
+The host copies the plugin directory into its own store, at a place it chooses (the Agent Plugins specification uses `~/.agents/plugins/<name>/` as its example). The image goes into Docker's storage. Nothing else is written until the server runs; the [installation overview](overview.md#what-every-channel-shares) lists what it writes then.
+
+## Configure a client
+
+For this channel, the plugin's `mcp.json` is the configuration: the host reads it and starts the entry. To change it, or on a host without plugin support, put the entry in the client's own configuration with literal values and a volume for downloads:
+
+```json
+{
+  "mcpServers": {
+    "libgen": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-v", "/home/you/Downloads/libgen:/downloads",
+        "-e", "LIBGEN_MCP_DOWNLOAD_DIR=/downloads",
+        "ghcr.io/jmrplens/libgen-mcp:latest"
+      ]
+    }
+  }
+}
+```
+
+The host directory must be writable by UID `10001`, as the [Docker page](docker.md#downloads-and-the-volume) explains. To use a binary installed another way instead of Docker, the entry is just `"command": "/path/to/libgen-mcp"`. Where each client keeps this file is on [Connect a client](../clients.md).
+
+## Upgrade
+
+The manifest's version moves with each release, but what the entry starts is the image tag `latest`, and `docker run` pulls only an image that is missing. A plugin installed weeks ago keeps running the image it pulled first until you pull again:
+
+```bash
+docker pull ghcr.io/jmrplens/libgen-mcp:latest
+```
+
+## Pin a version
+
+Change the image in your local copy of the entry to a version tag, `ghcr.io/jmrplens/libgen-mcp:2.1.0`, or a digest. The [Docker page](docker.md#pin-a-version) shows both.
+
+## Uninstall
+
+Remove the plugin the way your host documents, then free the image if nothing else uses it:
+
+```bash
+docker image rm ghcr.io/jmrplens/libgen-mcp:latest
+```
+
+## Platform notes
+
+The entry behaves the same wherever Docker runs, which is why it uses Docker: neither specification has per-platform variants of an entry. On macOS and Windows that means Docker Desktop or another runtime must be running before the host starts the server.
+
+## Common problems
+
+**The server never starts and the host's log shows `invalid duration`, or no MCP server appears at all.** See the note under [What the plugin runs](#what-the-plugin-runs): the host does not expand `${NAME:-default}`, or it refused the `mcp.json`. Use the entry under [Configure a client](#configure-a-client).
+
+**`Cannot connect to the Docker daemon`.** Docker is not running.
+
+**Downloaded files disappear.** They were saved inside the container. Add the volume shown above.
+
+Other channels are compared on the [installation overview](overview.md).

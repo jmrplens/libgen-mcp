@@ -1,6 +1,214 @@
 ---
 title: Binarios de la release y go install
-description: "Los binarios estáticos de libgen-mcp de cada release de GitHub: elige uno, verifícalo con los checksums firmados, actualízalo o quítalo, o compílalo con go install."
+description: "Los binarios estáticos adjuntos a cada release de GitHub: qué archivo corresponde a cada plataforma, cómo verificarlo con el checksums.txt firmado y su procedencia de compilación, ponerlo en tu PATH, y compilarlo desde el código fuente con go install."
+datePublished: "2026-10-03"
+mentions:
+  - name: "Go"
+    wikidata: Q37227
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+chips:
+  - text: "Un único archivo estático"
+  - text: "Checksums firmados"
+  - text: "Todos los canales"
+    href: "/libgen-mcp/es/install/overview/"
 ---
 
-Esta página cubrirá los binarios estáticos adjuntos a cada release de GitHub: qué fichero corresponde a cada plataforma, cómo verificarlo con el `checksums.txt` firmado y su procedencia de compilación, ponerlo en tu `PATH`, actualizarlo y quitarlo — y compilarlo desde el código fuente con `go install`. Mientras tanto, los pasos están en las secciones [binario de la release](/libgen-mcp/es/install/overview/#binario-de-la-release) y [`go install`](/libgen-mcp/es/install/overview/#go-install) de la instalación.
+import { Tabs, TabItem, Aside } from "@astrojs/starlight/components";
+
+Cada [release de GitHub](https://github.com/jmrplens/libgen-mcp/releases) lleva el servidor como un único ejecutable por plataforma. Es el archivo que entregan todos los gestores de paquetes de las demás páginas; descargarlo tú mismo se salta el gestor de paquetes y no deja instalado nada más que ese archivo.
+
+## Qué obtienes
+
+| Asset                          | Para                                                                         |
+| ------------------------------ | ---------------------------------------------------------------------------- |
+| `libgen-mcp-linux-amd64`       | Linux x86_64, con glibc o musl                                               |
+| `libgen-mcp-linux-arm64`       | Linux aarch64, con glibc o musl                                              |
+| `libgen-mcp-darwin-arm64`      | macOS en Apple Silicon                                                       |
+| `libgen-mcp-darwin-amd64`      | macOS en Intel                                                               |
+| `libgen-mcp-darwin-all`        | macOS, las dos arquitecturas en un binario universal                         |
+| `libgen-mcp-windows-amd64.exe` | Windows x64                                                                  |
+| `libgen-mcp-windows-arm64.exe` | Windows on Arm                                                               |
+| `<asset>.sbom.json`            | El SBOM de cada binario                                                      |
+| `THIRD_PARTY_NOTICES`          | Los textos de licencia de los módulos que enlaza el binario (desde la 2.1.0) |
+| `checksums.txt`                | El SHA256 de cada archivo de arriba                                          |
+| `checksums.txt.sigstore.json`  | El bundle Sigstore que firma `checksums.txt`                                 |
+
+**Los binarios son autónomos.** Se compilan con `CGO_ENABLED=0` y sin `-buildmode=pie`, así que no nombran ningún cargador dinámico: los de Linux funcionan con glibc y con musl, en una imagen distroless y sobre `scratch`. No hace falta instalar nada más.
+
+Los paquetes de Claude Desktop (`.mcpb`) están en la misma página de la release y tienen [su propia página](/libgen-mcp/es/install/claude-desktop/).
+
+## Requisitos
+
+Ninguno para ejecutarlo. Para seguir los pasos de abajo: `curl` (o un navegador), y para verificar, [cosign](https://docs.sigstore.dev/cosign/system_config/installation/) y, opcionalmente, la [CLI de GitHub](https://cli.github.com/). Compilar desde el código fuente necesita Go, en [Compilar desde el código fuente](#compilar-desde-el-código-fuente).
+
+## Instalar
+
+La dirección `releases/latest/download/` sirve siempre el archivo de la release más reciente con el mismo nombre.
+
+<Tabs syncKey="os">
+<TabItem label="Linux">
+
+```bash
+curl -fL -o libgen-mcp \
+  https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp-linux-amd64
+chmod +x libgen-mcp
+sudo mv libgen-mcp /usr/local/bin/
+```
+
+En arm64, descarga `libgen-mcp-linux-arm64`. Sin root, `~/.local/bin` también sirve, si está en tu `PATH`.
+
+</TabItem>
+<TabItem label="macOS">
+
+```bash
+curl -fL -o libgen-mcp \
+  https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp-darwin-all
+chmod +x libgen-mcp
+sudo mv libgen-mcp /usr/local/bin/
+```
+
+`libgen-mcp-darwin-all` funciona en las dos arquitecturas. `-darwin-arm64` y `-darwin-amd64` son el mismo programa con la mitad de tamaño, más o menos.
+
+</TabItem>
+<TabItem label="Windows">
+
+```powershell
+$dir = "$env:LOCALAPPDATA\Programs\libgen-mcp"
+New-Item -ItemType Directory -Force $dir | Out-Null
+Invoke-WebRequest -OutFile "$dir\libgen-mcp.exe" `
+  https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp-windows-amd64.exe
+# pon el directorio en el PATH de tu usuario, para los terminales nuevos
+[Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";$dir", "User")
+```
+
+En Windows on Arm, descarga `libgen-mcp-windows-arm64.exe`.
+
+</TabItem>
+</Tabs>
+
+Después:
+
+```bash
+libgen-mcp --version
+# libgen-mcp 2.1.0 (commit 5493887)
+```
+
+## Verificar lo que instalaste
+
+Comprueba primero la firma, y después el archivo contra el manifiesto que firma:
+
+```bash
+cd "$(mktemp -d)"
+gh release download --repo jmrplens/libgen-mcp \
+  --pattern 'checksums.txt' --pattern 'checksums.txt.sigstore.json' \
+  --pattern 'libgen-mcp-linux-amd64'
+
+# 1. El manifiesto lo firmó el workflow de release de este repositorio.
+cosign verify-blob \
+  --bundle checksums.txt.sigstore.json \
+  --certificate-identity-regexp '^https://github.com/jmrplens/libgen-mcp/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt
+# Verified OK
+
+# 2. El archivo que descargaste es el que nombra ese manifiesto.
+sha256sum --ignore-missing -c checksums.txt
+# libgen-mcp-linux-amd64: OK
+```
+
+En macOS usa `shasum -a 256 --ignore-missing -c checksums.txt`; en Windows, compara `(Get-FileHash libgen-mcp.exe).Hash` con la línea de `checksums.txt`. `gh release download` es una comodidad: vale cualquier descarga de los tres archivos, y `--pattern` toma el nombre del asset que quieras. Por qué el primer paso es el que importa está en la [instalación](/libgen-mcp/es/install/overview/#verificar-lo-que-instalas).
+
+Cada binario lleva además procedencia de compilación SLSA en el almacén de attestations de GitHub, que responde a qué commit y qué ejecución del workflow lo produjeron:
+
+```bash
+gh attestation verify libgen-mcp-linux-amd64 -R jmrplens/libgen-mcp \
+  --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml \
+  --source-ref refs/tags/v2.1.0
+```
+
+`--source-ref` la ata a la release que querías; usa la versión que descargaste.
+
+## Dónde queda en el disco
+
+Donde lo pongas: el binario es la instalación entera. Los sitios habituales son `/usr/local/bin` o `~/.local/bin` en Linux y macOS, y un directorio tuyo bajo `%LOCALAPPDATA%\Programs` en Windows. Lo que escribe el servidor cuando se ejecuta (cachés de mirrors, descargas, temporales) está en la [instalación](/libgen-mcp/es/install/overview/#lo-que-comparten-todos-los-canales).
+
+**Licencias.** El binario enlaza módulos de terceros cuyas licencias piden que sus textos viajen con él. Un binario descargado suelto no los lleva, así que conserva el `THIRD_PARTY_NOTICES` de la misma release a su lado si lo redistribuyes. Todos los canales de gestor de paquetes te instalan ese archivo.
+
+## Configurar un cliente
+
+```json
+{
+	"mcpServers": {
+		"libgen": { "command": "/usr/local/bin/libgen-mcp" }
+	}
+}
+```
+
+Usa la ruta completa: un cliente de escritorio no siempre hereda el `PATH` de tu shell. En Windows, escapa las barras invertidas, `"C:\\Users\\you\\AppData\\Local\\Programs\\libgen-mcp\\libgen-mcp.exe"`. Dónde guarda cada cliente este archivo está en [Conectar un cliente](/libgen-mcp/es/clients/).
+
+## Actualizar
+
+Descarga el archivo nuevo encima del viejo, y verifícalo igual. Si un cliente ya tiene el servidor en marcha, pídele que pare antes, o el proceso viejo conserva sus huecos de descarga y, en modo HTTP, su listener:
+
+```bash
+libgen-mcp --shutdown
+```
+
+`--shutdown` pide a todas las demás instancias de este binario en la máquina que terminen, y mata lo que quede al cabo de cinco segundos. El cliente arranca la nueva en su siguiente llamada.
+
+## Fijar una versión
+
+Cada release conserva sus archivos en una dirección fija. Cambia `latest/download` por `download/v<version>`:
+
+```bash
+curl -fL -o libgen-mcp \
+  https://github.com/jmrplens/libgen-mcp/releases/download/v2.1.0/libgen-mcp-linux-amd64
+```
+
+Un binario descargado nunca se actualiza solo, así que queda fijado hasta que lo reemplazas.
+
+## Desinstalar
+
+Borra el archivo. No se instaló nada más; los ajustes, las cachés y las descargas están donde [dice la instalación](/libgen-mcp/es/install/overview/#lo-que-comparten-todos-los-canales).
+
+## Compilar desde el código fuente
+
+`go install` compila el servidor con tu propia toolchain, a partir del código del módulo. Necesita **Go 1.27.1 o posterior**, la versión que nombra `go.mod`; un Go anterior desde la 1.21 descarga esa toolchain por su cuenta salvo que esté puesto `GOTOOLCHAIN=local`.
+
+```bash
+go install github.com/jmrplens/libgen-mcp/v2/cmd/server@latest
+```
+
+<Aside type="caution" title="La orden se llama server">
+`go install` nombra un binario por el directorio de su paquete, así que esto produce `$(go env GOPATH)/bin/server`, no `libgen-mcp`. Renómbralo, o compílalo con un nombre explícito:
+
+```bash
+git clone https://github.com/jmrplens/libgen-mcp
+cd libgen-mcp
+go build -o libgen-mcp ./cmd/server
+```
+
+</Aside>
+
+El `/v2` de la ruta es obligatorio: desde la versión mayor 2, Go solo resuelve un módulo bajo su ruta con sufijo, y la ruta sin sufijo se queda en la última release 1.x. Fija una versión con `@v2.1.0` en lugar de `@latest`; actualiza ejecutando la orden otra vez; desinstala borrando el archivo de `$(go env GOPATH)/bin`.
+
+**Verificar.** La toolchain de Go comprueba cada módulo que descarga contra la base de datos pública de checksums. Eso verifica el **código fuente** del que compiló, no un binario que publicó este proyecto: el resultado es tu compilación, y por eso no lleva firma de release. Una compilación con `go install` informa de su versión a partir del módulo (`libgen-mcp 2.1.0 (commit none)`), ya que no lleva ningún commit estampado.
+
+## Notas por plataforma
+
+- **La cuarentena de macOS.** Un archivo descargado con un navegador recibe el atributo de cuarentena, y Gatekeeper se niega entonces a ejecutar un binario que no está notarizado. `curl` no pone ese atributo. Para una descarga con navegador, `xattr -d com.apple.quarantine /usr/local/bin/libgen-mcp` lo quita.
+- **Windows SmartScreen** puede avisar de un ejecutable descargado con un navegador. `Unblock-File "$env:LOCALAPPDATA\Programs\libgen-mcp\libgen-mcp.exe"` quita la marca; `Invoke-WebRequest` no la pone.
+- **Cualquier otra plataforma** (FreeBSD, 32 bits, Linux en otra arquitectura) no tiene archivo precompilado. [Compílalo desde el código fuente](#compilar-desde-el-código-fuente) con `GOOS` y `GOARCH`.
+
+## Problemas habituales
+
+**`cannot execute binary file: Exec format error`.** El archivo es de otra arquitectura. `uname -m` dice cuál necesitas: `x86_64` es `amd64`, `aarch64` y `arm64` son `arm64`.
+
+**`Permission denied` al ejecutarlo.** Falta el bit de ejecución: `chmod +x`.
+
+**`sha256sum: checksums.txt: no file was verified`.** Ningún archivo del directorio tiene un nombre que liste `checksums.txt`. Conserva el nombre del asset hasta terminar la comprobación, y renómbralo después.
+
+**`go install` dice `libgen-mcp 1.7.3`, o falla con `unknown revision cmd/server/v2.1.0`.** Falta el `/v2` en la ruta: sin él `@latest` resuelve la última release 1.x, y una versión 2.x no se encuentra.
+
+Los demás canales se comparan en la [instalación](/libgen-mcp/es/install/overview/).

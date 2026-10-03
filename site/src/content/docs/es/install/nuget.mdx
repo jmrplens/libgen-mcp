@@ -1,6 +1,194 @@
 ---
-title: Instalar con NuGet
-description: "La herramienta .NET libgen-mcp: ejecútala con dnx o instálala con dotnet tool, verifica los paquetes, actualízala y quítala."
+title: Instalar desde NuGet
+description: "La herramienta .NET libgen-mcp: ejecútala con dnx o instálala con dotnet tool install, pasa los argumentos después de --, verifica los paquetes, actualízala, fija una versión y quítala."
+datePublished: "2026-10-03"
+mentions:
+  - name: "NuGet"
+    wikidata: Q975870
+  - name: ".NET"
+    wikidata: Q21622213
+chips:
+  - text: "Sin código .NET dentro"
+  - text: "Argumentos del servidor tras --"
+  - text: "Todos los canales"
+    href: "/libgen-mcp/es/install/overview/"
 ---
 
-Esta página cubrirá la herramienta .NET `libgen-mcp`: ejecutarla con `dnx` o instalarla con `dotnet tool install`, por qué los argumentos del propio servidor van después de `--`, cómo verificar los paquetes, actualizarla, fijar una versión y quitarla. Mientras tanto, los pasos están en la [sección NuGet de la instalación](/libgen-mcp/es/install/overview/#nuget).
+import { Tabs, TabItem, Aside } from "@astrojs/starlight/components";
+
+`libgen-mcp` se publica en NuGet como [`libgen-mcp`](https://www.nuget.org/packages/libgen-mcp), una herramienta .NET cuyo punto de entrada es el binario nativo de la release. Nada de lo que hay en los paquetes es código .NET y no se compila nada: el SDK descarga el binario de tu máquina y lo ejecuta.
+
+## Qué obtienes
+
+Siete paquetes por release:
+
+- **`libgen-mcp`**, el puntero. Es lo que instalas o ejecutas, y nombra un paquete por identificador de runtime. También lleva `.mcp/server.json`, la entrada del MCP Registry para **su propia** versión, que es lo que lee el tooling que entiende MCP para saber cómo arrancar el servidor.
+- **`libgen-mcp.<rid>`**, uno por identificador de runtime: `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`, `win-x64` y `win-arm64`. Cada uno lleva el binario, `LICENSE` y `THIRD_PARTY_NOTICES`. El SDK descarga solo el de tu host.
+
+El manifiesto de la herramienta es `DotNetCliTool Version="2"`, el formato con paquetes por identificador de runtime, y por eso un SDK anterior no puede instalarla.
+
+## Requisitos
+
+| Requisito      | Detalle                                                                                                                                                                                     |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SDK de .NET    | 10 o posterior. `dnx` viene con el SDK de .NET 10, y el formato de herramienta por identificador de runtime también lo necesita. No se usa ningún runtime de .NET para ejecutar el servidor |
+| Una plataforma | Uno de los seis identificadores de runtime de arriba. Linux con glibc o con musl por igual: el binario no necesita biblioteca C                                                             |
+
+`dotnet --version` debe imprimir `10.` o posterior.
+
+## Instalar
+
+<Tabs syncKey="nuget-tool">
+<TabItem label="dnx">
+
+Nada que instalar. `dnx` descarga los paquetes a la caché de NuGet en la primera ejecución y los reutiliza:
+
+```bash
+dnx libgen-mcp
+```
+
+</TabItem>
+<TabItem label="dotnet tool install">
+
+```bash
+dotnet tool install -g libgen-mcp
+```
+
+El SDK deja una orden `libgen-mcp` en `~/.dotnet/tools`. Los instaladores de Windows y macOS ponen ese directorio en tu `PATH`; en Linux, añádelo tú si no encuentra `libgen-mcp`.
+
+</TabItem>
+</Tabs>
+
+<Aside type="caution" title="Los argumentos del servidor van después de --">
+	Todo lo que hay antes de `--` es de `dnx`, y todo lo que va después llega al
+	servidor: `dnx libgen-mcp -- --http 127.0.0.1:8080`. Sin el separador, `dnx`
+	lee `--http` como opción propia. Una herramienta instalada recibe sus
+	argumentos directamente: `libgen-mcp --http 127.0.0.1:8080`.
+</Aside>
+
+Después:
+
+```bash
+dnx libgen-mcp -- --version
+# libgen-mcp 2.1.0 (commit 5493887)
+```
+
+## Verificar lo que instalaste
+
+**La firma del repositorio.** nuget.org firma cada paquete que acepta, y `dotnet nuget verify` comprueba esa firma sobre la copia en caché:
+
+```bash
+dotnet nuget verify ~/.nuget/packages/libgen-mcp/*/libgen-mcp.*.nupkg
+# Signature type: Repository
+#   Subject Name: CN=NuGet.org Repository by Microsoft, ...
+```
+
+Esa firma es de nuget.org, así que dice de dónde vino el paquete, no qué compilación lo produjo.
+
+**La procedencia de compilación del binario.** El binario que ejecuta el SDK es el asset de la release byte a byte, así que su attestation responde a eso. `dnx` lo ejecuta desde la caché de NuGet, y la orden de una herramienta instalada enlaza con el almacén de herramientas:
+
+```bash
+# lo que ejecuta dnx
+gh attestation verify ~/.nuget/packages/libgen-mcp.linux-x64/<version>/tools/any/linux-x64/libgen-mcp \
+  -R jmrplens/libgen-mcp --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
+
+# lo que dotnet tool install dejó en tu PATH (Linux y macOS)
+gh attestation verify "$(readlink -f "$(command -v libgen-mcp)")" \
+  -R jmrplens/libgen-mcp --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
+```
+
+Usa tu identificador de runtime en lugar de `linux-x64`.
+
+**Los propios paquetes (desde la 2.1.0).** El workflow de release atesta los siete paquetes tal como eran antes de que nuget.org añadiera su firma de repositorio. Quita esa única entrada de una copia descargada y verifica lo que queda:
+
+```bash
+version=2.1.0
+curl -sSLO https://api.nuget.org/v3-flatcontainer/libgen-mcp/$version/libgen-mcp.$version.nupkg
+zip -q -d libgen-mcp.$version.nupkg .signature.p7s
+gh attestation verify libgen-mcp.$version.nupkg -R jmrplens/libgen-mcp \
+  --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml \
+  --source-ref refs/tags/v$version
+```
+
+Lo mismo sirve para cualquier paquete `libgen-mcp.<rid>`. El `zip -d` de Info-ZIP deja todos los demás bytes donde estaban, que es la propia definición de NuGet del paquete sin firmar; una herramienta que reescribe el archivo da otros bytes, y entonces `gh` no encuentra ninguna attestation. Lo que añaden `--signer-workflow` y `--source-ref` se explica en la [instalación](/libgen-mcp/es/install/overview/#verificar-lo-que-instalas).
+
+## Dónde queda en el disco
+
+| Instalación              | La orden                                                     | El binario                                                                                |
+| ------------------------ | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `dnx`                    | Nada en tu `PATH`                                            | `~/.nuget/packages/libgen-mcp.<rid>/<version>/tools/any/<rid>/libgen-mcp`                 |
+| `dotnet tool install -g` | `~/.dotnet/tools/libgen-mcp`, un enlace (un shim en Windows) | `~/.dotnet/tools/.store/libgen-mcp/<version>/libgen-mcp.<rid>/<version>/tools/any/<rid>/` |
+
+En Windows `~` es `%USERPROFILE%` y el binario es `libgen-mcp.exe`. Lo que escribe el servidor cuando se ejecuta está en la [instalación](/libgen-mcp/es/install/overview/#lo-que-comparten-todos-los-canales).
+
+## Configurar un cliente
+
+```json
+{
+	"mcpServers": {
+		"libgen": { "command": "dnx", "args": ["libgen-mcp"] }
+	}
+}
+```
+
+Con un argumento para el servidor, conserva el separador: `"args": ["libgen-mcp", "--", "--log-level", "debug"]`. Tras una instalación global, nombra la orden, `"command": "libgen-mcp"`, sin separador. Dónde guarda cada cliente este archivo está en [Conectar un cliente](/libgen-mcp/es/clients/).
+
+## Actualizar
+
+<Tabs syncKey="nuget-tool">
+<TabItem label="dnx">
+
+`dnx` resuelve la versión más reciente al arrancar, y usa su caché cuando esa versión ya está en ella. No hay nada que hacer.
+
+</TabItem>
+<TabItem label="dotnet tool install">
+
+```bash
+dotnet tool update -g libgen-mcp
+```
+
+</TabItem>
+</Tabs>
+
+Un cliente que ya tiene el servidor en marcha conserva el proceso viejo hasta que lo reinicia; `libgen-mcp --shutdown` pide a todas las instancias en marcha que terminen.
+
+## Fijar una versión
+
+```bash
+dnx libgen-mcp@2.1.0
+dotnet tool install -g libgen-mcp --version 2.1.0
+```
+
+En la configuración de un cliente es `"args": ["libgen-mcp@2.1.0"]`. Para un repositorio que debe ejecutar una sola versión para todos, un manifiesto de herramientas local la fija en el árbol: `dotnet new tool-manifest`, luego `dotnet tool install libgen-mcp --version 2.1.0`, y `dotnet tool run libgen-mcp` la arranca.
+
+## Desinstalar
+
+<Tabs syncKey="nuget-tool">
+<TabItem label="dnx">
+
+No se instaló nada. Quita la entrada del cliente, y borra `~/.nuget/packages/libgen-mcp` y `~/.nuget/packages/libgen-mcp.<rid>` para eliminar los paquetes en caché.
+
+</TabItem>
+<TabItem label="dotnet tool install">
+
+```bash
+dotnet tool uninstall -g libgen-mcp
+```
+
+</TabItem>
+</Tabs>
+
+## Notas por plataforma
+
+- **Alpine** funciona con la build Alpine del SDK: resuelve el paquete `linux-x64`, cuyo binario funciona con musl sin cambios.
+- **La caché de NuGet se puede mover** con `NUGET_PACKAGES`; las rutas de arriba se mueven con ella.
+
+## Problemas habituales
+
+**`dnx: command not found`.** El SDK es anterior al 10, o solo hay un runtime instalado. `dotnet --list-sdks` muestra lo que hay.
+
+**El servidor rechaza una opción que debería conocer.** Nunca le llegó: se la quedó `dnx`. Pon `--` antes de los argumentos del servidor.
+
+**`Settings file 'DotnetToolSettings.xml' was not found in the package`, y luego «Contact the tool author».** El paquete está bien: el SDK es anterior al 10 y no sabe leer paquetes de herramienta por identificador de runtime (el SDK de .NET 9 dice exactamente esto). Instala el SDK de .NET 10.
+
+Los demás canales se comparan en la [instalación](/libgen-mcp/es/install/overview/).
