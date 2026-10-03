@@ -112,7 +112,8 @@ returns links, and refuses to start when it cannot:
 `LIBGEN_MCP_DOWNLOAD_DIR "…" is not usable: mkdir …: read-only file system`. Its default is
 `$HOME/Downloads`, so pointing it, and `HOME`, at the state directory is what lets a read-only
 system run the server at all. `XDG_CACHE_HOME=%C` sends the mirror cache to the cache directory,
-where a failure to write it would otherwise be silent and cost a mirror discovery on every start.
+where a failure to write it would otherwise cost a mirror discovery on every start, reported once
+as `the mirror cache cannot be written`.
 
 ### The environment file
 

@@ -1096,6 +1096,12 @@ See [Homebrew](install/homebrew.md).
 - **`… is not usable: … read-only file system` under `--read-only`.** The download directory
   is checked at startup on every transport. Mount a writable volume or a `tmpfs` there, and
   give `/tmp` a `tmpfs` too, since `read` by `md5` or `doi` stages the file it fetches there.
+- **`the mirror cache cannot be written, so every start discovers the mirrors again`.** Logged
+  once, at `WARN`, the first time the server tries to save the mirror list it discovered, with
+  the directory in `dir`. The server works, but every start fetches the mirror catalog again.
+  The cache lives under `$HOME/.cache/libgen-mcp` (or `$XDG_CACHE_HOME/libgen-mcp`): give
+  `/home/appuser` a volume, as [Containers](deploy/containers.md) does, or point
+  `XDG_CACHE_HOME` at a writable mount.
 - **The container exits at once with status `0`.** An argument was added without the
   defaults: any argument replaces the image's command wholesale, `--transport auto --http
   0.0.0.0:8080` included, and with no `-i` and no `--http` a stdio server reads end-of-file

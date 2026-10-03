@@ -111,7 +111,7 @@ The server logs one JSON object per line on stderr, which the journal keeps. The
 | `/var/cache/libgen-mcp` (`%C/…`) | `CacheDirectory=` | The discovered mirror list, `mirrors.json`                 |
 | A private `/tmp`                 | `PrivateTmp=`     | Files `read` fetches, when `LIBGEN_MCP_SERVER_FETCH` is on |
 
-The download directory is the one that would stop the unit. The server checks at startup that `LIBGEN_MCP_DOWNLOAD_DIR` can be created and written, **over HTTP too**, where `download` only returns links, and refuses to start when it cannot: `LIBGEN_MCP_DOWNLOAD_DIR "…" is not usable: mkdir …: read-only file system`. Its default is `$HOME/Downloads`, so pointing it, and `HOME`, at the state directory is what lets a read-only system run the server at all. `XDG_CACHE_HOME=%C` sends the mirror cache to the cache directory, where a failure to write it would otherwise be silent and cost a mirror discovery on every start.
+The download directory is the one that would stop the unit. The server checks at startup that `LIBGEN_MCP_DOWNLOAD_DIR` can be created and written, **over HTTP too**, where `download` only returns links, and refuses to start when it cannot: `LIBGEN_MCP_DOWNLOAD_DIR "…" is not usable: mkdir …: read-only file system`. Its default is `$HOME/Downloads`, so pointing it, and `HOME`, at the state directory is what lets a read-only system run the server at all. `XDG_CACHE_HOME=%C` sends the mirror cache to the cache directory, where a failure to write it would otherwise cost a mirror discovery on every start, reported once as `the mirror cache cannot be written`.
 
 ### The environment file
 
