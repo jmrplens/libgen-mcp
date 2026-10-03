@@ -174,10 +174,16 @@ func (c *Client) relatedFailureNote(err error) string {
 		return note
 	case errors.Is(err, errOpenAlexNotFound):
 		return "OpenAlex has no work with this DOI."
+	case errors.Is(err, errOpenAlexKeyRejected):
+		return "OpenAlex refused the API key this server is configured with, so the list was not fetched. The operator's log names the variable to fix."
 	default:
 		return "OpenAlex did not answer, so the list is not available now."
 	}
 }
+
+// errOpenAlexKeyRejected is a 401 or 403 to a request sent with the
+// configured key, which no retry fixes until the key is.
+var errOpenAlexKeyRejected = errors.New("OpenAlex rejected the configured key")
 
 // errOpenAlexBurst is a refusal for too many requests too fast, which passes
 // in seconds, as opposed to errOpenAlexBudget, a spent daily allowance.
@@ -305,8 +311,14 @@ func (c *Client) openAlexGet(ctx context.Context, endpoint string, into any) (an
 	}
 	defer func() { _ = resp.Body.Close() }()
 	c.openAlexBudgetOrShared().Observe(resp.StatusCode, resp.Header, time.Now())
+	openalex.NoteKeyRejected(resp.StatusCode, c.openAlexKey)
 	switch resp.StatusCode {
 	case http.StatusOK:
+	case http.StatusUnauthorized, http.StatusForbidden:
+		if strings.TrimSpace(c.openAlexKey) != "" {
+			return true, errOpenAlexKeyRejected
+		}
+		return true, fmt.Errorf("openalex: HTTP %d", resp.StatusCode)
 	case http.StatusNotFound:
 		return true, errOpenAlexNotFound
 	case http.StatusTooManyRequests:

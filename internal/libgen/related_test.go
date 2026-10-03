@@ -170,6 +170,8 @@ func TestRelated_Notes(t *testing.T) {
 		{name: "a refusal for the day", doi: "10.1/x", kind: RelatedCitedBy, listStatus: http.StatusTooManyRequests, listRemaining: "0", retryAfter: "40000", want: "LIBGEN_MCP_OPENALEX_KEY raises it"},
 		{name: "a refusal for the day with a key set", doi: "10.1/x", kind: RelatedCitedBy, key: "k", listStatus: http.StatusTooManyRequests, listRemaining: "0", want: "midnight UTC", notWant: "LIBGEN_MCP_OPENALEX_KEY"},
 		{name: "list failing", doi: "10.1/x", kind: RelatedCitedBy, listStatus: http.StatusBadGateway, want: "did not answer"},
+		{name: "a rejected key", doi: "10.1/x", kind: RelatedCitedBy, key: "bad", listStatus: http.StatusUnauthorized, want: "refused the API key", notWant: "bad"},
+		{name: "a 403 with no key", doi: "10.1/x", kind: RelatedCitedBy, listStatus: http.StatusForbidden, want: "did not answer"},
 		{name: "budget spent", doi: "10.1/x", kind: RelatedCitedBy, spent: true, want: "allowance"},
 		{name: "budget paused by a refusal", doi: "10.1/x", kind: RelatedCitedBy, paused: true, want: "Try again shortly"},
 		{name: "long reference list", doi: "10.1/x", kind: RelatedReferences, work: long, want: "first 100 of the 105 it names"},
