@@ -114,12 +114,26 @@ func registerEnvBackedFlags() {
 // operator typed the flag as well. An unset flag writes nothing, so it cannot
 // clear a variable by accident — which a naive implementation writing the empty
 // string would do to every deployment that configures through the environment.
-func applyEnvBackedFlags() {
+//
+// It returns the variables a typed flag overwrote with a different value, for
+// the startup log to name once logging is set up. They are found here because
+// this is the last moment they can be: after the write, the variable and the
+// flag agree.
+func applyEnvBackedFlags() []shadowedVariable {
+	var shadowed []shadowedVariable
 	for _, entry := range envBackedFlags {
-		setEnvFromFlag(entry.flagName, config.EnvName(entry.envShortName), entry.value)
+		envName := config.EnvName(entry.envShortName)
+		if s, ok := shadowedBy(flag.CommandLine, entry.flagName, envName); ok {
+			shadowed = append(shadowed, s)
+		}
+		setEnvFromFlag(entry.flagName, envName, entry.value)
 	}
 	setEnvFromFlag(mirrorFlagName, mirrorEnvName, mirrorFlag)
+	if s, ok := shadowedBy(flag.CommandLine, envFileFlagName, config.EnvFileVar); ok {
+		shadowed = append(shadowed, s)
+	}
 	setEnvFromFlag(envFileFlagName, config.EnvFileVar, envFileFlag)
+	return shadowed
 }
 
 // setEnvFromFlag writes one flag's value into its variable, and only when the

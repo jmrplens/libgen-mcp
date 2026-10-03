@@ -51,6 +51,20 @@ Two families of flags reach that order from opposite ends, with the same result:
   dotenv files are loaded. A variable that is set but blank counts as unset, and one that does
   not parse stops startup with exit `1`, naming the variable and the flag it fills.
 
+A typed flag that overrides a variable set to something else is logged once at startup, at
+`WARN`, one line per variable, naming the variable, the flag and both values:
+
+```text
+{"level":"WARN","msg":"a flag on the command line overrides an environment variable, which has no effect","variable":"LIBGEN_MCP_HTTP_ADDR","variable_value":"127.0.0.1:9000","flag":"--http","flag_value":"0.0.0.0:8080",…}
+```
+
+The flag still wins. The line is there for the case where the command line was not yours to
+read, which is the container image's: its command types `--http 0.0.0.0:8080`, so
+`LIBGEN_MCP_HTTP_ADDR` set beside it changes nothing. The same setting spelled two ways
+(`--stateless=true` and `LIBGEN_MCP_STATELESS=1`, `60s` and `1m`) is not reported, and nor is
+`LIBGEN_MIRROR`. For the server settings, the line covers a variable the process environment
+set; one a dotenv file would have set is simply never loaded.
+
 For the refusals below, a value taken from the environment counts as asked for, exactly like a
 typed one: exporting `LIBGEN_MCP_RATE_LIMIT_RPS` on a loopback listener is refused the same way
 `--rate-limit-rps` is. The variable for an HTTP flag is `LIBGEN_MCP_` plus the flag in upper

@@ -234,8 +234,11 @@ environment variables has to work with: the flag in upper case with dashes as un
 
 **A flag on the command line wins over its variable, and the image's default command is a
 command line.** It types `--http 0.0.0.0:8080`, so `LIBGEN_MCP_HTTP_ADDR` set on a container
-that keeps the default command is ignored, without a warning, and the server listens on
-`0.0.0.0:8080` regardless. Replace the default command with one that names no listener:
+that keeps the default command is ignored, and the server listens on `0.0.0.0:8080` regardless.
+It says so at startup, one `WARN` per overridden variable, naming the flag and both values
+(`a flag on the command line overrides an environment variable, which has no effect`, see
+[Where a setting comes from](../cli.md#where-a-setting-comes-from)). Replace the default command
+with one that names no listener:
 
 ```yaml
 services:
