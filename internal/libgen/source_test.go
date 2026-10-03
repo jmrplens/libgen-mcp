@@ -430,9 +430,8 @@ func TestSourcesThatKnowTheTypeDeclareIt(t *testing.T) {
 	t.Run("europepmc", func(t *testing.T) {
 		search := europePMCSearchServer(t, "europepmc_oa.json", http.StatusOK, nil)
 		defer search.Close()
-		render := europePMCRenderServer(t)
-		defer render.Close()
-		s := europePMCSource{http: search.Client(), searchBase: search.URL, renderBase: render.URL}
+		bucket := europePMCBucketServer(t)
+		s := europePMCSource{http: search.Client(), searchBase: search.URL, bucketBase: bucket.URL}
 		assertDeclaresExt(t, s, Item{DOI: doi})
 	})
 

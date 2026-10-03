@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 2026-09-24
+Last updated: 2026-10-03
 
 **libgen-mcp** is a Model Context Protocol (MCP) server you run yourself. In its
 normal use it runs entirely on your machine and acts as a bridge between your MCP
@@ -94,7 +94,8 @@ AI assistant) make. There are no background connections. The destinations are:
 - **Keyless open-access providers (only when you request an article by DOI).**
   Before any shadow-library fallback, the article `download` chain asks the open
   repositories for a freely licensed copy: [Europe PMC](https://europepmc.org)
-  (`ebi.ac.uk`, `europepmc.org`), [bioRxiv/medRxiv](https://www.biorxiv.org)
+  (`ebi.ac.uk`, with the PDF itself fetched from NCBI's PMC Article Datasets at
+  `pmc-oa-opendata.s3.amazonaws.com`), [bioRxiv/medRxiv](https://www.biorxiv.org)
   (`api.biorxiv.org`, plus the `biorxiv.org`/`medrxiv.org` content hosts), the
   [RFC Editor](https://www.rfc-editor.org) (`www.rfc-editor.org`) for an RFC DOI,
   [NIST](https://nvlpubs.nist.gov) for a `10.6028` DOI (the request goes to
