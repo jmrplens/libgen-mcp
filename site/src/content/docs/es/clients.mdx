@@ -1,6 +1,770 @@
 ---
 title: Conectar un cliente
 description: "Cómo registrar libgen-mcp en cada cliente MCP, por stdio o por HTTP, con una configuración completa para cada cliente."
+mentions:
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+chips:
+  - text: "Configuraciones listas para pegar"
+  - text: "Stdio o HTTP"
+  - text: "Sin cuenta"
+  - text: "Configuración"
+    href: "/libgen-mcp/es/configuration/"
+datePublished: "2026-10-03"
+head:
+  - tag: title
+    content: "Conecta libgen-mcp a Claude, VS Code, Cursor y otros clientes MCP"
 ---
 
-Esta página reunirá una configuración completa por cliente MCP: dónde guarda cada cliente su lista de servidores, la entrada que arranca el servidor por stdio, la que lo apunta a un despliegue HTTP y cómo comprobar que el cliente ve las cuatro herramientas. Mientras tanto, [Primeros pasos](/libgen-mcp/es/getting-started/) muestra la configuración de los clientes habituales.
+import { Tabs, TabItem, Aside } from "@astrojs/starlight/components";
+
+Cada cliente MCP guarda una lista de servidores, y cada uno la escribe de forma un poco distinta: otro archivo, otra clave de primer nivel, otro nombre para el campo de la URL. Esta página trae una entrada completa por cliente, en dos formas:
+
+- **Local, por stdio.** El cliente arranca el servidor como proceso hijo y habla con él por la entrada y la salida estándar. Es el servidor completo: las cuatro herramientas, y `download` guarda el archivo en tu disco.
+- **Remoto, por HTTP en streaming.** El cliente se conecta a un servidor que ya ejecuta alguien: el endpoint público en `https://mcp.jmrp.io/libgen` o tu propio despliegue con `--http`. No se instala nada, pero allí `read` no está registrada y `download` devuelve un enlace en lugar de un archivo. [Qué cambia en un servidor remoto](#qué-cambia-en-un-servidor-remoto) explica por qué.
+
+Todas las entradas de abajo llaman al servidor `libgen`. El nombre lo eliges tú; solo cambia cómo etiqueta el cliente las herramientas.
+
+## Lo que comparten todas las entradas
+
+### La orden local
+
+Las entradas de abajo arrancan el servidor con **`npx -y @jmrp.io/libgen-mcp`**, que necesita Node 18 o posterior y nada más: npm descarga el lanzador y el único binario precompilado que corresponde a tu plataforma, y `-y` responde a la pregunta «¿instalar este paquete?» que un cliente no puede contestar por ti. Cualquier otro canal funciona igual, y solo cambian `command` y `args`:
+
+| Canal                 | `command`                     | `args`                                                        | Página                                                   |
+| --------------------- | ----------------------------- | ------------------------------------------------------------- | -------------------------------------------------------- |
+| npm                   | `npx`                         | `["-y", "@jmrp.io/libgen-mcp"]`                               | [npm](/libgen-mcp/es/install/npm/)                       |
+| PyPI                  | `uvx`                         | `["libgen-mcp"]`                                              | [PyPI](/libgen-mcp/es/install/pypi/)                     |
+| NuGet                 | `dnx`                         | `["libgen-mcp"]`                                              | [NuGet](/libgen-mcp/es/install/nuget/)                   |
+| Docker                | `docker`                      | `["run", "-i", "--rm", "ghcr.io/jmrplens/libgen-mcp:latest"]` | [Docker](/libgen-mcp/es/install/docker/)                 |
+| Homebrew              | `libgen-mcp`                  | ninguno                                                       | [Homebrew](/libgen-mcp/es/install/homebrew/)             |
+| Binario de la release | `/ruta/absoluta/a/libgen-mcp` | ninguno                                                       | [Binarios de la release](/libgen-mcp/es/install/binary/) |
+
+Conviene saber tres cosas de esas órdenes antes de pegar una:
+
+- **Un cliente de escritorio no lee el `PATH` de tu shell.** Claude Desktop, y la mayoría de los editores que se abren desde el dock o el menú de inicio, lanzan el servidor con un entorno mínimo, así que un `npx` o un `libgen-mcp` a secas que funciona en tu terminal puede fallar allí con «command not found». Da la ruta absoluta (`which npx`, `which libgen-mcp`, o `where` en Windows).
+- **En Windows, `npx` es un archivo por lotes**, y un cliente que arranca procesos sin shell no puede ejecutarlo directamente. Envuélvelo: `"command": "cmd"` con `"args": ["/c", "npx", "-y", "@jmrp.io/libgen-mcp"]`.
+- **Docker necesita `-i`.** La imagen decide su transporte según lo que sea la entrada estándar: con `-i` recibe la tubería del cliente y habla stdio; sin él arranca un listener HTTP en el puerto 8080 y el cliente no oye nada. No publiques ningún puerto en este modo. Las descargas acaban dentro del contenedor salvo que montes un directorio; [Docker](/libgen-mcp/es/install/docker/) tiene la receta del volumen.
+
+Con `dnx`, los argumentos para el propio servidor van después de un `--`, porque todo lo anterior pertenece a `dnx`: `["libgen-mcp", "--", "--env-file", "/ruta/absoluta/libgen.env"]`.
+
+### Claves y otros ajustes
+
+El servidor no necesita configuración, y nada en esta página la pone. Tres ajustes opcionales son credenciales, y cada uno activa una fuente que el servidor sin claves deja apagada o lenta:
+
+| Variable                     | Qué activa                                                                              |
+| ---------------------------- | --------------------------------------------------------------------------------------- |
+| `LIBGEN_MCP_UNPAYWALL_EMAIL` | la fuente `unpaywall`, que necesita una dirección de contacto en cada consulta          |
+| `LIBGEN_MCP_CORE_KEY`        | la fuente `core`, con una clave de API gratuita de core.ac.uk                           |
+| `LIBGEN_MCP_ANNAS_KEY`       | las descargas de socio de Anna's Archive, con la clave secreta de una membresía de pago |
+
+No tienen flags de línea de órdenes, a propósito: un secreto en un argumento lo ve cualquier usuario de la máquina con `ps`. Dáselas al servidor de una de estas tres formas, de mayor a menor precedencia:
+
+1. **El bloque `env` del cliente** (abajo, la forma de escribirlo en cada cliente). El cliente se lo pasa al proceso que arranca, y nadie más lo ve.
+2. **Un archivo dotenv que nombras** con `--env-file /ruta/absoluta/libgen.env` en `args`, o con `LIBGEN_MCP_ENV_FILE` en el bloque `env`. Usa una ruta absoluta: una relativa se resuelve contra el directorio de trabajo, que elige el cliente y que cambia con cada espacio de trabajo que abres.
+3. **`~/.libgen-mcp.env`** en tu directorio personal, que todo servidor local lee sin que se lo digan.
+
+<Aside type="caution">
+	Un `.env` en el directorio de trabajo **nunca** se carga. Un cliente pone como
+	directorio de trabajo el espacio de trabajo que tenga abierto, así que ese
+	archivo llega con un repositorio clonado y no de tu mano; el servidor lo
+	nombra al arrancar y sigue sin él. Las reglas completas de precedencia, y el
+	resto de variables, están en [Configuración](/libgen-mcp/es/configuration/).
+</Aside>
+
+Con Docker, el contenedor no ve el entorno del cliente hasta que se lo pasas: añade `"-e", "LIBGEN_MCP_UNPAYWALL_EMAIL"` (solo el nombre, sin valor) a `args` antes del nombre de la imagen, y pon el valor en el bloque `env`. Docker lo copia entonces del entorno que le dio el cliente, y el valor nunca aparece en una lista de argumentos.
+
+Un cliente local que admite elicitation de MCP también puede recibir la petición de una dirección para Unpaywall o de una clave de Anna's en la única llamada que la necesita, que se usa una vez y nunca se guarda: consulta [Peticiones interactivas](/libgen-mcp/es/tools/#peticiones-interactivas-elicitation).
+
+### Qué cambia en un servidor remoto
+
+Un servidor remoto lo configura quien lo ejecuta, no tu cliente: no hay bloque `env` que enviar, y las claves de arriba son las del despliegue. Que el servidor no esté en tu máquina trae dos diferencias:
+
+- **`read` no está registrada.** Falta en `tools/list` en lugar de aparecer y fallar, así que el cliente ve tres herramientas.
+- **`download` devuelve un enlace** (un `resource_link` más un objeto `resolved`) en lugar de escribir un archivo, y es tu cliente o tu navegador quien descarga los bytes.
+
+Las dos vienen de `LIBGEN_MCP_SERVER_FETCH`, que está desactivada por defecto en un despliegue HTTP para que la dirección de salida compartida del servidor nunca transporte el contenido de los archivos; consulta [`LIBGEN_MCP_SERVER_FETCH`](/libgen-mcp/es/configuration/#libgen_mcp_server_fetch) y [Dónde acaba el archivo](/libgen-mcp/es/tools/#dónde-acaba-el-archivo-local-vs-remoto). Un operador que la pone a `1` en su propio despliegue recupera ambas cosas.
+
+La URL es el propio endpoint: `https://mcp.jmrp.io/libgen` para la instancia pública ([Endpoint hospedado](/libgen-mcp/es/hosted/) la describe), o la dirección que sirva tu propio despliegue, donde el punto de montaje y su alias `/mcp` son el mismo endpoint. Cómo ejecutar uno está en [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/). El transporte es HTTP en streaming sin estado; un cliente que solo ofrece el antiguo transporte SSE no puede conectarse.
+
+## Instalación en un clic
+
+Cuatro clientes aceptan un enlace de instalación, y el README lleva un botón para cada uno. Todos los botones registran la forma Docker de la entrada local, así que el único requisito es el propio Docker:
+
+[![Install in VS Code](https://img.shields.io/badge/Install_in-VS_Code-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=libgen&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22ghcr.io%2Fjmrplens%2Flibgen-mcp%3Alatest%22%5D%7D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/Install_in-VS_Code_Insiders-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=libgen&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22ghcr.io%2Fjmrplens%2Flibgen-mcp%3Alatest%22%5D%7D&quality=insiders)
+[![Install in Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=libgen&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCJnaGNyLmlvL2ptcnBsZW5zL2xpYmdlbi1tY3A6bGF0ZXN0Il19)
+[![Add to LM Studio](https://files.lmstudio.ai/deeplink/mcp-install-dark.svg)](https://lmstudio.ai/install-mcp?name=libgen&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCJnaGNyLmlvL2ptcnBsZW5zL2xpYmdlbi1tY3A6bGF0ZXN0Il19)
+[![Add to Kiro](https://kiro.dev/images/add-to-kiro.svg)](https://kiro.dev/launch/mcp/add?name=libgen&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22ghcr.io%2Fjmrplens%2Flibgen-mcp%3Alatest%22%5D%7D)
+
+Claude Desktop tiene su propio camino de un clic, la extensión `.mcpb`, más abajo. La configuración de un botón viaja codificada dentro de su URL, donde ninguna revisión la lee, así que `make check-install-buttons` decodifica todos los botones del repositorio y falla cuando dos que lanzan la misma orden no coinciden.
+
+## De un vistazo
+
+| Cliente                  | Dónde vive la lista                                         | Clave             | Stdio | HTTP en streaming          |
+| ------------------------ | ----------------------------------------------------------- | ----------------- | :---: | -------------------------- |
+| Claude Code              | `.mcp.json`, `~/.claude.json` o `claude mcp add`            | `mcpServers`      |  sí   | `"type": "http"`           |
+| Claude Desktop           | la extensión `.mcpb` o `claude_desktop_config.json`         | `mcpServers`      |  sí   | conector personalizado     |
+| VS Code / GitHub Copilot | `.vscode/mcp.json` o el `mcp.json` de usuario               | `servers`         |  sí   | `"type": "http"`           |
+| Cursor                   | `.cursor/mcp.json` o `~/.cursor/mcp.json`                   | `mcpServers`      |  sí   | `url`                      |
+| Windsurf / Devin Desktop | `mcp_config.json`                                           | `mcpServers`      |  sí   | `url`                      |
+| Zed                      | `settings.json`                                             | `context_servers` |  sí   | `url`                      |
+| JetBrains AI Assistant   | Settings, Tools, AI Assistant, Model Context Protocol (MCP) | `mcpServers`      |  sí   | `url`                      |
+| JetBrains Junie          | `.junie/mcp/mcp.json` o `~/.junie/mcp/mcp.json`             | `mcpServers`      |  sí   | `url`                      |
+| Kiro                     | `.kiro/settings/mcp.json` o `~/.kiro/settings/mcp.json`     | `mcpServers`      |  sí   | `url`                      |
+| OpenCode                 | `opencode.json` o `~/.config/opencode/opencode.json`        | `mcp`             |  sí   | `"type": "remote"`         |
+| Cline                    | `~/.cline/data/settings/cline_mcp_settings.json`            | `mcpServers`      |  sí   | `"type": "streamableHttp"` |
+| Continue                 | `.continue/mcpServers/*.yaml` o `~/.continue/config.yaml`   | `mcpServers`      |  sí   | `type: streamable-http`    |
+| LM Studio                | `~/.lmstudio/mcp.json`                                      | `mcpServers`      |  sí   | `url`                      |
+| Gemini CLI               | `.gemini/settings.json` o `~/.gemini/settings.json`         | `mcpServers`      |  sí   | `httpUrl`                  |
+| OpenAI Codex             | `~/.codex/config.toml`                                      | `mcp_servers`     |  sí   | `url`                      |
+| Goose                    | `~/.config/goose/config.yaml`                               | `extensions`      |  sí   | `type: streamable_http`    |
+
+Los formatos de los clientes cambian; cada sección enlaza la documentación del propio cliente, que manda si no coincide con esta página. Las formas de aquí se comprobaron contra esas páginas en octubre de 2026.
+
+## Claude Code
+
+<Tabs syncKey="transport">
+<TabItem label="Local (stdio)">
+
+La orden `claude mcp add` escribe la entrada por ti. Todo lo que va después de `--` es la orden que ejecuta el cliente:
+
+```bash
+claude mcp add libgen -- npx -y @jmrp.io/libgen-mcp
+```
+
+Con una clave, pon `--env` antes del `--`, una vez por variable:
+
+```bash
+claude mcp add libgen --env LIBGEN_MCP_UNPAYWALL_EMAIL=tu@ejemplo.com -- npx -y @jmrp.io/libgen-mcp
+```
+
+Por defecto la entrada va a `~/.claude.json` para el proyecto actual. `--scope user` la hace disponible en todos los proyectos, y `--scope project` la escribe en `.mcp.json` en la raíz del proyecto, donde puede versionarse para todo el que trabaje allí:
+
+```json
+{
+	"mcpServers": {
+		"libgen": {
+			"type": "stdio",
+			"command": "npx",
+			"args": ["-y", "@jmrp.io/libgen-mcp"],
+			"env": {
+				"LIBGEN_MCP_UNPAYWALL_EMAIL": "tu@ejemplo.com"
+			}
+		}
+	}
+}
+```
+
+Un `.mcp.json` versionado no debería llevar ninguna clave; deja `env` fuera de él y guarda la clave en `~/.libgen-mcp.env`. En Windows nativo, envuelve la orden: `-- cmd /c npx -y @jmrp.io/libgen-mcp`.
+
+</TabItem>
+<TabItem label="Remoto (HTTP)">
+
+```bash
+claude mcp add --transport http libgen https://mcp.jmrp.io/libgen
+```
+
+o, en `.mcp.json`:
+
+```json
+{
+	"mcpServers": {
+		"libgen": { "type": "http", "url": "https://mcp.jmrp.io/libgen" }
+	}
+}
+```
+
+</TabItem>
+</Tabs>
+
+Ejecuta `/mcp` dentro de una sesión, o `claude mcp list` desde una shell, para ver si el servidor se conectó. Referencia: [documentación de MCP de Claude Code](https://code.claude.com/docs/en/mcp).
+
+## Claude Desktop
+
+<Tabs syncKey="transport">
+<TabItem label="Local (stdio)">
+
+El camino más sencillo es la **extensión `.mcpb`**: descarga el paquete para tu sistema desde la [última release](https://github.com/jmrplens/libgen-mcp/releases/latest), ábrelo con Claude Desktop y confirma los ajustes, donde la dirección para Unpaywall, la clave de CORE y un archivo de ajustes tienen sus propios campos. Lleva el binario dentro, así que no necesita ni Node ni Docker. [Extensión de Claude Desktop](/libgen-mcp/es/install/claude-desktop/) tiene los detalles, incluida la instalación en Linux desde **Extensions > Install Extension…**.
+
+Para configurarlo a mano, abre **Settings > Developer > Edit Config**, que abre `claude_desktop_config.json`:
+
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+- Linux: `~/.config/Claude/claude_desktop_config.json`
+
+```json
+{
+	"mcpServers": {
+		"libgen": {
+			"command": "/ruta/absoluta/a/npx",
+			"args": ["-y", "@jmrp.io/libgen-mcp"],
+			"env": {
+				"LIBGEN_MCP_DOWNLOAD_DIR": "/ruta/absoluta/a/descargas"
+			}
+		}
+	}
+}
+```
+
+Usa un `command` absoluto: Claude Desktop no hereda el `PATH` de tu shell. Cierra la aplicación del todo y vuelve a abrirla para que cargue el cambio. La salida de error del servidor se escribe en `mcp-server-libgen.log`, en el directorio de logs de Claude (`~/Library/Logs/Claude` en macOS, `%APPDATA%\Claude\logs` en Windows), que es el primer sitio donde mirar cuando no arranca.
+
+</TabItem>
+<TabItem label="Remoto (HTTP)">
+
+`claude_desktop_config.json` solo admite servidores locales. Añade `https://mcp.jmrp.io/libgen` como **conector personalizado**: en un plan Pro o Max, en **Customize > Connectors**, con **+ Add** y luego **Add custom connector**; en un plan Team o Enterprise lo añade un propietario en **Organization settings > Connectors**. Claude llega a un conector personalizado desde la nube de Anthropic y no desde tu máquina, así que una URL propia tiene que ser accesible desde Internet; una dirección de loopback, de tu red local o solo accesible por VPN no puede funcionar ahí.
+
+</TabItem>
+</Tabs>
+
+Referencias: [Connect to local MCP servers](https://modelcontextprotocol.io/docs/develop/connect-local-servers), [Get started with custom connectors using remote MCP](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp).
+
+## VS Code / GitHub Copilot
+
+<Tabs syncKey="transport">
+<TabItem label="Local (stdio)">
+
+VS Code lee `.vscode/mcp.json` en el espacio de trabajo, y un `mcp.json` de usuario que abre la orden **MCP: Open User Configuration**. Su clave de primer nivel es `servers`, no `mcpServers`:
+
+```json
+{
+	"servers": {
+		"libgen": {
+			"type": "stdio",
+			"command": "npx",
+			"args": ["-y", "@jmrp.io/libgen-mcp"],
+			"env": {
+				"LIBGEN_MCP_UNPAYWALL_EMAIL": "${input:unpaywall-email}"
+			}
+		}
+	},
+	"inputs": [
+		{
+			"type": "promptString",
+			"id": "unpaywall-email",
+			"description": "Contact email for the Unpaywall API (optional)"
+		}
+	]
+}
+```
+
+El bloque `inputs` hace que VS Code pida el valor una vez y lo mantenga fuera del archivo; añade `"password": true` a un input que guarde una clave. Quita `env` e `inputs` por completo para el servidor sin claves. Una entrada también puede nombrar `"envFile"`, un archivo dotenv que VS Code carga en el entorno del servidor.
+
+</TabItem>
+<TabItem label="Remoto (HTTP)">
+
+```json
+{
+	"servers": {
+		"libgen": { "type": "http", "url": "https://mcp.jmrp.io/libgen" }
+	}
+}
+```
+
+</TabItem>
+</Tabs>
+
+Las herramientas aparecen en el modo agente de Copilot Chat, en el selector de herramientas. Referencia: [VS Code MCP servers](https://code.visualstudio.com/docs/copilot/customization/mcp-servers).
+
+## Cursor
+
+<Tabs syncKey="transport">
+<TabItem label="Local (stdio)">
+
+Cursor lee `.cursor/mcp.json` en el proyecto y `~/.cursor/mcp.json` para todos los proyectos:
+
+```json
+{
+	"mcpServers": {
+		"libgen": {
+			"type": "stdio",
+			"command": "npx",
+			"args": ["-y", "@jmrp.io/libgen-mcp"],
+			"env": {
+				"LIBGEN_MCP_UNPAYWALL_EMAIL": "${env:LIBGEN_MCP_UNPAYWALL_EMAIL}"
+			}
+		}
+	}
+}
+```
+
+`${env:NAME}` copia una variable del entorno con el que se arrancó Cursor, así que el archivo no guarda ningún valor. Un campo `"envFile"` que nombre un archivo dotenv es la otra forma de mantener una clave fuera de él.
+
+</TabItem>
+<TabItem label="Remoto (HTTP)">
+
+```json
+{
+	"mcpServers": {
+		"libgen": { "url": "https://mcp.jmrp.io/libgen" }
+	}
+}
+```
+
+</TabItem>
+</Tabs>
+
+Referencia: [documentación de MCP de Cursor](https://cursor.com/docs/context/mcp).
+
+## Windsurf / Devin Desktop
+
+<Tabs syncKey="transport">
+<TabItem label="Local (stdio)">
+
+Windsurf pasó a ser Devin Desktop el 2 de junio de 2026, mediante una actualización normal que conservó la configuración existente. Tiene dos agentes: Devin Local, el predeterminado en las pestañas nuevas, y el agente heredado Cascade. Los dos leen el `mcp_config.json` del usuario:
+
+- macOS y Linux: `~/.config/devin/mcp_config.json` (bajo `$XDG_CONFIG_HOME` si está definida)
+- Windows: `%APPDATA%\devin\mcp_config.json`
+- Versiones de Windsurf anteriores al cambio de nombre: `~/.codeium/windsurf/mcp_config.json`
+
+Devin Local lee además `.devin/mcp_config.json` en el proyecto, y `devin mcp add libgen -- npx -y @jmrp.io/libgen-mcp` escribe la entrada por ti. En Cascade, el archivo se abre desde el menú **…** del panel de Cascade, en **Open MCP config file**. `${env:NAME}` copia una variable del entorno con el que se inició la aplicación:
+
+```json
+{
+	"mcpServers": {
+		"libgen": {
+			"command": "npx",
+			"args": ["-y", "@jmrp.io/libgen-mcp"],
+			"env": {
+				"LIBGEN_MCP_UNPAYWALL_EMAIL": "${env:LIBGEN_MCP_UNPAYWALL_EMAIL}"
+			}
+		}
+	}
+}
+```
+
+</TabItem>
+<TabItem label="Remoto (HTTP)">
+
+El campo es `url`, que leen los dos agentes (Cascade acepta también `serverUrl`):
+
+```json
+{
+	"mcpServers": {
+		"libgen": { "url": "https://mcp.jmrp.io/libgen" }
+	}
+}
+```
+
+</TabItem>
+</Tabs>
+
+Referencias: [configuración de MCP de Cascade](https://docs.devin.ai/desktop/cascade/mcp), [configuración de MCP de Devin](https://docs.devin.ai/cli/extensibility/mcp/configuration), [preguntas frecuentes de Devin Desktop](https://docs.devin.ai/desktop/devin-desktop-faq).
+
+## Zed
+
+<Tabs syncKey="transport">
+<TabItem label="Local (stdio)">
+
+Zed guarda sus servidores bajo `context_servers` en `settings.json`, que abre la orden **zed: open settings file**:
+
+- macOS y Linux: `~/.config/zed/settings.json` (bajo `$XDG_CONFIG_HOME` en Linux si está definida)
+- Windows: `%APPDATA%\Zed\settings.json`
+
+**Settings > AI > MCP Servers > Add Server** escribe la misma entrada por ti:
+
+```json
+{
+	"context_servers": {
+		"libgen": {
+			"command": "npx",
+			"args": ["-y", "@jmrp.io/libgen-mcp"],
+			"env": {}
+		}
+	}
+}
+```
+
+</TabItem>
+<TabItem label="Remoto (HTTP)">
+
+```json
+{
+	"context_servers": {
+		"libgen": { "url": "https://mcp.jmrp.io/libgen" }
+	}
+}
+```
+
+El servidor no necesita autenticación, así que deja `headers` fuera.
+
+</TabItem>
+</Tabs>
+
+Referencias: [documentación de MCP de Zed](https://zed.dev/docs/ai/mcp), [configuración de Zed](https://zed.dev/docs/configuring-zed).
+
+## IDE de JetBrains
+
+JetBrains tiene dos agentes, y cada uno tiene su propia lista de servidores.
+
+<Tabs syncKey="transport">
+<TabItem label="Local (stdio)">
+
+**AI Assistant:** abre **Settings > Tools > AI Assistant > Model Context Protocol (MCP)**, añade un servidor y pega la configuración como JSON:
+
+```json
+{
+	"mcpServers": {
+		"libgen": {
+			"command": "npx",
+			"args": ["-y", "@jmrp.io/libgen-mcp"]
+		}
+	}
+}
+```
+
+La documentación de AI Assistant no nombra ningún archivo para esa lista, solo la página de ajustes, que además ofrece importar los servidores que ya tenga Claude Desktop.
+
+**Junie:** abre **Settings > Tools > Junie > MCP Settings**, que abre `mcp.json`, o edita el archivo directamente: `.junie/mcp/mcp.json` en el proyecto, o `~/.junie/mcp/mcp.json` en tu directorio personal para todos los proyectos. El plugin y la CLI de Junie comparten los dos archivos. La entrada es el mismo objeto `mcpServers`, con un objeto `env` para las claves.
+
+</TabItem>
+<TabItem label="Remoto (HTTP)">
+
+En AI Assistant:
+
+```json
+{
+	"mcpServers": {
+		"libgen": { "url": "https://mcp.jmrp.io/libgen" }
+	}
+}
+```
+
+Junie también se conecta a servidores remotos, pero su documentación no muestra una entrada remota; la misma forma con `url` es la que hay que probar, y la pantalla `/mcp` de la CLI de Junie la añade por ti.
+
+</TabItem>
+</Tabs>
+
+Referencias: [AI Assistant MCP](https://www.jetbrains.com/help/ai-assistant/mcp.html), [Junie MCP settings](https://junie.jetbrains.com/docs/junie-plugin-mcp-settings.html), [Junie CLI MCP configuration](https://junie.jetbrains.com/docs/junie-cli-mcp-configuration.html).
+
+## Kiro
+
+<Tabs syncKey="transport">
+<TabItem label="Local (stdio)">
+
+Kiro lee `.kiro/settings/mcp.json` en el espacio de trabajo y `~/.kiro/settings/mcp.json` para todos, y gana el del espacio de trabajo cuando los dos nombran el mismo servidor. Un cambio guardado reconecta el servidor sin reiniciar:
+
+```json
+{
+	"mcpServers": {
+		"libgen": {
+			"command": "npx",
+			"args": ["-y", "@jmrp.io/libgen-mcp"],
+			"env": {}
+		}
+	}
+}
+```
+
+</TabItem>
+<TabItem label="Remoto (HTTP)">
+
+```json
+{
+	"mcpServers": {
+		"libgen": { "url": "https://mcp.jmrp.io/libgen" }
+	}
+}
+```
+
+</TabItem>
+</Tabs>
+
+Referencia: [configuración de MCP de Kiro](https://kiro.dev/docs/mcp/configuration/).
+
+## OpenCode
+
+<Tabs syncKey="transport">
+<TabItem label="Local (stdio)">
+
+OpenCode lee `opencode.json` en la raíz del proyecto y `~/.config/opencode/opencode.json`. Su clave es `mcp`, la orden es un único array, y las variables van bajo `environment`:
+
+```json
+{
+	"$schema": "https://opencode.ai/config.json",
+	"mcp": {
+		"libgen": {
+			"type": "local",
+			"command": ["npx", "-y", "@jmrp.io/libgen-mcp"],
+			"enabled": true,
+			"environment": {}
+		}
+	}
+}
+```
+
+</TabItem>
+<TabItem label="Remoto (HTTP)">
+
+```json
+{
+	"$schema": "https://opencode.ai/config.json",
+	"mcp": {
+		"libgen": {
+			"type": "remote",
+			"url": "https://mcp.jmrp.io/libgen",
+			"enabled": true
+		}
+	}
+}
+```
+
+</TabItem>
+</Tabs>
+
+Referencia: [OpenCode MCP servers](https://opencode.ai/docs/mcp-servers/).
+
+## Cline
+
+<Tabs syncKey="transport">
+<TabItem label="Local (stdio)">
+
+En el panel de Cline, abre **MCP Servers > Configure > Configure MCP Servers**, que abre `cline_mcp_settings.json`. Desde Cline 4.0, la extensión y la CLI de Cline comparten un único archivo en tu directorio personal, `~/.cline/data/settings/cline_mcp_settings.json` (`CLINE_DATA_DIR` sustituye a `~/.cline/data`). Cline 3.x lo guardaba en el almacenamiento de VS Code para la extensión, y 4.0 traslada sus entradas al archivo compartido en el primer arranque:
+
+- macOS: `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
+- Linux: `~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
+- Windows: `%APPDATA%\Code\User\globalStorage\saoudrizwan.claude-dev\settings\cline_mcp_settings.json`
+
+```json
+{
+	"mcpServers": {
+		"libgen": {
+			"command": "npx",
+			"args": ["-y", "@jmrp.io/libgen-mcp"],
+			"env": {},
+			"disabled": false
+		}
+	}
+}
+```
+
+</TabItem>
+<TabItem label="Remoto (HTTP)">
+
+```json
+{
+	"mcpServers": {
+		"libgen": {
+			"type": "streamableHttp",
+			"url": "https://mcp.jmrp.io/libgen",
+			"disabled": false
+		}
+	}
+}
+```
+
+</TabItem>
+</Tabs>
+
+Indica `"type": "streamableHttp"` de forma explícita: una entrada con `url` y sin `type` se lee como el antiguo transporte SSE. Referencia: [documentación de MCP de Cline](https://docs.cline.bot/mcp/configuring-mcp-servers).
+
+## Continue
+
+<Tabs syncKey="transport">
+<TabItem label="Local (stdio)">
+
+Continue solo usa MCP en el modo agente. Pon un archivo de bloque en `.continue/mcpServers/` dentro del espacio de trabajo, por ejemplo `libgen.yaml`:
+
+```yaml
+name: libgen
+version: 0.0.1
+schema: v1
+mcpServers:
+  - name: libgen
+    type: stdio
+    command: npx
+    args:
+      - "-y"
+      - "@jmrp.io/libgen-mcp"
+    env:
+      LIBGEN_MCP_UNPAYWALL_EMAIL: ${{ secrets.LIBGEN_MCP_UNPAYWALL_EMAIL }}
+```
+
+o añade la misma lista `mcpServers` a `~/.continue/config.yaml`. `${{ secrets.NAME }}` lee un secreto que guarda Continue, así que el archivo no contiene ningún valor; quita `env` para el servidor sin claves.
+
+</TabItem>
+<TabItem label="Remoto (HTTP)">
+
+```yaml
+mcpServers:
+  - name: libgen
+    type: streamable-http
+    url: https://mcp.jmrp.io/libgen
+```
+
+</TabItem>
+</Tabs>
+
+Referencia: [documentación de MCP de Continue](https://docs.continue.dev/customize/deep-dives/mcp).
+
+## LM Studio
+
+<Tabs syncKey="transport">
+<TabItem label="Local (stdio)">
+
+En la pestaña **Program**, elige **Edit mcp.json**, que abre `~/.lmstudio/mcp.json`:
+
+```json
+{
+	"mcpServers": {
+		"libgen": {
+			"command": "npx",
+			"args": ["-y", "@jmrp.io/libgen-mcp"],
+			"env": {}
+		}
+	}
+}
+```
+
+</TabItem>
+<TabItem label="Remoto (HTTP)">
+
+```json
+{
+	"mcpServers": {
+		"libgen": { "url": "https://mcp.jmrp.io/libgen" }
+	}
+}
+```
+
+</TabItem>
+</Tabs>
+
+Un modelo local tiene que admitir llamadas a herramientas para poder usar el servidor. Referencia: [documentación de MCP de LM Studio](https://lmstudio.ai/docs/app/mcp).
+
+## Gemini CLI
+
+<Tabs syncKey="transport">
+<TabItem label="Local (stdio)">
+
+Gemini CLI lee `.gemini/settings.json` en el proyecto y `~/.gemini/settings.json`:
+
+```json
+{
+	"mcpServers": {
+		"libgen": {
+			"command": "npx",
+			"args": ["-y", "@jmrp.io/libgen-mcp"],
+			"env": {
+				"LIBGEN_MCP_UNPAYWALL_EMAIL": "$LIBGEN_MCP_UNPAYWALL_EMAIL"
+			}
+		}
+	}
+}
+```
+
+Gemini CLI quita del entorno que transmite las variables que parecen sensibles, así que una clave solo llega al servidor cuando la entrada la nombra en `env` como arriba; `$NAME` la copia de tu shell.
+
+</TabItem>
+<TabItem label="Remoto (HTTP)">
+
+El campo para HTTP en streaming es `httpUrl`; `url` significa el antiguo transporte SSE:
+
+```json
+{
+	"mcpServers": {
+		"libgen": { "httpUrl": "https://mcp.jmrp.io/libgen" }
+	}
+}
+```
+
+o, desde una shell, `gemini mcp add --transport http libgen https://mcp.jmrp.io/libgen`, que escribe en los ajustes del proyecto salvo que pases `--scope user`.
+
+</TabItem>
+</Tabs>
+
+Referencia: [Gemini CLI MCP servers](https://geminicli.com/docs/tools/mcp-server/).
+
+## OpenAI Codex
+
+<Tabs syncKey="transport">
+<TabItem label="Local (stdio)">
+
+Codex lee `~/.codex/config.toml`, que comparten la CLI, la extensión del IDE y la aplicación de escritorio:
+
+```toml
+[mcp_servers.libgen]
+command = "npx"
+args = ["-y", "@jmrp.io/libgen-mcp"]
+startup_timeout_sec = 60
+
+[mcp_servers.libgen.env]
+LIBGEN_MCP_UNPAYWALL_EMAIL = "tu@ejemplo.com"
+```
+
+`codex mcp add libgen -- npx -y @jmrp.io/libgen-mcp` escribe la primera tabla por ti, con `--env NAME=value` antes del `--` para una clave. El primer arranque descarga el paquete de npm, así que el tiempo de arranque más largo evita que una conexión lenta se dé por un servidor que falló.
+
+</TabItem>
+<TabItem label="Remoto (HTTP)">
+
+```toml
+[mcp_servers.libgen]
+url = "https://mcp.jmrp.io/libgen"
+```
+
+</TabItem>
+</Tabs>
+
+Referencia: [documentación de MCP de Codex](https://developers.openai.com/codex/mcp).
+
+## Goose
+
+<Tabs syncKey="transport">
+<TabItem label="Local (stdio)">
+
+Goose llama extensiones a los servidores. `goose configure` añade una de forma interactiva; el resultado en `~/.config/goose/config.yaml` (`%APPDATA%\Block\goose\config\config.yaml` en Windows) es:
+
+```yaml
+extensions:
+  libgen:
+    type: stdio
+    name: libgen
+    enabled: true
+    cmd: npx
+    args: ["-y", "@jmrp.io/libgen-mcp"]
+    envs: {}
+    env_keys: []
+    timeout: 300
+```
+
+</TabItem>
+<TabItem label="Remoto (HTTP)">
+
+```yaml
+extensions:
+  libgen:
+    type: streamable_http
+    name: libgen
+    enabled: true
+    uri: https://mcp.jmrp.io/libgen
+    headers: {}
+    envs: {}
+    env_keys: []
+    timeout: 300
+```
+
+</TabItem>
+</Tabs>
+
+Referencia: [archivos de configuración de Goose](https://goose-docs.ai/docs/guides/config-files).
+
+## Cualquier otro cliente
+
+La mayoría de los clientes aceptan la forma `mcpServers` que comparten casi todas las secciones de arriba: un `command` con `args` y un `env` opcional para stdio, una `url` para HTTP en streaming. Un cliente que solo habla stdio puede llegar igualmente a un servidor remoto mediante un puente de stdio a HTTP como [`mcp-remote`](https://github.com/geelen/mcp-remote):
+
+```json
+{
+	"mcpServers": {
+		"libgen": {
+			"command": "npx",
+			"args": ["-y", "mcp-remote", "https://mcp.jmrp.io/libgen"]
+		}
+	}
+}
+```
+
+## Comprobar que funciona
+
+Pide al asistente que liste sus herramientas, o abre la vista de servidores del cliente: un servidor local ofrece `search`, `get_details`, `download` y `read`, y uno remoto las tres primeras. Después pregúntale algo, como _«Busca el libro de Rust»_, y [Primeros pasos](/libgen-mcp/es/getting-started/#tu-primera-búsqueda) explica lo que vuelve.
+
+Cuando el servidor no aparece, arranca la misma orden en una terminal: debería quedarse esperando entrada en silencio, con su log en stderr. Un error ahí es del servidor; si no hay error, el problema está en el `command`, el `PATH` o el JSON del cliente. [Solución de problemas](/libgen-mcp/es/troubleshooting/) recoge los fallos habituales.

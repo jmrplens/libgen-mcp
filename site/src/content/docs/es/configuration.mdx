@@ -74,7 +74,7 @@ import { Aside } from "@astrojs/starlight/components";
 
 Un ajuste puede venir de tres sitios, que se prueban en este orden — gana el primero donde la variable esté **definida**, que no es exactamente lo mismo que el primero que tenga valor:
 
-1. **El entorno del proceso**, que es lo que pasó tu cliente MCP. Fíjalo en el bloque `env` del cliente (consulta [Primeros pasos](/libgen-mcp/es/getting-started/)), en tu shell, o con flags `-e` en `docker run`. Unos pocos tienen además flag; véase más abajo.
+1. **El entorno del proceso**, que es lo que pasó tu cliente MCP. Fíjalo en el bloque `env` del cliente (consulta [Conectar un cliente](/libgen-mcp/es/clients/)), en tu shell, o con flags `-e` en `docker run`. Unos pocos tienen además flag; véase más abajo.
 2. **El fichero que nombre `LIBGEN_MCP_ENV_FILE`**, si nombras alguno. Dale una ruta absoluta.
 3. **`~/.libgen-mcp.env`**, un fichero dotenv en tu directorio personal.
 

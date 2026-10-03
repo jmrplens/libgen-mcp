@@ -131,11 +131,15 @@ signed, and checking that is a step worth taking once.
 
 Point your client at the binary. The command is `libgen-mcp` (or the absolute path to the
 `server` binary if you kept the default `go install` name). Over stdio no extra arguments
-are needed.
+are needed. Claude Code is the example here; **[Connect a client](clients.md)** has the
+complete entry for every other client — Claude Desktop, VS Code, Cursor, Windsurf, Zed,
+JetBrains, Kiro, OpenCode, Cline, Continue, LM Studio, Gemini CLI, Codex and Goose — in
+both its local and its remote form, the one-click install buttons, and where optional keys
+go.
 
 ### Claude Code
 
-Add the server to your project's `.mcp.json` (or run `claude mcp add`):
+Run `claude mcp add libgen -- libgen-mcp`, or add the server to your project's `.mcp.json`:
 
 ```json
 {
@@ -147,50 +151,9 @@ Add the server to your project's `.mcp.json` (or run `claude mcp add`):
 }
 ```
 
-### Claude Desktop
-
-The easiest path is the one-click **`.mcpb`** desktop extension from the
-[latest release](https://github.com/jmrplens/libgen-mcp/releases/latest) (macOS, Windows
-and Linux, no Docker): download the bundle for your system (see
-[the Claude Desktop extension page](install/claude-desktop.md)) and open it with Claude
-Desktop, then confirm the settings. On Linux, install it from **Extensions > Install
-Extension…**, since the Linux app does not open `.mcpb` files itself.
-
-To wire it up by hand instead, edit `claude_desktop_config.json`
-(`~/Library/Application Support/Claude/` on macOS,
-`%APPDATA%\Claude\` on Windows, `~/.config/Claude/` on Linux) and add the same
-`mcpServers` block, then restart Claude Desktop:
-
-```json
-{
-  "mcpServers": {
-    "libgen": {
-      "command": "/absolute/path/to/libgen-mcp",
-      "env": {
-        "LIBGEN_MCP_DOWNLOAD_DIR": "/absolute/path/to/downloads"
-      }
-    }
-  }
-}
-```
-
-Desktop clients do not inherit your shell `PATH`, so use an absolute `command` path.
-
-### VS Code
-
-VS Code's MCP support (or the Continue / Cline extensions) reads an `mcp.json` with the
-same shape. In VS Code's own format:
-
-```json
-{
-  "servers": {
-    "libgen": {
-      "command": "libgen-mcp",
-      "type": "stdio"
-    }
-  }
-}
-```
+On Claude Desktop the one-click [`.mcpb` extension](install/claude-desktop.md) needs no
+configuration file at all. Desktop clients do not inherit your shell `PATH`, so a
+configuration file there takes an absolute `command` path.
 
 ### Hosted endpoint (no install)
 
