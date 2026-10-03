@@ -1,6 +1,208 @@
 ---
 title: Modelo de seguridad
 description: "En qué confía libgen-mcp y qué rechaza: rutas locales, destinos salientes, texto no fiable de terceros, el endurecimiento HTTP y las claves por llamada."
+mentions:
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+  - name: "OpenTelemetry"
+    wikidata: Q121746046
+chips:
+  - text: "Sin claves por defecto"
+  - text: "Las claves por llamada no se guardan"
+  - text: "Modo servidor HTTP"
+    href: "/libgen-mcp/es/http-server-mode/"
+datePublished: "2026-10-03"
+head:
+  - tag: title
+    content: "Modelo de seguridad de libgen-mcp: en qué confía y qué rechaza"
 ---
 
-Esta página describirá en qué confía el servidor y qué rechaza: qué rutas locales puede abrir `read`, a qué destinos salientes se conecta, cómo se evita que el texto de terceros se lea como instrucciones, qué comprueba un despliegue HTTP antes de responder y cómo una clave por llamada se usa una vez y nunca se guarda. Cómo informar de una vulnerabilidad está en la [política de seguridad](https://github.com/jmrplens/libgen-mcp/blob/main/SECURITY.md).
+import { Aside } from "@astrojs/starlight/components";
+
+`libgen-mcp` recibe instrucciones de un modelo de lenguaje y descarga contenido de sitios que no controla, así que casi todo lo que maneja lo ha escrito alguien distinto de quien lo ejecuta. Esta página dice en qué entradas confía, en cuáles no y qué hace con las segundas: las claves que guarda, los destinos a los que se niega a llegar, las rutas locales que se niega a abrir, el texto de terceros que impide que se lea como instrucciones y lo que comprueba un despliegue HTTP antes de responder. Termina con una lista de comprobación para un despliegue HTTP.
+
+Los mecanismos en sí están documentados donde viven, y esta página enlaza con ellos en lugar de repetirlos. Cómo informar de una vulnerabilidad, y qué cuenta como tal, está en la [política de seguridad](https://github.com/jmrplens/libgen-mcp/blob/main/SECURITY.md).
+
+## En qué confía el servidor y en qué no
+
+| Entrada                                                                                           | Quién la controla                                             | Se trata como                                                                                |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Los flags, el entorno del proceso, `~/.libgen-mcp.env`, un fichero que nombra `--env-file`        | El operador                                                   | Configuración. La única entrada que decide qué puede hacer el servidor.                      |
+| Un `.env` en el directorio de trabajo                                                             | Quien escribió el espacio de trabajo que abrió el cliente     | Nada. No se carga nunca.                                                                     |
+| Los argumentos de las herramientas: un md5, un DOI, una consulta, un `path`, un `source`          | El modelo, que lee texto no fiable                            | No fiables. Se validan, y toda ruta queda acotada.                                           |
+| El contenido del catálogo y de los mirrors: títulos, autores, descripciones, texto extraído       | Quien subió o catalogó el registro                            | Datos no fiables. Se escapan según dónde caen y se marcan como `UNTRUSTED` en el resultado.  |
+| Las URL que aporta un tercero: enlaces de descarga, resultados de índices, redirecciones, mirrors | Editoriales, índices de acceso abierto, operadores de mirrors | Destinos no fiables. Solo se conecta a ellos a través del guardián de direcciones salientes. |
+| Las peticiones a un endpoint HTTP                                                                 | Cualquiera que pueda alcanzarlo                               | Anónimas. El servidor no autentica a nadie, y acota lo que puede gastar cada dirección.      |
+
+Dos consecuencias merecen decirse claramente.
+
+**Los argumentos del modelo no son los del operador.** Un modelo que acaba de leer un documento puede dejarse llevar por una instrucción incrustada en él, así que un `path` o una URL que llegan en una llamada a una herramienta se tratan como si los hubiera elegido un desconocido. Por eso `read` rechaza `~/.ssh/id_rsa` por defecto, incluso en un servidor que arrancó el propio usuario, y por eso un DOI cuyo enlace resuelto apunta a la dirección de metadatos de la nube se rechaza en lugar de descargarse.
+
+**El directorio de trabajo no es configuración.** Un servidor stdio hereda el directorio de trabajo del cliente, que lo fija en el espacio de trabajo que esté abierto, y ese directorio puede llegar con un repositorio clonado o un archivo descomprimido. Un `.env` ahí podría fijar `LIBGEN_MCP_ALLOWED_READ_DIRS` y darle a `read` el resto del disco, o fijar `LIBGEN_MIRROR` y decidir adónde va cada búsqueda. Así que no se lee nunca. Un fichero dotenv configura el servidor solo cuando alguien lo puso donde el servidor mira (`~/.libgen-mcp.env`) o lo nombró a propósito (`LIBGEN_MCP_ENV_FILE`, o `--env-file`, preferiblemente con ruta absoluta).
+
+## Claves
+
+### Sin claves por defecto
+
+La búsqueda, los detalles, las descargas y la lectura funcionan sin cuenta, sin clave y sin configuración. Las credenciales de abajo son opcionales, y cada una añade una fuente o un camino más rápido en lugar de desbloquear una capacidad que el servidor no tendría.
+
+### Claves que configura el operador
+
+| Variable                     | Para qué sirve                                   |
+| ---------------------------- | ------------------------------------------------ |
+| `LIBGEN_MCP_ANNAS_KEY`       | Descargas de miembro (rápidas) de Anna's Archive |
+| `LIBGEN_MCP_CORE_KEY`        | La fuente de acceso abierto CORE                 |
+| `LIBGEN_MCP_UNPAYWALL_EMAIL` | La fuente Unpaywall, que exige un contacto       |
+
+Se fijan en el entorno o en un fichero dotenv y **no tienen flags de línea de órdenes**, a propósito: un secreto en una línea de órdenes es visible para cualquier cuenta local a través de `ps` y acaba en el historial del shell. En un despliegue HTTP una clave configurada es del despliegue, así que la gastan todos los llamantes. Un resultado de `download` no informa de una cuenta de Anna's Archive ni de cuánto le queda de cupo salvo que la llamada haya pedido el nivel de miembro. Una clave que habilita una fuente se ve de otra manera: la fuente aparece en el enum `source` de `download`. Consulta [el ADR sobre lo que revela un resultado](https://github.com/jmrplens/libgen-mcp/blob/main/docs/decisions/2026-08-08-result-reveals-only-what-the-call-revealed.md).
+
+### Claves que aporta un llamante para una sola llamada
+
+Cuando no hay clave configurada, `download` puede pedirle una al cliente mediante elicitation: una clave de Anna's Archive cuando la llamada fija `annas_member: true`, una dirección de contacto de Unpaywall para una descarga por DOI. La respuesta se usa solo para esa petición. **No se guarda, no sirve de clave de nada, no se cuenta ni se registra**, y nunca es un argumento de la herramienta, así que se queda en el formulario del cliente y no en el contexto del modelo. A un cliente que no admite elicitation no se le pregunta nunca, y la descarga sigue por el camino sin clave. Las peticiones se describen en [Herramientas → Peticiones interactivas](/libgen-mcp/es/tools/#peticiones-interactivas-elicitation).
+
+### Por dónde viaja una clave
+
+Una clave va en una cabecera de la petición siempre que el servicio la acepte ahí. Dos servicios solo la aceptan en la query string, y allí la regla pasa a ser qué le ocurre después a la URL:
+
+| Credencial                         | Se envía como                    | Por qué                                           |
+| ---------------------------------- | -------------------------------- | ------------------------------------------------- |
+| Clave de CORE                      | Cabecera `Authorization: Bearer` | La API la recibe ahí                              |
+| Clave de Anna's Archive            | Parámetro de consulta `key`      | Es el único sitio donde la lee la API de miembros |
+| Dirección de contacto de Unpaywall | Parámetro de consulta `email`    | Es el único sitio donde la lee la API             |
+
+Una dirección de contacto configurada se ofrece también a las API de acceso abierto que mantienen un polite pool para los llamantes identificados, Crossref entre ellas, en un parámetro `mailto` o en el `User-Agent`. Una dirección por llamada va solo a Unpaywall.
+
+Una URL con un secreto dentro se filtra de dos maneras previsibles, y las dos están cerradas:
+
+- **En una redirección.** `net/http` envía la URL completa de la petición anterior como `Referer` en cada salto que sigue. El cliente saliente quita `Referer`, `Authorization`, `Cookie`, `Cookie2`, `Proxy-Authorization` y `WWW-Authenticate` cada vez que una redirección cambia de esquema, host o puerto, y corta la cadena tras cinco saltos.
+- **En un error.** Un fallo de transporte se notifica como un error cuyo texto es la URL completa de la petición, query string incluida, y este servidor escribe esos errores a la vez en su log y en la transcripción del modelo. Los caminos de las peticiones salientes redactan ese error (se quitan userinfo, query y fragmento; se conservan esquema, host y ruta) antes de que nada lo envuelva.
+
+Lo mismo vale para la URL prefirmada del fichero que devuelve la API de miembros, que es una credencial válida por sí misma. Adónde va la clave de cada fuente, y cómo se midió, está en [Fuentes](/libgen-mcp/es/sources/).
+
+## Destinos salientes
+
+Casi todas las URL que descarga este servidor las eligió otro: el enlace que una editorial depositó en Crossref, la URL de un repositorio que republica un índice de acceso abierto, un mirror extraído de una página de catálogo. Sin un guardián, cualquiera capaz de colocar una URL en uno de esos índices podría apuntar el servidor a la LAN del operador o a un endpoint de metadatos de la nube. El guardián está en el dialer, así que juzga la dirección a la que realmente resolvió un nombre, cosa que una comprobación sobre la URL no puede hacer frente a un nombre público con un registro `A` privado ni frente a un DNS rebinding.
+
+| Nivel | Se rechaza                                                                                                                                                                         | Lo levanta                                                                                                                                                                                       |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A     | Las direcciones de metadatos de la nube `169.254.169.254`, `169.254.170.2`, `fd00:ec2::254` y `100.100.100.200`                                                                    | Nada. Ni el flag ni nombrar el host.                                                                                                                                                             |
+| B     | Loopback, `0.0.0.0/8`, broadcast, link-local, todos los ámbitos multicast, RFC 1918, RFC 4193 y el NAT de operador de RFC 6598, cada uno también en su forma IPv6 con IPv4 mapeada | Un host que nombró el operador, toda petición del cliente de catálogo y descargas en cuanto un host nombrado es privado, o `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES` para todos los destinos a la vez |
+
+**Un host que nombró el operador está exento del nivel B, resuelva a lo que resuelva.** Los hosts de `LIBGEN_MIRROR` y `LIBGEN_MCP_SCIHUB_HOSTS`, y el catálogo, el mirror preferido y los de reserva de cada familia de mirrors, son destinos que eligió este despliegue. Todo lo demás — una URL de descarga resuelta, el nombre de un mirror extraído del catálogo, una redirección que sale de un host nombrado — recibe el nivel estricto, **siempre que todos los hosts nombrados sean públicos**.
+
+**Nombrar un host privado amplía la exención.** Cuando algún host que nombró el operador resuelve a espacio privado, como hace un mirror en tu propia red, el nivel B se levanta para todas las peticiones que hace el cliente de catálogo y descargas, no solo para ese mirror: las URL de descarga resueltas y sus redirecciones incluidas. El caso para el que existe es un mirror privado que redirige a un host hermano de la misma red; el precio es que en ese despliegue ya no se rechaza una URL de descarga de un tercero que apunte a una dirección privada. El nivel A sigue en pie, y los proveedores de descubrimiento (arXiv, Crossref y los demás) conservan el nivel estricto, porque no nombran ningún host. El razonamiento está en [el ADR del host nombrado por el operador](https://github.com/jmrplens/libgen-mcp/blob/main/docs/decisions/2026-09-17-an-operator-named-host-is-exempt-from-the-destination-guard.md).
+
+**`LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES`** (o `--allow-private-addresses`) levanta el nivel B para todos los destinos, incluidos los que eligió un tercero. Está desactivada por defecto, y el servidor **se niega a arrancar** con ella en un listener que otras máquinas pueden alcanzar, porque cualquier llamante capaz de hacer un POST podría entonces apuntar el servidor a tu red. Se comprueba dos veces: una sobre la dirección configurada y otra sobre la dirección que el kernel enlazó de verdad. Enlaza una dirección loopback o un socket unix, o déjala sin fijar: nombrar un mirror de tu propia red en `LIBGEN_MIRROR` lo alcanza sin el flag, con el coste más acotado que se describe arriba.
+
+**Tras `HTTP_PROXY` o `HTTPS_PROXY`** el dialer solo ve el proxy, así que el guardián separa sus preguntas. El proxy es configuración del operador y solo responde ante el nivel A. El destino se juzga por petición, antes de enviar nada, con los dos niveles, en la medida en que su URL escribe una dirección — y una dirección es cualquier forma que acepte un resolver de C: `2852039166`, `0xa9fea9fe`, `0251.0376.0251.0376` y `169.254.43518` son todas `169.254.169.254` para el proxy, y cada una se juzga como esa dirección. Un host cuya última etiqueta solo parece numérica se rechaza sin más. Un nombre de host tras un proxy lo resuelve el proxy, así que ahí el nivel B es decisión del proxy. El nombre también se resuelve localmente y se rechaza si alguna respuesta es una dirección de metadatos, cuando esta máquina puede resolverlo; cuando no puede, solo el proxy ve la respuesta y la petición pasa.
+
+La mecánica completa está en [Arquitectura → Política de direcciones salientes](/libgen-mcp/es/architecture/#política-de-direcciones-salientes), y los dos rechazos con los que se encuentra un operador están en [Solución de problemas](/libgen-mcp/es/troubleshooting/#el-servidor-no-arranca-la-escotilla-de-direcciones-privadas-en-un-listener-abierto) y [tras un proxy de salida](/libgen-mcp/es/troubleshooting/#tras-un-proxy-de-salida-refusing-to-connect-to-a-private-or-local-address).
+
+## Ficheros locales
+
+Dos argumentos de herramienta son rutas locales: el `path` de `read`, que el servidor abre y cuyo texto devuelve, y el `path` de `download`, donde escribe. Los dos vienen del modelo, así que los dos quedan acotados a un conjunto de raíces:
+
+- el directorio en el que se arrancó el servidor — **salvo que sea el directorio personal**, que nunca es una raíz implícita, porque Claude Desktop arranca los servidores en `/` y otros clientes los arrancan en el directorio personal del usuario;
+- el directorio temporal del sistema;
+- el directorio de descargas (`LIBGEN_MCP_DOWNLOAD_DIR`);
+- lo que añada el operador: `LIBGEN_MCP_ALLOWED_READ_DIRS` para `read`, `LIBGEN_MCP_ALLOWED_DOWNLOAD_DIRS` para `download`. Están separadas, porque lo que un despliegue acepta que se lea y lo que acepta que se escriba son decisiones distintas.
+
+Un rechazo nombra la variable que lo ampliaría, porque una contención que nadie puede ampliar a propósito acaba desactivándola quien tropieza con ella.
+
+Las rutas se resuelven a través de los enlaces simbólicos antes de la comprobación, así que un enlace cuenta por adónde apunta: uno dentro de una raíz permitida que apunta fuera se rechaza, y uno que apunta dentro se sigue. Lo que ocurre después de la comprobación depende de la herramienta:
+
+- **`download`** abre su fichero parcial sin seguir un enlace simbólico en la hoja, así que se rechaza un enlace colocado ahí después de la comprobación. Windows no tiene ese flag de apertura, así que allí la comprobación es todo lo que hay.
+- **`read`** comprueba la ruta y después la abre por nombre. Un usuario local que pueda escribir en una raíz permitida — y el directorio temporal del sistema siempre lo es — puede cambiar el fichero entre las dos cosas. La contención impide que un modelo nombre un fichero fuera de las raíces; no defiende frente a otra cuenta local que le gane la carrera.
+
+El nombre de fichero de una descarga se sanea a un único componente de ruta, así que un título del catálogo no puede nombrar un directorio.
+
+**Un despliegue remoto rechaza las rutas locales por completo.** Cuando el disco del llamante y el del servidor son máquinas distintas — cualquier listener HTTP, o un servidor stdio con `LIBGEN_MCP_REMOTE_DOWNLOADS` fijada — no se acepta ninguna ruta aportada por el llamante, y `read` recibe un md5 o un DOI en su lugar. Además, `LIBGEN_MCP_SERVER_FETCH` está desactivada por defecto en un despliegue remoto: `read` no se registra y `download` devuelve un enlace en lugar de un fichero, así que ningún cuerpo de fichero cruza la conexión del propio servidor. Ese valor por defecto tiene que ver con una dirección de salida compartida, no con el secreto, y un valor explícito gana en ambos sentidos; consulta [Configuración](/libgen-mcp/es/configuration/#libgen_mcp_server_fetch) y [el ADR sobre la descarga en un servidor alojado](https://github.com/jmrplens/libgen-mcp/blob/main/docs/decisions/2026-09-08-a-hosted-server-does-not-fetch-file-bodies.md).
+
+También hay límites de tamaño: `LIBGEN_MCP_MAX_DOWNLOAD_BYTES` acota una descarga cuando está fijada (por defecto no hay límite), y se aplica sobre `Content-Length` y otra vez durante la transmisión, y una lectura de texto plano se detiene en 8 MiB.
+
+## Texto de terceros en un resultado
+
+El título de un registro, la descripción de un libro y el texto extraído de un PDF los escribió quien los subió, y un resultado de herramienta lo lee un modelo que actúa sobre lo que lee. Tres reglas impiden que lo primero se convierta en instrucciones para lo segundo.
+
+**Está marcado.** La descripción de cada herramienta le dice al modelo que lo que devuelve es texto de terceros `UNTRUSTED`, que se lee como datos y nunca se sigue como instrucciones. El resultado lo repite donde empieza el texto — antes de una lista de resultados de búsqueda, de un pasaje extraído, de las coincidencias de una búsqueda dentro de un documento, de un índice de contenidos — y los prompts llevan la misma advertencia. Consulta [Herramientas → salida de read](/libgen-mcp/es/tools/#salida-de-read).
+
+**Se escapa según dónde cae.** Un valor que va a una celda de tabla, un elemento de lista, un encabezado, un bloque de código o un enlace pasa por el helper de esa construcción, que quita lo que cambiaría ahí la forma del documento: una barra vertical que cierra una celda, un salto de línea que abre un encabezado, una valla cerrada desde dentro. Los bytes de control se quitan antes de cualquier comprobación, y solo se escribe un enlace para una dirección `http` o `https` absoluta, porque un destino `javascript:` es un enlace entero que algunos clientes renderizan activo. `make check-md-escaping` recorre los paquetes de renderizado e informa de un valor en tiempo de ejecución que llega a una construcción Markdown sin un escapador de por medio.
+
+**El encabezado de orientación está reservado.** La sección `Next steps` al final de un resultado es la única parte escrita con la voz del propio servidor. Si un registro trae ese encabezado exacto, `💡 **Next steps:**`, se reescribe como una entidad HTML que se ve igual pero ya no es la marca. La reescritura solo reconoce la cadena exacta, así que un encabezado parecido pasa como texto; lo que sigue aplicándose es la marca `UNTRUSTED` que lo rodea.
+
+Un resultado, además, solo revela lo que reveló la llamada: cuando `download` guarda un fichero, el resultado no nombra la fuente ni el mirror que lo sirvió salvo que el llamante fijara una.
+
+## El endpoint HTTP
+
+Sobre stdio el servidor no sirve ningún endpoint de red para MCP, y su único llamante es el proceso que lo arrancó. Sobre HTTP es un servicio de red, y lo siguiente vale para todo despliegue. La guía del operador es [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/), con configuraciones de proxy en [Detrás de un proxy inverso](/libgen-mcp/es/deploy/reverse-proxy/).
+
+<Aside type="caution" title="No hay autenticación">
+	Cualquiera que pueda alcanzar el endpoint puede llamar a todas las
+	herramientas que registra. Si no es lo que quieres, pon la autenticación en el
+	proxy que tiene delante.
+</Aside>
+
+| Comprobación           | Qué hace                                                                                                                                                                                                                                                                                                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Guardián de host       | Una conexión aceptada en una dirección loopback solo puede llevar un `Host` loopback, contra el DNS rebinding; un nombre público que llega por un proxy se rechaza con `403` hasta que `--public-url` o `--trusted-proxies` lo declaran. Un socket unix está exento.                                                                                                           |
+| POST de otro origen    | Un POST de navegador desde otro origen se rechaza con `403`. Los clientes que no envían ni `Origin` ni `Sec-Fetch-Site` — todo cliente que no es un navegador — no se ven afectados.                                                                                                                                                                                           |
+| CORS                   | Desactivado salvo que `--trusted-origins` nombre un origen; entonces el endpoint MCP responde al preflight y devuelve ese origen en lugar de `*`. `*` se acepta con un aviso al arrancar. Las tarjetas del servidor son documentos públicos y responden siempre `Access-Control-Allow-Origin: *`. Deja que responda CORS una sola capa, nunca el proxy y el servidor a la vez. |
+| Cabeceras de seguridad | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` y `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` en cada respuesta, incluidas las que escribe una capa interior. Las tarjetas del servidor sustituyen la cabecera de caché por `public, max-age=3600`.                            |
+| HSTS                   | `Strict-Transport-Security: max-age=31536000; includeSubDomains`, solo cuando este proceso termina TLS (`--tls-cert`). Sin `preload`.                                                                                                                                                                                                                                          |
+| TLS                    | `--tls-cert` y `--tls-key`, los dos o ninguno, TLS 1.2 como mínimo, HTTP/2 negociado, releídos al rotar sin reiniciar.                                                                                                                                                                                                                                                         |
+| Socket unix            | `--http` con una ruta enlaza un socket creado `0660` (`--http-socket-mode`) en una plataforma con modos de fichero, con la umask estrechada alrededor del bind para que nunca sea conectable por todos ni un instante. Un fichero existente no se reemplaza nunca salvo que sea un socket muerto.                                                                              |
+| Rutas                  | El endpoint MCP (y su alias `/mcp`), `GET /health` y las tarjetas del servidor. Cualquier otra ruta es `404`.                                                                                                                                                                                                                                                                  |
+| Cuerpo de la petición  | `--max-request-body-bytes`, 4 MiB por defecto; un cuerpo mayor recibe `413`. Un valor negativo hace fallar el arranque.                                                                                                                                                                                                                                                        |
+| Límites por llamante   | `--rate-limit-rps` (`10`) y `--rate-limit-burst` (`40`) por dirección cobrada, y `--max-inflight-per-client` para las llamadas retenidas de `download`/`read`. El límite de tasa está desactivado en un listener loopback o un socket salvo que `--trusted-proxies` diga quiénes son los llamantes.                                                                            |
+| Techos del proceso     | Las llamadas retenidas y las sesiones con estado se acotan a partir de `RLIMIT_NOFILE` al arrancar; superados, una llamada recibe `503` con `Retry-After: 30`.                                                                                                                                                                                                                 |
+| Perfilado              | `--pprof-addr` / `LIBGEN_MCP_PPROF_ADDR` se rechaza salvo que nombre una dirección loopback, porque un perfil de heap es una copia de la memoria del proceso, secretos por llamada incluidos.                                                                                                                                                                                  |
+
+La cabecera con la dirección reenviada de un proxy de confianza solo se cree si viene de un par que nombra `--trusted-proxies`; de cualquier otro es texto que escribió el llamante. Cada uno de estos ajustes que podría quedarse en silencio por una errata hace fallar el arranque — la lista está en [Con qué se niega a arrancar el servidor](/libgen-mcp/es/http-server-mode/#con-qué-se-niega-a-arrancar-el-servidor).
+
+## Logs y telemetría
+
+**Los logs van a stderr** y se quedan en la máquina. Son el registro propio del operador, así que conservan lo que necesita quien depura: la consulta que ejecutó una búsqueda, la fuente y el mirror que sirvieron una descarga. Un secreto por llamada no se escribe nunca ahí, y un error saliente se redacta antes de registrarse.
+
+**La telemetría está apagada por defecto**, y cuando está encendida va solo al colector de OpenTelemetry que configura el operador — este proyecto no tiene backend. La copia exportada de cada registro quita una lista fija de campos (la consulta, el título de un registro, un secreto por llamada, la dirección cobrada, un panic recuperado y su pila, entre otros) y sustituye el texto de cada error por su tipo. Algunas cosas no se exportan con ningún ajuste: la consulta de búsqueda, un título devuelto, los argumentos y resultados de las herramientas, un secreto por llamada y el contenido de lo que se descarga o se lee.
+
+**Los llamantes no se identifican salvo que lo decida el operador.** `LIBGEN_MCP_TELEMETRY_IDENTITY` vale `none` por defecto; `pseudonymous` exporta un digest con clave de la dirección del llamante, y `full` la dirección misma. En un endpoint público esa dirección es la de un desconocido, y por eso `full` es una decisión con forma jurídica. Un llamante puede ver en la tarjeta del servidor qué registra un despliegue sobre él, sin preguntar.
+
+El detalle está en [Telemetría](/libgen-mcp/es/telemetry/#qué-no-se-registra-nunca), y lo que sale de la máquina con la configuración por defecto está en [Privacidad](/libgen-mcp/es/privacy/).
+
+## Cadena de suministro
+
+| Medida                         | Qué cubre                                                                                                                                                                                                                                                                       |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sumas de comprobación firmadas | `checksums.txt` para los binarios y los ficheros que GoReleaser publica a su lado, con un bundle de cosign (Sigstore) sin clave cuya identidad es el workflow de release. Los bundles `.mcpb` se construyen después y no están en él; solo llevan procedencia de la compilación |
+| Procedencia de la compilación  | Procedencia SLSA en el almacén de attestations de GitHub para cada asset de la release, cada `.mcpb`, la imagen de contenedor (el índice y cada plataforma) y, desde la 2.1.0, cada paquete NuGet                                                                               |
+| Firmas de la imagen            | Una firma de cosign 3.x sin clave sobre el índice de la imagen y los dos manifiestos de plataforma, en GHCR y en Docker Hub                                                                                                                                                     |
+| SBOM                           | Un SBOM SPDX por binario de la release, publicado a su lado, y uno por plataforma de la imagen, atestiguado sobre la imagen                                                                                                                                                     |
+| Procedencia en los registros   | Procedencia de npm y attestations PEP 740 de PyPI gracias a la publicación de confianza, sin token guardado. Los paquetes de npm, PyPI y NuGet llevan binarios comprobados contra el `checksums.txt` firmado antes de empaquetarse                                              |
+| Puertas de vulnerabilidades    | `govulncheck` en cada pull request para lo que alcanza el grafo de llamadas de este módulo, y una puerta sobre los binarios compilados que falla ante cualquier aviso contra un módulo que nombre su información de compilación salvo que se declare una razón revisada         |
+| CI fijada                      | Cada acción de terceros fijada a un SHA de commit, auditado por `make check-supply-chain`; las herramientas que se descargan (GoReleaser, cosign) fijadas a versiones exactas                                                                                                   |
+| Binarios autónomos             | `CGO_ENABLED=0` sin intérprete ELF, así que un binario funciona igual con glibc que con musl y la imagen lo ejecuta como UID `10001`, no como root                                                                                                                              |
+
+Cómo verificar cada canal, con las órdenes, está en [Instalación → Verificar lo que instalas](/libgen-mcp/es/install/overview/#verificar-lo-que-instalas).
+
+## Informar de una vulnerabilidad
+
+No abras un issue público. Informa en privado mediante el [informe privado de vulnerabilidades](https://github.com/jmrplens/libgen-mcp/security/advisories/new) de GitHub o por correo, como describe la [política de seguridad](https://github.com/jmrplens/libgen-mcp/blob/main/SECURITY.md); allí está también qué entra en el alcance, los plazos de respuesta y qué versiones reciben correcciones (solo la última release).
+
+## Lista de comprobación para endurecer un despliegue HTTP
+
+Recórrela en orden; los últimos puntos dan por hechos los primeros.
+
+1. **Ejecuta la última release, verificada.** Solo la última recibe correcciones, y la firma es la mitad de la verificación que se suele saltar.
+2. **Elige el listener.** Un socket unix para un proxy en la misma máquina; si no, una dirección loopback. Nunca una dirección comodín que internet alcance sin un proxy.
+3. **Termina TLS**, en el proxy o con `--tls-cert` y `--tls-key`.
+4. **Declara el nombre** que usan los clientes con `--public-url`, para que el guardián de host lo acepte.
+5. **Nombra el proxy** con `--trusted-proxies` y `--trusted-proxy-header` juntos, y solo el proxy, para que los límites por llamante y la telemetría vean a los llamantes y no al proxy.
+6. **Decide quién puede llamar.** El servidor no autentica a nadie; si el endpoint no debe estar abierto a cualquiera que lo alcance, autentica en el proxy.
+7. **Deja `--trusted-origins` vacío** salvo que lo necesite un cliente de navegador, y entonces nombra su origen exacto. Nunca `*` en un endpoint público, y nunca CORS en el proxy y en el servidor a la vez.
+8. **Deja `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES` sin fijar.** Si necesitas un mirror privado, nómbralo en `LIBGEN_MIRROR` en su lugar, sabiendo que eso levanta el nivel de direcciones privadas para todas las URL de descarga y redirecciones que sigue el cliente de catálogo. Sin un mirror privado, nombra solo hosts públicos y conserva el nivel estricto.
+9. **Deja `LIBGEN_MCP_SERVER_FETCH` en su valor remoto por defecto** salvo que la dirección de salida sea solo tuya.
+10. **Mantén los límites activos**, y dimensiona `--max-inflight-per-client` y `LIBGEN_MCP_ACTION_TIMEOUT` para los llamantes que esperas.
+11. **Saca las claves de las líneas de órdenes.** `LIBGEN_MCP_ANNAS_KEY`, `LIBGEN_MCP_CORE_KEY` y `LIBGEN_MCP_UNPAYWALL_EMAIL` van en el entorno o en un fichero dotenv que solo pueda leer la cuenta del servicio.
+12. **Deja `--pprof-addr` sin fijar** en producción.
+13. **Mantén `LIBGEN_MCP_TELEMETRY_IDENTITY=none`** si la telemetría está encendida, salvo que tengas un motivo y una base legal para registrar a los llamantes.
+14. **Ejecuta la imagen tal como se publica**, con su usuario no root y con la comprobación de salud que declara.

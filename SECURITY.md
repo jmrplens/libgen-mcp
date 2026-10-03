@@ -55,7 +55,7 @@ wanted:
 - **Untrusted remote content escaping its bounds.** Record titles, authors,
   descriptions and extracted document text all come from external sites. They
   are rendered into Markdown tool results through the escaping helpers in
-  `internal/tools/markdown.go`, and are explicitly labelled as untrusted data so
+  `internal/toolutil/markdown.go`, and are explicitly labelled as untrusted data so
   a model treats them as data rather than instructions. A way to break out of a
   table cell or a code fence, or to strip that labelling, is a vulnerability.
 - **Prompt injection reaching the client as instructions.** If externally
