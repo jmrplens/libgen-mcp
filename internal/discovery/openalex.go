@@ -238,13 +238,17 @@ func openAlexWorkToResult(w *openAlexWork) (DiscoveryResult, bool) {
 }
 
 // openAlexDOI strips the resolver prefix OpenAlex writes every DOI under, leaving
-// the bare identifier the download and get_details tools take.
+// the bare identifier the download and get_details tools take. The resolver is
+// recognized by its host whatever the scheme or a dx. label in front of it, and a
+// "doi:" prefix is dropped too.
 func openAlexDOI(raw string) string {
 	doi := strings.TrimSpace(raw)
-	for _, prefix := range []string{"https://doi.org/", "http://doi.org/", "doi:"} {
-		if len(doi) >= len(prefix) && strings.EqualFold(doi[:len(prefix)], prefix) {
-			return strings.TrimSpace(doi[len(prefix):])
-		}
+	const doiScheme, resolverHost = "doi:", "doi.org/"
+	if len(doi) >= len(doiScheme) && strings.EqualFold(doi[:len(doiScheme)], doiScheme) {
+		return strings.TrimSpace(doi[len(doiScheme):])
+	}
+	if i := strings.Index(strings.ToLower(doi), resolverHost); i > 0 && strings.Contains(doi[:i], "://") {
+		return strings.TrimSpace(doi[i+len(resolverHost):])
 	}
 	return doi
 }

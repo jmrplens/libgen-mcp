@@ -279,6 +279,14 @@ func TestOpenAlexWorkToResult(t *testing.T) {
 			want: DiscoveryResult{Origin: "openalex", DOI: "10.1/x"}, wantOK: true,
 		},
 		{
+			name: "a dx resolver", work: openAlexWork{DOI: "https://DX.DOI.ORG/10.1/x"},
+			want: DiscoveryResult{Origin: "openalex", DOI: "10.1/x"}, wantOK: true,
+		},
+		{
+			name: "doi.org without a scheme is left alone", work: openAlexWork{DOI: "doi.org/10.1/x"},
+			want: DiscoveryResult{Origin: "openalex", DOI: "doi.org/10.1/x"}, wantOK: true,
+		},
+		{
 			name: "a pdf at a closed location", work: openAlexWork{DOI: "10.1/x", BestOALocation: &openAlexLocation{PDFURL: "https://h/x.pdf"}},
 			want: DiscoveryResult{Origin: "openalex", DOI: "10.1/x"}, wantOK: true,
 		},

@@ -481,7 +481,7 @@ func TestOpenAlexSendsTheKeyAndReportsTheBudget(t *testing.T) {
 // TestOpenAlexBudgetDefaultsToTheSharedOne checks a source built without a budget
 // reports to the process-wide one, which is what the chain builds.
 func TestOpenAlexBudgetDefaultsToTheSharedOne(t *testing.T) {
-	if got := (openalexSource{}).budgetOrShared(); got != openalex.Shared() {
+	if (openalexSource{}).budgetOrShared() != openalex.Shared() {
 		t.Error("a source with no budget did not report to openalex.Shared")
 	}
 }
