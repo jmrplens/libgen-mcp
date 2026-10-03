@@ -220,12 +220,18 @@ sudo systemctl restart libgen-mcp
 
 <Aside type="caution" title="No --shutdown">
 	No uses `libgen-mcp --shutdown` con un servicio supervisado. Pide a todas las
-	instancias del binario en la máquina que salgan y mata lo que queda a los
-	cinco segundos, diga lo que diga `--drain-delay`, y systemd cuenta esa muerte
-	como un fallo y vuelve a arrancar la unidad. Con las unidades de arriba, mató
-	el servidor a mitad de drenaje y systemd lo reinició una vez. La opción existe
-	para instancias que nadie supervisa, como una arrancada por el lanzador npm de
-	un cliente de escritorio o por un paquete `.mcpb`.
+	instancias del binario en la máquina que salgan, y la instancia que termina
+	queda parada, no reiniciada: la actualización es `systemctl restart`. Lo que
+	`--shutdown` espera es el drenaje de la propia instancia. Lee `--drain-delay`
+	de su línea de órdenes, o `LIBGEN_MCP_DRAIN_DELAY` de su entorno (en Linux, lo
+	que requiere `sudo` para una unidad que corre como otro usuario), y solo mata
+	lo que siga vivo pasado ese retraso más 10 segundos para la fase de cierre.
+	Una instancia sin drenaje se mata a los cinco segundos. Hasta la 2.1.0 mataba
+	a los cinco segundos dijera lo que dijera `--drain-delay`, y con las unidades
+	de arriba systemd contaba esa muerte como un fallo y volvía a arrancar la
+	unidad. La opción existe para instancias que nadie supervisa, como una
+	arrancada por el lanzador npm de un cliente de escritorio o por un paquete
+	`.mcpb`.
 </Aside>
 
 ### Comprobarlo desde fuera

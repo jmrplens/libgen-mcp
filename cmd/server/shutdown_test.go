@@ -5,11 +5,14 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/shirou/gopsutil/v4/process"
+
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 )
 
 // helperEnv marks a re-exec of this test binary as the child a shutdown case
@@ -31,13 +34,14 @@ func TestHelperProcess(t *testing.T) {
 	os.Exit(0)
 }
 
-// startHelper spawns one child and returns a handle to it.
-func startHelper(t *testing.T) *processHandle {
+// startHelper spawns one child, with env added to its environment, and returns
+// a handle to it.
+func startHelper(t *testing.T, env ...string) *processHandle {
 	t.Helper()
 
 	//nolint:gosec // this test binary, re-executed
 	cmd := exec.CommandContext(context.Background(), os.Args[0], "-test.run=TestHelperProcess")
-	cmd.Env = append(os.Environ(), helperEnv+"=1")
+	cmd.Env = append(append(os.Environ(), helperEnv+"=1"), env...)
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("starting the helper: %v", err)
 	}
@@ -87,6 +91,96 @@ func TestRunShutdownTerminatesAPeer(t *testing.T) {
 
 	if running, _ := helper.IsRunning(); running {
 		t.Error("the peer is still running after --shutdown returned")
+	}
+}
+
+// TestRunShutdownWaitsForADrainingPeer reads the drain off a real peer's
+// environment, which is where a systemd unit's Environment= puts it, and says
+// how long it will wait. The peer exits on the signal at once, so the wait it
+// announces is never spent: the poll ends it.
+func TestRunShutdownWaitsForADrainingPeer(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("another process's environment is read from procfs, which only Linux has")
+	}
+	helper := startHelper(t, config.EnvName("DRAIN_DELAY")+"=1s")
+	withProcessList(t, func() ([]*processHandle, error) { return []*processHandle{helper}, nil })
+
+	var stderr bytes.Buffer
+	start := time.Now()
+	if got := runShutdown(&stderr); got != 0 {
+		t.Fatalf("exit = %d, want 0 (%s)", got, stderr.String())
+	}
+	want := "waiting up to " + (time.Second + httpShutdownTimeout + shutdownExitMargin).String()
+	if !strings.Contains(stderr.String(), want) {
+		t.Errorf("stderr = %q, want it to say %q", stderr.String(), want)
+	}
+	if strings.Contains(stderr.String(), "force-killed") {
+		t.Errorf("stderr = %q, want the peer to exit on its own", stderr.String())
+	}
+	if elapsed := time.Since(start); elapsed > shutdownGracePeriod {
+		t.Errorf("runShutdown took %s for a peer that exited on the signal, want the poll to end the wait", elapsed)
+	}
+}
+
+// TestPeerGrace is the wait for one peer, from its command line and its
+// environment.
+func TestPeerGrace(t *testing.T) {
+	drain := config.EnvName("DRAIN_DELAY")
+	budget := httpShutdownTimeout + shutdownExitMargin
+	for _, tc := range []struct {
+		name string
+		args []string
+		env  map[string]string
+		want time.Duration
+	}{
+		{name: "no drain keeps the fast default", args: []string{"--http", ":8080"}, want: shutdownGracePeriod},
+		{name: "a typed drain", args: []string{"--drain-delay", "10s"}, want: 10*time.Second + budget},
+		{name: "a typed drain with an equals sign", args: []string{"-drain-delay=1m"}, want: time.Minute + budget},
+		{name: "a drain from the environment", env: map[string]string{drain: " 30s "}, want: 30*time.Second + budget},
+		{name: "the flag beats the environment", args: []string{"--drain-delay=1s"}, env: map[string]string{drain: "1m"}, want: time.Second + budget},
+		{name: "a zero drain", args: []string{"--drain-delay=0"}, want: shutdownGracePeriod},
+		{name: "a drain that does not parse", env: map[string]string{drain: "soon"}, want: shutdownGracePeriod},
+		{name: "a drain past the cap", args: []string{"--drain-delay=1h"}, want: maxShutdownGrace},
+		{name: "a positional argument is not a flag", args: []string{"--", "--drain-delay=1m"}, want: shutdownGracePeriod},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := peerGrace(tc.args, tc.env); got != tc.want {
+				t.Errorf("peerGrace(%v, %v) = %s, want %s", tc.args, tc.env, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestShutdownGraceIsTheLongestPeer waits for the slowest peer, and gives a
+// peer whose command line cannot be read the default rather than guessing.
+func TestShutdownGraceIsTheLongestPeer(t *testing.T) {
+	peers := []*processHandle{{Pid: 1}, {Pid: 2}, {Pid: 3}, {Pid: 4}}
+	cmdlines := map[int32][]string{
+		1: {"libgen-mcp", "--drain-delay", "5s"},
+		2: {"libgen-mcp", "--http", ":8080"},
+		4: {},
+	}
+	envs := map[int32]map[string]string{2: {config.EnvName("DRAIN_DELAY"): "20s"}}
+	cmdline := func(p *processHandle) ([]string, error) {
+		args, ok := cmdlines[p.Pid]
+		if !ok {
+			return nil, os.ErrPermission
+		}
+		return args, nil
+	}
+	environ := func(pid int32) (map[string]string, error) {
+		if env, ok := envs[pid]; ok {
+			return env, nil
+		}
+		return nil, os.ErrPermission
+	}
+
+	want := 20*time.Second + httpShutdownTimeout + shutdownExitMargin
+	if got := shutdownGrace(peers, cmdline, environ); got != want {
+		t.Errorf("shutdownGrace() = %s, want %s from the peer draining for 20s", got, want)
+	}
+	if got := shutdownGrace(nil, cmdline, environ); got != shutdownGracePeriod {
+		t.Errorf("shutdownGrace(no peers) = %s, want %s", got, shutdownGracePeriod)
 	}
 }
 

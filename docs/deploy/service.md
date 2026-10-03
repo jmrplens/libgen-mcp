@@ -261,11 +261,15 @@ keeps running from its own copy until the restart. `libgen-mcp --version` on the
 the `version` field of `GET /health` afterwards, confirm the swap.
 
 **Do not use `libgen-mcp --shutdown` on a supervised service.** It asks every instance of the
-binary on the machine to exit and kills what is left after five seconds, whatever
-`--drain-delay` says, and systemd counts that kill as a failure and starts the unit again. Run
-under the units above, it force-killed the server mid-drain and systemd restarted it once. The
-flag exists for instances nothing supervises, such as one started by a desktop client's npm
-launcher or `.mcpb` bundle.
+binary on the machine to exit, and an instance it ends is stopped, not restarted: the upgrade is
+`systemctl restart`. What `--shutdown` waits for is the instance's own drain. It reads
+`--drain-delay` off the instance's command line, or `LIBGEN_MCP_DRAIN_DELAY` from its environment
+(on Linux, which takes `sudo` for a unit running as another user), and kills only what is still
+running after that delay plus 10 seconds for the shutdown phase; an instance with no drain is
+killed after five seconds. Up to 2.1.0 it killed after five seconds whatever `--drain-delay`
+said, and under the units above systemd counted the kill as a failure and started the unit
+again. The flag exists for instances nothing supervises, such as one started by a desktop
+client's npm launcher or `.mcpb` bundle.
 
 ### Checking it from outside
 
