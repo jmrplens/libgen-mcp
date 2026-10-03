@@ -2,12 +2,14 @@ package libgen
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -239,6 +241,64 @@ func TestEuropePMCResolveMalformed(t *testing.T) {
 	s := europePMCSource{http: search.Client(), searchBase: search.URL}
 	if _, err := s.Resolve(context.Background(), Item{DOI: "10.1/x"}); err == nil {
 		t.Fatal("Resolve() should fail on a malformed JSON response")
+	}
+}
+
+// TestEuropePMCResolveDeclinesARetractedPublication drives the case the dataset's
+// own flag misses. Both fixtures were recorded on 2026-10-03 for
+// 10.1038/s41531-026-01395-8: Europe PMC types it "retracted publication", while
+// the PMC dataset's only version carries is_retracted false and an open-access
+// PDF. The article must be declined as a clean miss, and the bucket never asked.
+func TestEuropePMCResolveDeclinesARetractedPublication(t *testing.T) {
+	search := europePMCSearchServer(t, "europepmc_retracted.json", http.StatusOK, nil)
+	defer search.Close()
+	var asked atomic.Int32
+	bucket := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		asked.Add(1)
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer bucket.Close()
+
+	s := europePMCSource{http: search.Client(), searchBase: search.URL, bucketBase: bucket.URL}
+	_, err := s.Resolve(context.Background(), Item{DOI: "10.1038/s41531-026-01395-8"})
+	assertCleanMiss(t, err)
+	if err == nil || !strings.Contains(err.Error(), "retracted") {
+		t.Errorf("Resolve() error = %v, want it to say the article is retracted", err)
+	}
+	if n := asked.Load(); n != 0 {
+		t.Errorf("the bucket was asked %d time(s) for a retracted article", n)
+	}
+
+	// The bucket's own record of the same article, which is why the Europe PMC
+	// signal is read: the version flag alone would have served it.
+	var meta pmcOAMeta
+	if decErr := json.Unmarshal(pmcOAFixture(t, "pmcoa_meta_retracted_unflagged.json"), &meta); decErr != nil {
+		t.Fatalf("decoding the recorded metadata: %v", decErr)
+	}
+	if meta.IsRetracted || !meta.IsPMCOpenAccess || meta.PDFURL == "" {
+		t.Errorf("the recorded metadata no longer shows the gap this test is about: %+v", meta)
+	}
+}
+
+// TestEuropePMCResultRetracted pins how the lite result's publication type is read.
+func TestEuropePMCResultRetracted(t *testing.T) {
+	cases := []struct {
+		name    string
+		pubType string
+		want    bool
+	}{
+		{name: "recorded retraction", pubType: "retracted publication; research-article; journal article", want: true},
+		{name: "any case and spacing", pubType: "Journal Article;Retracted Publication ", want: true},
+		{name: "a retraction notice is not itself retracted", pubType: "retraction of publication; journal article", want: false},
+		{name: "ordinary article", pubType: "research-article; journal article", want: false},
+		{name: "absent", pubType: "", want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := (europePMCResult{PubType: tc.pubType}).retracted(); got != tc.want {
+				t.Errorf("retracted(%q) = %t, want %t", tc.pubType, got, tc.want)
+			}
+		})
 	}
 }
 

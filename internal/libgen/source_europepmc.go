@@ -64,6 +64,23 @@ type europePMCResult struct {
 	IsOpenAccess string `json:"isOpenAccess"`
 	InEPMC       string `json:"inEPMC"`
 	HasPDF       string `json:"hasPDF"`
+	// PubType is the "; "-joined publication-type list of the lite result, which
+	// carries "retracted publication" for a retracted article.
+	PubType string `json:"pubType"`
+}
+
+// retracted reports whether Europe PMC types the record as a retracted
+// publication. It is the article-level signal: the PMC dataset's per-version
+// is_retracted flag was measured false on PMC13421471, a version whose own
+// title reads "RETRACTED ARTICLE", while Europe PMC's pubType for the same DOI
+// said "retracted publication".
+func (r europePMCResult) retracted() bool {
+	for t := range strings.SplitSeq(r.PubType, ";") {
+		if strings.EqualFold(strings.TrimSpace(t), "retracted publication") {
+			return true
+		}
+	}
+	return false
 }
 
 // Name identifies the Europe PMC source.
@@ -82,10 +99,16 @@ func (s europePMCSource) Supports(it Item) bool { return it.DOI != "" }
 // full text is actually held here, and isOpenAccess=Y so serving it is within this
 // source's open-access-only remit. Europe PMC holds plenty of full text it may not
 // redistribute freely, so the OA flag is a license check, not a redundant one.
+//
+// A record Europe PMC types as a retracted publication is declined outright,
+// whatever its flags say, so a retracted article is never handed back as a paper.
 func (s europePMCSource) Resolve(ctx context.Context, it Item) (Resolved, error) {
 	rec, err := s.lookup(ctx, it.DOI)
 	if err != nil {
 		return Resolved{}, err
+	}
+	if rec.retracted() {
+		return Resolved{}, notIndexed(fmt.Errorf("europepmc: %q is a retracted publication, so it is not served", it.DOI))
 	}
 	if rec.PMCID == "" || !strings.EqualFold(rec.InEPMC, "Y") || !strings.EqualFold(rec.IsOpenAccess, "Y") {
 		return Resolved{}, notIndexed(fmt.Errorf("europepmc: %q is indexed but has no open-access full text", it.DOI))

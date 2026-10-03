@@ -58,8 +58,14 @@ type pmcOAListing struct {
 type pmcOAMeta struct {
 	// IsManuscript marks an author manuscript rather than the published version.
 	IsManuscript bool `json:"is_manuscript"`
-	// IsRetracted marks a retracted version, which is never served.
+	// IsRetracted marks a retracted version. It is not reliable on its own: it
+	// was measured false on a version titled "RETRACTED ARTICLE", which is why
+	// Resolve also reads Europe PMC's publication type.
 	IsRetracted bool `json:"is_retracted"`
+	// IsPMCOpenAccess marks a version in the PMC Open Access Subset. A version
+	// outside it (an author manuscript released for text mining only) is not
+	// served, so the open-access claim holds for the file actually returned.
+	IsPMCOpenAccess bool `json:"is_pmc_openaccess"`
 	// PDFURL is the s3:// address of the PDF, present only when the publisher's
 	// license lets PMC distribute one.
 	PDFURL string `json:"pdf_url"`
@@ -70,12 +76,15 @@ type pmcOAMeta struct {
 // Europe PMC's own PDF routes (/backend/ptpmcrender.fcgi and
 // /articles/<pmcid>?pdf=render) answer every automated client with a Cloudflare
 // challenge since 2026-10, so the bytes are taken from the dataset NCBI publishes
-// for exactly this kind of reuse instead. The published version is preferred over
-// an author manuscript, and a retracted version is never offered.
+// for exactly this kind of reuse instead. Only a version in the PMC Open Access
+// Subset is offered, the published version is preferred over an author
+// manuscript, and an article any of whose versions is flagged retracted is not
+// offered at all (pmcOACandidates).
 //
-// An article the dataset does not hold, or holds without a PDF, is a clean miss:
-// both are answers about this article. A bucket that lists a PDF and then does not
-// serve it is the service failing, which is unavailability.
+// An article the dataset does not hold, holds without an open-access PDF, or
+// flags as retracted is a clean miss: each is an answer about this article. A
+// bucket that lists a PDF and then does not serve it is the service failing,
+// which is unavailability.
 func (s europePMCSource) pdfURL(ctx context.Context, pmcid string) (string, error) {
 	versions, err := s.pmcOAVersions(ctx, pmcid)
 	if err != nil {
@@ -84,7 +93,7 @@ func (s europePMCSource) pdfURL(ctx context.Context, pmcid string) (string, erro
 	if len(versions) == 0 {
 		return "", notIndexed(fmt.Errorf("europepmc: the PMC open-access dataset holds no copy of %s", pmcid))
 	}
-	candidates, err := s.pmcOACandidates(ctx, versions)
+	candidates, err := s.pmcOACandidates(ctx, pmcid, versions)
 	if err != nil {
 		return "", err
 	}
@@ -157,29 +166,69 @@ func pmcOAVersionPrefixes(pmcid string, listing pmcOAListing) []string {
 	return out
 }
 
+// pmcOAVersionMeta is one version's prefix together with its metadata.
+type pmcOAVersionMeta struct {
+	// version is the version prefix, such as "PMC4991899.1".
+	version string
+	// meta is what the version's metadata JSON says about it.
+	meta pmcOAMeta
+}
+
 // pmcOACandidates reads each version's metadata and returns the HTTPS URLs of the
 // PDFs worth offering: published versions first, then author manuscripts, each
-// group in the order the versions were given. A retracted version or one without
-// a PDF contributes nothing.
-func (s europePMCSource) pmcOACandidates(ctx context.Context, versions []string) ([]string, error) {
+// group in the order the versions were given (highest number first, which is the
+// newest when the journal itself versions the article).
+//
+// A version outside the PMC Open Access Subset or without a PDF contributes
+// nothing. A retracted flag on any version declines the whole article, since a
+// retraction is a statement about the work rather than about one file of it. A
+// version whose metadata cannot be read is skipped, and that failure is returned
+// only when no version yielded a candidate, so it is never mistaken for an
+// answer about the article.
+func (s europePMCSource) pmcOACandidates(ctx context.Context, pmcid string, versions []string) ([]string, error) {
+	metas, lastErr := s.pmcOAReadVersions(ctx, versions)
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	var published, manuscripts []string
-	for _, v := range versions {
-		var meta pmcOAMeta
-		fetch := jsonFetch{client: s.http, source: "europepmc", subject: v, maxBody: pmcOAMaxMetaBody}
-		if err := fetch.get(ctx, s.bucket()+"/"+v+"/"+v+".json", &meta); err != nil {
-			return nil, err
+	for _, vm := range metas {
+		if vm.meta.IsRetracted {
+			return nil, notIndexed(fmt.Errorf("europepmc: the PMC dataset marks %s retracted, so it is not served", pmcid))
 		}
-		u, ok := pmcOAObjectURL(s.bucket(), meta.PDFURL, v)
-		if !ok || meta.IsRetracted {
+		u, ok := pmcOAObjectURL(s.bucket(), vm.meta.PDFURL, vm.version)
+		if !ok || !vm.meta.IsPMCOpenAccess {
 			continue
 		}
-		if meta.IsManuscript {
+		if vm.meta.IsManuscript {
 			manuscripts = append(manuscripts, u)
 		} else {
 			published = append(published, u)
 		}
 	}
-	return append(published, manuscripts...), nil
+	published = append(published, manuscripts...)
+	if len(published) == 0 && lastErr != nil {
+		return nil, lastErr
+	}
+	return published, nil
+}
+
+// pmcOAReadVersions fetches the metadata of every version it can, returning the
+// ones it read and the last failure among the ones it could not.
+func (s europePMCSource) pmcOAReadVersions(ctx context.Context, versions []string) ([]pmcOAVersionMeta, error) {
+	var (
+		metas   []pmcOAVersionMeta
+		lastErr error
+	)
+	for _, v := range versions {
+		var meta pmcOAMeta
+		fetch := jsonFetch{client: s.http, source: "europepmc", subject: v, maxBody: pmcOAMaxMetaBody}
+		if err := fetch.get(ctx, s.bucket()+"/"+v+"/"+v+".json", &meta); err != nil {
+			lastErr = err
+			continue
+		}
+		metas = append(metas, pmcOAVersionMeta{version: v, meta: meta})
+	}
+	return metas, lastErr
 }
 
 // pmcOAObjectURL maps the metadata's s3:// PDF address onto the bucket's HTTPS
