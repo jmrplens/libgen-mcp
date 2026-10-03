@@ -176,17 +176,17 @@ Deja sin cambios las secciones `[Unit]`, `[Install]` y de endurecimiento de la u
 
 ### El límite de descriptores dimensiona el proceso
 
-El proceso retiene como mucho un número de llamadas derivado de su `RLIMIT_NOFILE` duro, leído una vez al arrancar, y mantiene como mucho la mitad de ese número en sesiones con estado. La aritmética, de `cmd/server/held.go`: se deja libre un octavo del límite, se reserva un descriptor para cada una de las 64 ranuras de descarga, y cada llamada retenida cuenta como once descriptores, su abanico más ancho.
+El proceso retiene como mucho un número de llamadas derivado de su `RLIMIT_NOFILE` duro, leído una vez al arrancar, y mantiene como mucho la mitad de ese número en sesiones con estado. La aritmética, de `cmd/server/held.go`: se deja libre un octavo del límite, se reserva un descriptor para cada una de las 64 ranuras de descarga, y cada llamada retenida cuenta como doce descriptores, su abanico más ancho.
 
 ```text
-llamadas retenidas = (límite - límite/8 - 64) / 11
+llamadas retenidas = (límite - límite/8 - 64) / 12
 ```
 
 | `LimitNOFILE=`                       | Llamadas retenidas | Sesiones con estado |
 | ------------------------------------ | -----------------: | ------------------: |
-| `1024`                               |                 75 |                  37 |
-| `65536` (las unidades de arriba)     |               5207 |                2603 |
-| sin fijar (`1024:524288` de systemd) |              41698 |               20849 |
+| `1024`                               |                 69 |                  34 |
+| `65536` (las unidades de arriba)     |               4773 |                2386 |
+| sin fijar (`1024:524288` de systemd) |              38224 |               19112 |
 
 Con `LimitNOFILE=` sin fijar, un servicio de systemd recibe un límite blando de 1024 y uno duro de 524288, y el runtime de Go sube el blando hasta el duro, así que la cifra sigue a 524288. No hay opción para el techo: el límite de descriptores es el ajuste. Elígelo pensando en la memoria, porque una llamada retenida también cuesta memoria, y acótala con `MemoryMax=` si el host es compartido. La línea de arranque confirma lo que recibió el proceso:
 
@@ -341,7 +341,7 @@ NSSM para una aplicación enviándole primero Ctrl+C, que el servidor toma como 
 
 Tres cosas cambian en Windows:
 
-- **Los techos del proceso quedan fijos en la cifra de 1024 descriptores**, 75 llamadas retenidas y 37 sesiones. Windows no tiene un `RLIMIT_NOFILE` que leer, y ninguna opción lo sube.
+- **Los techos del proceso quedan fijos en la cifra de 1024 descriptores**, 69 llamadas retenidas y 34 sesiones. Windows no tiene un `RLIMIT_NOFILE` que leer, y ninguna opción lo sube.
 - **`--http-socket-mode` se rechaza.** Una ruta de socket unix en `--http` funciona en un Windows actual, pero la plataforma no puede imponer un modo de fichero sobre ella, así que pedirlo detiene el servidor al arrancar en lugar de prometer permisos que no tendría.
 - **`--healthcheck` solo lee la línea de órdenes de la instancia.** Fuera de Linux no puede ver el entorno de otro proceso, así que un listener configurado solo con variables se sondea dándole el destino directamente, `libgen-mcp --healthcheck http://127.0.0.1:8080/health`. Lo mismo vale en macOS.
 

@@ -39,7 +39,7 @@ head:
             "name": "¿Qué puede hacer libgen-mcp?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Permite a un asistente de IA encontrar un libro o un artículo, citarlo y leerlo. search consulta Library Genesis y otros nueve proveedores, get_details devuelve los metadatos de un registro con citas BibTeX y RIS, download guarda el archivo por md5, DOI o ISBN a través de una cadena de veintiuna fuentes, y read extrae, busca y resume la estructura del PDF, EPUB o texto guardado. Los proveedores de búsqueda extra son Anna's Archive, arXiv, OpenAlex, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC, todos sin clave, fusionados y deduplicados con los resultados del catálogo. Por defecto (auto) solo se consultan cuando el catálogo no devuelve nada. Un artículo pedido por DOI pasa primero por los proveedores de acceso abierto, después por el enlace del propio editor, y solo entonces por Sci-Hub y SciDB. Los mirrors se descubren y se cachean automáticamente, con failover, reintentos con enfriamiento y un limitador de tasa compartido, de modo que el servidor sigue funcionando aunque algunos mirrors caigan o vuelvan."
+              "text": "Permite a un asistente de IA encontrar un libro o un artículo, citarlo y leerlo. search consulta Library Genesis y otros diez proveedores, get_details devuelve los metadatos de un registro con citas BibTeX y RIS, download guarda el archivo por md5, DOI o ISBN a través de una cadena de veintiuna fuentes, y read extrae, busca y resume la estructura del PDF, EPUB o texto guardado. Los proveedores de búsqueda extra son Anna's Archive, arXiv, OpenAlex, Europe PMC, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC, todos sin clave, fusionados y deduplicados con los resultados del catálogo. Por defecto (auto) solo se consultan cuando el catálogo no devuelve nada. Un artículo pedido por DOI pasa primero por los proveedores de acceso abierto, después por el enlace del propio editor, y solo entonces por Sci-Hub y SciDB. Los mirrors se descubren y se cachean automáticamente, con failover, reintentos con enfriamiento y un limitador de tasa compartido, de modo que el servidor sigue funcionando aunque algunos mirrors caigan o vuelvan."
             }
           },
           {
@@ -70,7 +70,7 @@ head:
       }
 template: splash
 hero:
-  tagline: Pídele un libro o un artículo a tu asistente de IA y consíguelo — encontrado, citado, descargado y leído en lenguaje natural. Búsqueda federada sobre el catálogo de Library Genesis y otros nueve proveedores, veintiuna fuentes de descarga con el acceso abierto primero. Sin cuenta, sin clave de API, un solo binario estático.
+  tagline: Pídele un libro o un artículo a tu asistente de IA y consíguelo — encontrado, citado, descargado y leído en lenguaje natural. Búsqueda federada sobre el catálogo de Library Genesis y otros diez proveedores, veintiuna fuentes de descarga con el acceso abierto primero. Sin cuenta, sin clave de API, un solo binario estático.
   actions:
     - text: Primeros pasos
       link: /libgen-mcp/es/getting-started/
@@ -151,9 +151,9 @@ libgen-mcp es un servidor Model Context Protocol (MCP) de código abierto, escri
 
 ### ¿Qué puede hacer libgen-mcp?
 
-Permite a un asistente de IA encontrar un libro o un artículo, citarlo y leerlo. `search` consulta Library Genesis y otros nueve proveedores, `get_details` devuelve los metadatos de un registro con citas BibTeX y RIS, `download` guarda el archivo por md5, DOI o ISBN a través de una cadena de veintiuna fuentes, y `read` extrae, busca y resume la estructura del PDF, EPUB o texto guardado.
+Permite a un asistente de IA encontrar un libro o un artículo, citarlo y leerlo. `search` consulta Library Genesis y otros diez proveedores, `get_details` devuelve los metadatos de un registro con citas BibTeX y RIS, `download` guarda el archivo por md5, DOI o ISBN a través de una cadena de veintiuna fuentes, y `read` extrae, busca y resume la estructura del PDF, EPUB o texto guardado.
 
-Los proveedores de búsqueda extra son Anna's Archive, arXiv, OpenAlex, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC, todos sin clave, fusionados y deduplicados con los resultados del catálogo. Por defecto (`auto`) solo se consultan cuando el catálogo no devuelve nada. Un artículo pedido por DOI pasa primero por los proveedores de acceso abierto, después por el enlace del propio editor, y solo entonces por Sci-Hub y SciDB. Los mirrors se descubren y se cachean automáticamente, con failover, reintentos con enfriamiento y un limitador de tasa compartido, de modo que el servidor sigue funcionando aunque algunos mirrors caigan o vuelvan.
+Los proveedores de búsqueda extra son Anna's Archive, arXiv, OpenAlex, Europe PMC, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC, todos sin clave, fusionados y deduplicados con los resultados del catálogo. Por defecto (`auto`) solo se consultan cuando el catálogo no devuelve nada. Un artículo pedido por DOI pasa primero por los proveedores de acceso abierto, después por el enlace del propio editor, y solo entonces por Sci-Hub y SciDB. Los mirrors se descubren y se cachean automáticamente, con failover, reintentos con enfriamiento y un limitador de tasa compartido, de modo que el servidor sigue funcionando aunque algunos mirrors caigan o vuelvan.
 
 ### ¿Necesito una cuenta, clave de API o token para usar libgen-mcp?
 

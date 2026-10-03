@@ -59,8 +59,8 @@ An eighth of the limit is left spare for the idle process, `/health` and the con
 refused. Sixty-four descriptors are reserved for the process-wide ceiling on byte-moving calls
 (`download` and `read`), each of which opens a file on top of its connection. What remains is
 divided by what one held call can cost at most, which is an escalated `search`: the caller's
-connection, the catalog request, and one connection for each of the nine searchers beyond the
-catalog, eleven in all. The divisor is counted from the provider list, so a provider added in a
+connection, the catalog request, and one connection for each of the ten searchers beyond the
+catalog, twelve in all. The divisor is counted from the provider list, so a provider added in a
 release lowers the ceiling with it. Both results are at least `1`.
 
 A worked example, for a container started with `--ulimit nofile=4096`:
@@ -69,19 +69,19 @@ A worked example, for a container started with `--ulimit nofile=4096`:
 spare       4096 / 8               =  512
 reserved    64 byte-moving slots   =   64
 left        4096 - 512 - 64        = 3520
-held calls  3520 / 11              =  320
-sessions    320 / 2                =  160   (counted only with --stateless=false)
+held calls  3520 / 12              =  293
+sessions    293 / 2                =  146   (counted only with --stateless=false)
 ```
 
 The Go runtime raises the soft limit to the hard one before `main`, so the figure follows the
-**hard** limit: 75 held calls under 1024, 41698 under the 524288 a default systemd service gets.
+**hard** limit: 69 held calls under 1024, 38224 under the 524288 a default systemd service gets.
 The startup line `process ceilings` prints what this process was given
 (`held_calls_per_process`, `descriptor_limit`, `descriptor_limit_source`), and the full table,
 the refusal (`503`, `Retry-After: 30`, `This server is busy. Retry later.`) and what counts as a
 held call are in
 [HTTP server mode → What the whole process may hold](../http-server-mode.md#what-the-whole-process-may-hold).
 
-Eleven descriptors is the bound, not the typical cost: a search still queued for its catalog token
+Twelve descriptors is the bound, not the typical cost: a search still queued for its catalog token
 holds only its caller's connection. That is why the ceiling is rarely what a deployment meets
 first.
 

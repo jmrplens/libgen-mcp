@@ -196,17 +196,17 @@ after `usermod` so its workers pick the group up. Its configuration is in
 The process holds at most a number of calls derived from its hard `RLIMIT_NOFILE`, read once at
 startup, and keeps at most half that number in stateful sessions. The arithmetic, from
 `cmd/server/held.go`: an eighth of the limit is left spare, one descriptor is set aside for each
-of the 64 download slots, and each held call is counted at eleven descriptors, its widest fan-out.
+of the 64 download slots, and each held call is counted at twelve descriptors, its widest fan-out.
 
 ```text
-held calls = (limit - limit/8 - 64) / 11
+held calls = (limit - limit/8 - 64) / 12
 ```
 
 | `LimitNOFILE=`                  | Held calls | Stateful sessions |
 | ------------------------------- | ---------: | ----------------: |
-| `1024`                          |         75 |                37 |
-| `65536` (the units above)       |       5207 |              2603 |
-| unset (systemd's `1024:524288`) |      41698 |             20849 |
+| `1024`                          |         69 |                34 |
+| `65536` (the units above)       |       4773 |              2386 |
+| unset (systemd's `1024:524288`) |      38224 |             19112 |
 
 With `LimitNOFILE=` unset, a systemd service gets a soft limit of 1024 and a hard limit of
 524288, and the Go runtime raises the soft limit to the hard one, so the figure follows 524288.
@@ -412,7 +412,7 @@ the maintained alternative and is configured the same way, in an XML file beside
 
 Three things differ on Windows:
 
-- **The process ceilings are fixed at the 1024-descriptor figure**, 75 held calls and 37
+- **The process ceilings are fixed at the 1024-descriptor figure**, 69 held calls and 34
   sessions. Windows has no `RLIMIT_NOFILE` to read, and no flag raises it.
 - **`--http-socket-mode` is refused.** A unix-socket `--http` path works on current Windows, but
   the platform cannot enforce a file mode on it, so asking for one stops the server at startup
