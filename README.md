@@ -303,13 +303,13 @@ by registering the tools and prompts for real and walking the tree, and
 | Discovery providers      |     8 |
 | `LIBGEN_MCP_*` variables |    57 |
 | Go packages              |    52 |
-| Test files               |   265 |
+| Test files               |   266 |
 
 | Test surface         | Files |
 | -------------------- | ----: |
 | unit (internal)      |   107 |
 | unit (cmd)           |   102 |
-| HTTP end-to-end      |    32 |
+| HTTP end-to-end      |    33 |
 | stdio end-to-end     |    11 |
 | collector acceptance |     7 |
 | live end-to-end      |     6 |

@@ -325,7 +325,7 @@ libgen-mcp --healthcheck 127.0.0.1:8080
 
 This is **not** `cmd/probe`, which is a maintainer's live diagnostic against the real mirrors.
 
-Its neighbour is `libgen-mcp --shutdown`, which asks every other instance of this binary on the machine to exit and kills what is left after five seconds. It exists for the upgrade: swapping the binary under an npm launcher, a `.mcpb` bundle or a plain `cp` leaves the old process holding a download slot, a temp-cache entry and the listener the new one wants. Binary names are compared with the platform suffix stripped, so `libgen-mcp-linux-amd64` matches `libgen-mcp` and neither matches somebody else's process on a shared host.
+Its neighbour is `libgen-mcp --shutdown`, which asks every other instance of this binary on the machine to exit and kills what is left after five seconds, or after its drain plus the shutdown phase when it has a `--drain-delay` ([`--shutdown`](/libgen-mcp/cli/#operations)). It exists for the upgrade: swapping the binary under an npm launcher, a `.mcpb` bundle or a plain `cp` leaves the old process holding a download slot, a temp-cache entry and the listener the new one wants. Binary names are compared with the platform suffix stripped, so `libgen-mcp-linux-amd64` matches `libgen-mcp` and neither matches somebody else's process on a shared host.
 
 ## One image, two transports
 

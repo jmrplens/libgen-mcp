@@ -105,6 +105,9 @@ type listenerFlags struct {
 	basePath  string
 	tlsCert   string
 	transport string
+	// drainDelay is the peer's --drain-delay as typed, which --shutdown reads
+	// to know how long a draining peer will take to exit.
+	drainDelay string
 	// utility is set when the command line is a healthcheck, a shutdown, a
 	// version or a help invocation rather than a server.
 	utility bool
@@ -153,6 +156,8 @@ func parseListenerFlags(args []string) listenerFlags {
 			f.tlsCert = takeValue()
 		case "transport":
 			f.transport = takeValue()
+		case "drain-delay":
+			f.drainDelay = takeValue()
 		case "healthcheck", "shutdown", "version", "h", "help":
 			f.utility = true
 		}
@@ -570,13 +575,15 @@ func environCaveat(f listenerFlags, err error) string {
 }
 
 // listenerEnvNames is the set environUnder keeps: the variables that decide
-// where, and whether, HTTP is served.
+// where, and whether, HTTP is served, and how long the listener drains before
+// it closes, which is what --shutdown waits out.
 func listenerEnvNames() map[string]bool {
 	return map[string]bool{
-		config.EnvName("HTTP_ADDR"): true,
-		config.EnvName("HTTP_PATH"): true,
-		config.EnvName("TLS_CERT"):  true,
-		config.EnvName("TRANSPORT"): true,
+		config.EnvName("HTTP_ADDR"):   true,
+		config.EnvName("HTTP_PATH"):   true,
+		config.EnvName("TLS_CERT"):    true,
+		config.EnvName("TRANSPORT"):   true,
+		config.EnvName("DRAIN_DELAY"): true,
 	}
 }
 

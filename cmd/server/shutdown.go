@@ -3,8 +3,9 @@
 // It exists for the upgrade: swapping the binary under an npm launcher, a .mcpb
 // bundle or a plain `cp` leaves the old process running, and this one holds a
 // download slot, a temp-cache entry and its TTL, and a listener the new one
-// wants. `libgen-mcp --shutdown` asks them to go and, after five seconds, makes
-// them.
+// wants. `libgen-mcp --shutdown` asks them to go and, once they have had the
+// time they asked for, makes them: five seconds for an instance that does not
+// drain, and its own drain plus the shutdown phase for one that does.
 //
 // It shares its process lookup with --healthcheck, which is the reason both
 // land together: the dependency on a process list is the cost, and one consumer
@@ -21,6 +22,8 @@ import (
 	"time"
 
 	"github.com/shirou/gopsutil/v4/process"
+
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 )
 
 // shutdownGracePeriod is how long runShutdown waits after asking before it
@@ -32,6 +35,64 @@ import (
 // instance, and the force-kill is what bounds the rest — an upgrade that waited
 // out every straggler would be an upgrade that appears to hang.
 const shutdownGracePeriod = 5 * time.Second
+
+// shutdownExitMargin is what a draining peer is given beyond its drain and its
+// shutdown phase, for closing the remaining connections and exiting.
+const shutdownExitMargin = 2 * time.Second
+
+// maxShutdownGrace is the longest runShutdown ever waits: the longest drain
+// the server accepts, its shutdown phase and the margin. A peer whose command
+// line names a longer drain was refused at startup, so it is not running.
+const maxShutdownGrace = maxDrainDelay + httpShutdownTimeout + shutdownExitMargin
+
+// peerGrace is how long a peer started with args and env is waited for after
+// it is asked to exit.
+//
+// A peer that drains sleeps out --drain-delay with /health answering 503
+// before it begins closing, and the close itself may take httpShutdownTimeout
+// with a stream open. Killing it at five seconds, which is what this command
+// used to do, ended a systemd service mid-drain — and systemd, seeing a kill
+// rather than an exit, restarted it. So such a peer gets its whole budget. One
+// that does not drain keeps the five seconds it always had: the wait ends the
+// moment the last peer exits, so the grace only matters for one that is stuck.
+//
+// The drain is read the way the peer read it: the flag on its command line
+// first, then LIBGEN_MCP_DRAIN_DELAY from its environment. A value that does
+// not parse is one the peer refused, so it is not draining on it.
+func peerGrace(args []string, env map[string]string) time.Duration {
+	value := parseListenerFlags(args).drainDelay
+	if value == "" {
+		value = env[config.EnvName("DRAIN_DELAY")]
+	}
+	delay, err := time.ParseDuration(strings.TrimSpace(value))
+	if err != nil || delay <= 0 {
+		return shutdownGracePeriod
+	}
+	return min(delay+httpShutdownTimeout+shutdownExitMargin, maxShutdownGrace)
+}
+
+// shutdownGrace is the longest grace any of peers needs, read through
+// cmdline and environ. A peer whose command line cannot be read gets the
+// default, since nothing says it drains.
+func shutdownGrace(peers []*processHandle, cmdline func(*processHandle) ([]string, error), environ func(int32) (map[string]string, error)) time.Duration {
+	grace := shutdownGracePeriod
+	for _, p := range peers {
+		args, err := cmdline(p)
+		if err != nil || len(args) == 0 {
+			continue
+		}
+		// An unreadable environment is an empty one: the command line is still
+		// read, and the default stands for what it does not say.
+		env, _ := environ(p.Pid)
+		grace = max(grace, peerGrace(args[1:], env))
+	}
+	return grace
+}
+
+// peerCmdline reads a peer's command line, argv[0] included.
+func peerCmdline(p *processHandle) ([]string, error) {
+	return p.CmdlineSlice()
+}
 
 // processHandle is one running process as the process list reports it.
 //
@@ -62,13 +123,19 @@ func runShutdown(stderr io.Writer) int {
 	}
 	fmt.Fprintf(stderr, "shutdown: found %d running instance(s)\n", len(peers))
 
+	// Read before the signal, while every peer is still there to be read.
+	grace := shutdownGrace(peers, peerCmdline, peerEnviron)
+	if grace > shutdownGracePeriod {
+		fmt.Fprintf(stderr, "shutdown: waiting up to %s for a draining instance to exit\n", grace)
+	}
+
 	for _, p := range peers {
 		// SIGTERM on Unix, TerminateProcess on Windows: the same signal the
 		// drain path is written for.
 		_ = p.Terminate()
 	}
 
-	deadline := time.After(shutdownGracePeriod)
+	deadline := time.After(grace)
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
 	for {
