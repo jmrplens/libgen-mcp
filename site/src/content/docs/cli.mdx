@@ -1,6 +1,170 @@
 ---
 title: Command-line flags
 description: "Every flag the libgen-mcp binary accepts, with its default, its environment variable, the transport it applies to and what it refuses."
+mentions:
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+chips:
+  - text: "Every flag has a variable"
+  - text: "Invalid values stop startup"
+  - text: "Exit codes"
+  - text: "Configuration"
+    href: "/libgen-mcp/configuration/"
+datePublished: "2026-10-03"
+head:
+  - tag: title
+    content: "libgen-mcp command-line flags, defaults and exit codes"
 ---
 
-This page will list every flag the `libgen-mcp` binary accepts, with its default, the environment variable that sets the same thing where there is one, the transport it applies to, and what happens when it is given a value it cannot honour. Settings that exist only as environment variables are in [Configuration](/libgen-mcp/configuration/).
+Every flag the `libgen-mcp` binary accepts, grouped by what it configures. Each table gives the flag's type and default, the variable that sets the same thing, and the transport it applies to. Settings that exist only as environment variables (timeouts, download limits, credentials, telemetry) are in [Configuration](/libgen-mcp/configuration/); how to choose values for a deployment is in [HTTP server mode](/libgen-mcp/http-server-mode/).
+
+## How flags are spelled
+
+The binary parses its command line with Go's standard `flag` package, so:
+
+- `-flag` and `--flag` are the same flag.
+- A value goes after a space or an `=`: `--http :8080` and `--http=:8080` are the same.
+- **A boolean takes its value only after `=`.** `--stateless=false` turns stateless mode off; `--stateless false` turns it **on** and leaves `false` as a stray argument that is ignored. The booleans are `--stateless`, `--json-response`, `--version`, `--healthcheck` and `--shutdown`. (`--allow-private-addresses` is a string that holds a boolean, so it takes either spelling.)
+- A duration is a Go duration: `90s`, `5m`, `1h30m`.
+- `-h` or `--help` prints the flag list and exits `0`. An unknown flag, or a value its type cannot parse (`--drain-delay soon`), prints the list and exits `2`.
+- Positional arguments are ignored, except the target `--healthcheck` may be given.
+
+## Where a setting comes from
+
+Every setting a flag configures can also come from the environment, and the environment can be filled from a dotenv file. The first of these that sets it wins:
+
+1. **A flag you typed** on the command line.
+2. **The process environment**: what the MCP client's `env` block, the shell, `docker run -e`, a compose file's `environment:` or a unit's `Environment=` passed.
+3. **The file `--env-file` names** (or `LIBGEN_MCP_ENV_FILE`, which the flag writes).
+4. **`~/.libgen-mcp.env`**, in the home directory of the user running the server.
+5. **The built-in default** in the tables below.
+
+A dotenv file never overrides a variable that is already set, which is what puts both files below the environment. A `.env` in the working directory is never read, for the reason [Configuration](/libgen-mcp/configuration/) gives.
+
+Two families of flags reach that order from opposite ends, with the same result:
+
+- **Server settings** (`--log-level`, `--download-dir`, `--sources`, `--mirror`, `--allow-private-addresses`, `--pprof-addr`, `--env-file`) **write their variable** before anything reads configuration, and only when you typed them, so an exported variable survives a flag you did not pass.
+- **HTTP settings** are **filled in from their variable** when you did not type them, after the dotenv files are loaded. A variable that is set but blank counts as unset, and one that does not parse stops startup with exit `1`, naming the variable and the flag it fills.
+
+For the refusals below, a value taken from the environment counts as asked for, exactly like a typed one: exporting `LIBGEN_MCP_RATE_LIMIT_RPS` on a loopback listener is refused the same way `--rate-limit-rps` is. The variable for an HTTP flag is `LIBGEN_MCP_` plus the flag in upper case with dashes as underscores, except `--http`, whose variable is `LIBGEN_MCP_HTTP_ADDR`.
+
+## Transport and listener
+
+| Flag                       | Type   | Default               | Variable                            | Applies to | What it does                                                                                                                                                                                                                                                                                                                                          |
+| -------------------------- | ------ | --------------------- | ----------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--transport`              | string | _(empty)_             | `LIBGEN_MCP_TRANSPORT`              | both       | Which transport to serve: `stdio`, `http` or `auto`. Empty keeps the original rule: a `--http` value means HTTP, none means stdio. `auto` reads it off standard input, and only `/dev/null` (a container started without `-i`) means HTTP. See [Architecture](/libgen-mcp/architecture/#which-transport-and-who-decides). Any other value is refused. |
+| `--http`                   | string | _(empty)_             | `LIBGEN_MCP_HTTP_ADDR`              | both       | Serve streamable HTTP here instead of stdio. A TCP address (`:8080`, `127.0.0.1:8080`) or a unix socket path (`/run/mcp-libgen.sock`). A value containing a path separator is a socket and anything else is TCP, so a bare `mcp.sock` is read as a host. Under `--transport http` with no `--http`, the server binds `:8080`.                         |
+| `--http-path`              | string | `/`                   | `LIBGEN_MCP_HTTP_PATH`              | HTTP       | URL path every route is mounted under: the endpoint, its `/mcp` alias, `/health` and the server cards. Set it when a reverse proxy forwards its prefix instead of stripping it. Refused when it carries a query, a fragment, a `..` segment or a percent-escape.                                                                                      |
+| `--http-socket-mode`       | string | `0660`                | `LIBGEN_MCP_HTTP_SOCKET_MODE`       | HTTP       | Permission mode of the unix socket `--http` names, as octal with or without a leading `0`. A value other than the default is refused when `--http` is a TCP address, and on a platform without file modes (Windows).                                                                                                                                  |
+| `--stateless`              | bool   | `true`                | `LIBGEN_MCP_STATELESS`              | HTTP       | Serve sessionless streamable HTTP: no `Mcp-Session-Id`, every POST self-contained, `GET` and `DELETE` on the endpoint answer `405`. `--stateless=false` restores the legacy session transport, which negotiates protocol `2025-11-25` or older (see [Compatibility](/libgen-mcp/compatibility/#mcp-protocol-versions)).                               |
+| `--json-response`          | bool   | `false`               | `LIBGEN_MCP_JSON_RESPONSE`          | HTTP       | Answer with `application/json` bodies instead of `text/event-stream`.                                                                                                                                                                                                                                                                                 |
+| `--max-request-body-bytes` | int    | `0` (the SDK's 4 MiB) | `LIBGEN_MCP_MAX_REQUEST_BODY_BYTES` | HTTP       | Largest request body accepted; a larger one gets `413`. A negative value is refused, because it would lift the cap. Stdio has its own bound for the same thing, `LIBGEN_MCP_STDIO_MAX_LINE_BYTES`, with the same 4 MiB default.                                                                                                                       |
+
+Where each listener shape fits, what the socket mode means and what happens to a file already at the socket path: [HTTP server mode → Where the server listens](/libgen-mcp/http-server-mode/#where-the-server-listens).
+
+## Identity and proxies
+
+| Flag                     | Type   | Default   | Variable                          | Applies to | What it does                                                                                                                                                                                                                                                                                                                           |
+| ------------------------ | ------ | --------- | --------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--public-url`           | string | _(empty)_ | `LIBGEN_MCP_PUBLIC_URL`           | HTTP       | The origin clients reach this deployment at, e.g. `https://mcp.example.org/libgen`. Its host is the one the server answers to in a proxied `Host` header, and it becomes the `remotes` entry of the discovery card. Refused unless it is an `http` or `https` URL with a host.                                                         |
+| `--trusted-proxies`      | string | _(empty)_ | `LIBGEN_MCP_TRUSTED_PROXIES`      | HTTP       | Comma-separated addresses and CIDR ranges of the proxies whose `--trusted-proxy-header` is believed, e.g. `127.0.0.1/32`. The literal `unix` trusts every peer of a unix-socket listener, and is refused on a TCP address. Requires `--trusted-proxy-header`.                                                                          |
+| `--trusted-proxy-header` | string | _(empty)_ | `LIBGEN_MCP_TRUSTED_PROXY_HEADER` | HTTP       | Header a trusted proxy fills with the client's address, e.g. `X-Real-IP` or `X-Forwarded-For`. Read only from a peer `--trusted-proxies` names. Requires `--trusted-proxies`, and is refused when it is not a valid header name. Without the pair, every caller is told apart by the address its connection comes from.                |
+| `--trusted-origins`      | string | _(empty)_ | `LIBGEN_MCP_TRUSTED_ORIGINS`      | HTTP       | Comma-separated browser origins allowed to call cross-origin, as `scheme://host[:port]`, e.g. `https://claude.ai`. Empty refuses every cross-origin browser request, and `*` accepts any, with a startup warning. A malformed entry is refused rather than dropped. Clients that are not browsers send no `Origin` and are unaffected. |
+
+`--trusted-proxies` and `--trusted-proxy-header` go together or not at all: a header nobody is trusted to set is text the caller wrote, and a proxy list whose header is never read charges every caller to the proxy. Which identity a deployment has and what it decides is [HTTP server mode → What identity this deployment has](/libgen-mcp/http-server-mode/#what-identity-this-deployment-has).
+
+## TLS
+
+| Flag         | Type   | Default   | Variable              | Applies to | What it does                                                                                                                                                                                                                                                                                                                                |
+| ------------ | ------ | --------- | --------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--tls-cert` | string | _(empty)_ | `LIBGEN_MCP_TLS_CERT` | HTTP       | PEM certificate file. Setting it makes this process terminate TLS instead of a proxy in front, and turns on `Strict-Transport-Security`. The pair is loaded at startup, so a missing or mismatched file stops it, and reloaded on the next handshake after either file changes. `--healthcheck` also reads it, to verify an `https` target. |
+| `--tls-key`  | string | _(empty)_ | `LIBGEN_MCP_TLS_KEY`  | HTTP       | PEM private key for `--tls-cert`. Both or neither: half a pair is refused.                                                                                                                                                                                                                                                                  |
+
+Renewal without a restart: [HTTP server mode → A renewal is two file writes](/libgen-mcp/http-server-mode/#a-renewal-is-two-file-writes-not-a-restart).
+
+## Limits
+
+| Flag                        | Type  | Default                               | Variable                             | Applies to | What it does                                                                                                                                                                                                                                                                                                                                                                                                        |
+| --------------------------- | ----- | ------------------------------------- | ------------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--rate-limit-rps`          | float | `10`                                  | `LIBGEN_MCP_RATE_LIMIT_RPS`          | HTTP       | Inbound requests per second allowed from one charged address, for the methods that reach a mirror or spend this process. `0` or less turns it off. On a listener whose every peer is this machine (a loopback bind or a unix socket) it is off unless `--trusted-proxies` names the proxy in front, and setting it there explicitly is refused rather than downgraded, because every caller would share one budget. |
+| `--rate-limit-burst`        | int   | `40`                                  | `LIBGEN_MCP_RATE_LIMIT_BURST`        | HTTP       | How many of those requests one charged address may make at once before the refill rate applies.                                                                                                                                                                                                                                                                                                                     |
+| `--max-inflight-per-client` | int   | `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS` | `LIBGEN_MCP_MAX_INFLIGHT_PER_CLIENT` | HTTP       | How many `download` or `read` calls one charged address may have in flight. Unset, it is the whole download semaphore. `0` or less turns the per-caller bound off. Behind a proxy it is only as real as the identity under it, so it needs the trusted-proxy pair too.                                                                                                                                              |
+
+These are per caller, and they sit inside process-wide ceilings that no flag sets, derived from the descriptor limit at startup. All of it is explained in [HTTP server mode → What one caller may ask for](/libgen-mcp/http-server-mode/#what-one-caller-may-ask-for) and the two sections after it.
+
+## Sessions and shutdown
+
+| Flag                  | Type     | Default | Variable                       | Applies to | What it does                                                                                                                                                                                                                                                                                                                                     |
+| --------------------- | -------- | ------- | ------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--drain-delay`       | duration | `0`     | `LIBGEN_MCP_DRAIN_DELAY`       | HTTP       | How long `GET /health` answers `503 draining` on shutdown before the listener closes. `0` closes at once. Refused outside `0` to `5m`. See [Draining before the listener closes](/libgen-mcp/http-server-mode/#draining-before-the-listener-closes).                                                                                             |
+| `--http-idle-timeout` | duration | `0`     | `LIBGEN_MCP_HTTP_IDLE_TIMEOUT` | HTTP       | Close a kept-alive connection that has gone this long between requests. `0` closes none. It bounds the gap between requests, never a response being written, so an SSE stream is not what it reclaims. A negative value is refused.                                                                                                              |
+| `--session-timeout`   | duration | `30m`   | `LIBGEN_MCP_SESSION_TIMEOUT`   | HTTP       | Close a legacy stateful session that has gone this long without a request. `0` never closes one. Applies to `--stateless=false` only: setting it under the default stateless transport is refused rather than ignored. Refused outside `0` to `24h`. See [Closing what has gone idle](/libgen-mcp/http-server-mode/#closing-what-has-gone-idle). |
+
+## Server settings
+
+These configure the server itself rather than a listener, so they apply on both transports. Each one is a flag spelling of a variable documented in [Configuration](/libgen-mcp/configuration/), and is validated there: a value the server cannot use stops startup with exit `1`. The one exception is `--env-file`, whose file is optional input rather than a setting.
+
+| Flag                        | Type   | Default              | Variable                             | Applies to | What it does                                                                                                                                                                                                                                                                                                           |
+| --------------------------- | ------ | -------------------- | ------------------------------------ | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--log-level`               | string | `info`               | `LIBGEN_MCP_LOG_LEVEL`               | both       | Logging verbosity: `debug`, `info`, `warn` or `error`. Logs go to stderr as JSON.                                                                                                                                                                                                                                      |
+| `--download-dir`            | string | `~/Downloads`        | `LIBGEN_MCP_DOWNLOAD_DIR`            | both       | Directory `download` saves into. Created if missing and probed for writability at startup.                                                                                                                                                                                                                             |
+| `--sources`                 | string | _(empty: all)_       | `LIBGEN_MCP_SOURCES`                 | both       | Comma-separated download sources to enable. The chain keeps its own fixed order whatever order you list them in. An unknown name is refused. See [Sources](/libgen-mcp/sources/).                                                                                                                                      |
+| `--mirror`                  | string | _(empty: discovery)_ | `LIBGEN_MIRROR`                      | both       | A LibGen mirror to try first, e.g. `https://libgen.li`. The discovered mirrors remain the fallback. Must be an `http` or `https` URL.                                                                                                                                                                                  |
+| `--allow-private-addresses` | string | `false`              | `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES` | both       | Permit outbound connections to loopback, link-local, private and carrier-grade NAT addresses: `true` or `false`. A host named in `LIBGEN_MIRROR` or `LIBGEN_MCP_SCIHUB_HOSTS` is already exempt, and cloud metadata addresses stay refused either way. Refused on an HTTP listener other machines can reach.           |
+| `--env-file`                | string | _(empty)_            | `LIBGEN_MCP_ENV_FILE`                | both       | Load settings from this dotenv file as well as `~/.libgen-mcp.env`, ranked above it. Give an absolute path: a relative one follows the working directory the client chose. A file that cannot be read is logged at `WARN` and the server starts without it.                                                            |
+| `--pprof-addr`              | string | _(empty: nothing)_   | `LIBGEN_MCP_PPROF_ADDR`              | both       | Serve Go's profiling handlers (`net/http/pprof`) on a listener of their own at this address, e.g. `127.0.0.1:6060`. Refused unless the host is `localhost` or a loopback IP, because a heap profile is a copy of the process's memory, per-call secrets included. `:6060` is refused because it binds every interface. |
+
+The credentials (`LIBGEN_MCP_ANNAS_KEY`, `LIBGEN_MCP_CORE_KEY`, `LIBGEN_MCP_UNPAYWALL_EMAIL`) have no flags, deliberately: a secret on a command line is visible to every user on the machine through `ps` and lands in shell history.
+
+## Operations
+
+These answer and exit before any configuration is read and before anything is bound, so `--env-file` and the variables have no effect on them.
+
+| Flag            | Type | Default | Variable | Applies to | What it does                                                                                                                                                                                                                                                                                                                                                                                                      |
+| --------------- | ---- | ------- | -------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--version`     | bool | `false` | _(none)_ | neither    | Print `libgen-mcp <version> (commit <sha>)` on stdout and exit `0`.                                                                                                                                                                                                                                                                                                                                               |
+| `--healthcheck` | bool | `false` | _(none)_ | neither    | Find the running instance on this machine, read its listener off its own command line and environment, ask its `/health`, and exit `0` when it answers, `1` when it does not, `2` when a given target does not parse. A target may be given after the flag: an `http(s)` URL, `unix:<path>` or `host:port`. See [Probing an instance](/libgen-mcp/http-server-mode/#probing-an-instance-that-is-already-running). |
+| `--shutdown`    | bool | `false` | _(none)_ | neither    | Ask every other instance of this binary on the machine to exit (`SIGTERM`, or `TerminateProcess` on Windows), kill what is left after 5 seconds, and exit `0`. Finding none is success, and only a process list that cannot be read exits `1`. For an upgrade that swaps the binary while the old process still holds a listener and a download slot.                                                             |
+
+```bash
+libgen-mcp --version
+libgen-mcp --healthcheck                                # discover the local instance
+libgen-mcp --healthcheck http://127.0.0.1:8080/health   # or name it
+libgen-mcp --healthcheck unix:/run/mcp-libgen.sock
+libgen-mcp --shutdown
+```
+
+## HTTP flags on a stdio server
+
+Every flag is registered whatever the transport, so a stdio server accepts the HTTP ones and parses them. A valid value does not stop it: the server names each such flag once on stderr and serves anyway, because none of them is dangerous to ignore on a pipe with one client on the other end.
+
+```json
+{
+	"level": "WARN",
+	"msg": "this flag is read by the HTTP transport only, so it has no effect on a stdio server",
+	"flag": "--rate-limit-rps",
+	"source": "command line",
+	"variable": "LIBGEN_MCP_RATE_LIMIT_RPS"
+}
+```
+
+- A flag typed on the command line is a `WARN`. Under `--transport auto`, or when the value came from a variable, it is an `INFO`, because there the setting was written for either transport.
+- `--max-request-body-bytes` is a `WARN` from any source, and its line names the stdio setting that does the same job, `LIBGEN_MCP_STDIO_MAX_LINE_BYTES`, as `on_stdio_set`.
+- A `--http` address given to a run that serves stdio is a `WARN` too, or an `INFO` under `--transport auto`, where the address answers the HTTP case stdin did not pick.
+- **Validation still runs first.** A value that is invalid, or contradicts another setting, stops a stdio server exactly as it stops an HTTP one: `--session-timeout` under the default stateless mode, `--trusted-proxy-header` without `--trusted-proxies`, a `--tls-cert` naming a missing file.
+
+Which flags count as HTTP-only is a table in `cmd/server/http_only_flags.go`, and a test fails when a flag is registered without being classified, so a new HTTP flag cannot be ignored on stdio in silence. The fix for each line is in [Troubleshooting](/libgen-mcp/troubleshooting/#a-stdio-server-says-a-flag-has-no-effect).
+
+## Exit codes
+
+| Code  | When                                                                                                                                                                                                                                            |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`   | A clean shutdown: the client closed stdin, or the first `SIGINT`/`SIGTERM` drained and stopped the server. Also `--version`, `--help`, a healthy `--healthcheck` and `--shutdown`.                                                              |
+| `1`   | The server refused to start or stopped on an error: an invalid or contradictory setting, a listener it could not bind. The last line on stderr is the reason. Also an unhealthy `--healthcheck`, and a `--shutdown` that cannot list processes. |
+| `2`   | The command line did not parse: an unknown flag or a value its type rejects. Also a `--healthcheck` target that does not parse.                                                                                                                 |
+| `130` | A second `SIGINT` arrived more than a second after the first, ending the process without waiting for the drain.                                                                                                                                 |
+| `143` | The same for a second `SIGTERM`.                                                                                                                                                                                                                |
+
+**A repeated stop signal within one second is the same request**, and drains like the first. One stop often arrives twice within milliseconds — a terminal's Ctrl+C reaches the whole process group, systemd signals every process in the unit, and the npm launcher relays the stop it received — and reading that copy as "stop now" would skip the drain it asked for. A signal after the window is the operator deciding not to wait: the server re-raises it on itself, so a shell reports `128` plus the signal number, and where a process cannot signal itself (Windows) it exits with that same code.
+
+The full list of startup refusals, and why each one is a refusal rather than a warning, is [HTTP server mode → What the server refuses to start with](/libgen-mcp/http-server-mode/#what-the-server-refuses-to-start-with).

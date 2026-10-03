@@ -12,6 +12,7 @@ import (
 	"maps"
 	"os"
 	"path"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -488,4 +489,79 @@ func TestExplain_NamesEveryIgnoredFlag(t *testing.T) {
 			}
 		})
 	}
+}
+
+// cliPages are the three copies of the command-line reference, relative to
+// this package.
+var cliPages = []string{
+	"../../docs/cli.md",
+	"../../site/src/content/docs/cli.mdx",
+	"../../site/src/content/docs/es/cli.mdx",
+}
+
+// cliPageFlagRow matches the flag a reference table row documents: a row that
+// opens with a backticked --name.
+var cliPageFlagRow = regexp.MustCompile("(?m)^\\| `--([a-z0-9-]+)`")
+
+// TestEveryFlagIsOnTheCLIPage holds the command-line reference to the flags
+// this binary registers, in both directions.
+//
+// The full set is the two classification tables plus the env-backed flags,
+// which [TestHTTPOnlyFlags_ClassifyEveryRegisteredFlag] already proves is every
+// registration. So a new flag fails here until each copy of the page has a row
+// for it, and a removed one fails until its row is gone. The rows are matched
+// rather than generated: the page explains each flag in prose a generator
+// cannot write, and what drifts is the set, not the wording.
+func TestEveryFlagIsOnTheCLIPage(t *testing.T) {
+	registered := registeredFlagNames()
+	for _, page := range cliPages {
+		t.Run(path.Base(path.Dir(page))+"/"+path.Base(page), func(t *testing.T) {
+			documented := documentedFlagRows(t, page)
+			for _, name := range slices.Sorted(maps.Keys(registered)) {
+				if !documented[name] {
+					t.Errorf("--%s is registered but %s has no table row for it", name, page)
+				}
+			}
+			for _, name := range slices.Sorted(maps.Keys(documented)) {
+				if !registered[name] {
+					t.Errorf("%s documents --%s, which this binary does not register", page, name)
+				}
+			}
+		})
+	}
+}
+
+// registeredFlagNames is every flag this binary registers: the two
+// classification tables and the env-backed flags, which together are the whole
+// set [TestHTTPOnlyFlags_ClassifyEveryRegisteredFlag] holds them to.
+func registeredFlagNames() map[string]bool {
+	registered := map[string]bool{}
+	for name := range httpOnlyFlags {
+		registered[name] = true
+	}
+	for name := range stdioFlags {
+		registered[name] = true
+	}
+	for _, entry := range envBackedFlags {
+		registered[entry.flagName] = true
+	}
+	return registered
+}
+
+// documentedFlagRows returns the flags page has a table row for, failing on a
+// flag documented twice.
+func documentedFlagRows(t *testing.T, page string) map[string]bool {
+	t.Helper()
+	raw, err := os.ReadFile(page)
+	if err != nil {
+		t.Fatalf("reading %s: %v", page, err)
+	}
+	documented := map[string]bool{}
+	for _, match := range cliPageFlagRow.FindAllStringSubmatch(string(raw), -1) {
+		if documented[match[1]] {
+			t.Errorf("%s has two rows for --%s", page, match[1])
+		}
+		documented[match[1]] = true
+	}
+	return documented
 }

@@ -1,6 +1,159 @@
 ---
 title: Compatibilidad
 description: "Las plataformas y arquitecturas para las que se compila libgen-mcp, las versiones del protocolo MCP que negocia y lo que necesita cada canal de instalación."
+mentions:
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+chips:
+  - text: "Seis plataformas, glibc y musl"
+  - text: "Stdio y streamable HTTP"
+  - text: "Texto servido apto para gateways"
+  - text: "Instalación"
+    href: "/libgen-mcp/es/install/overview/"
+datePublished: "2026-10-03"
+head:
+  - tag: title
+    content: "Compatibilidad de libgen-mcp: plataformas, protocolo MCP y clientes"
 ---
 
-Esta página enumerará los sistemas operativos y arquitecturas para los que se compila cada release, las bibliotecas de C sobre las que funciona el binario, las versiones del protocolo MCP que negocia el servidor, los transportes que puede usar cada cliente y las versiones mínimas de herramientas que necesita cada canal de instalación. Cómo instalarlo en cada uno está en la [instalación](/libgen-mcp/es/install/overview/).
+Para qué se compila cada release, qué necesita además cada canal de instalación, qué versiones del protocolo MCP y qué capacidades habla el servidor, y en qué puede confiar un cliente o un gateway que esté delante. Cómo instalarlo en cada plataforma está en la [instalación](/libgen-mcp/es/install/overview/).
+
+## Plataformas
+
+Cada release se compila para seis destinos, más un binario universal de macOS que funde los dos de macOS:
+
+| Sistema | amd64 (x86-64) | arm64 (AArch64) | Versión mínima          |
+| ------- | -------------- | --------------- | ----------------------- |
+| Linux   | sí             | sí              | kernel 3.2              |
+| macOS   | sí             | sí              | macOS 13 Ventura        |
+| Windows | sí             | sí              | Windows 10, Server 2016 |
+
+Las versiones mínimas son los suelos de la propia cadena de herramientas Go 1.27, no una decisión de este proyecto. La de macOS está medida: el enlazador estampa `minos 13.0` en el `LC_BUILD_VERSION` de cada binario de macOS, y macOS se niega a arrancar un binario que pide un sistema más nuevo que él. Lo que no está en esta tabla (FreeBSD, 32 bits, RISC-V) hay que compilarlo desde el código con `go build`, que funciona porque el servidor no usa cgo.
+
+### Glibc y musl
+
+Los binarios **no nombran ninguna biblioteca de C ni ningún cargador dinámico**. Todas las compilaciones de este repositorio —los binarios de la release, la imagen y `make build`— son `CGO_ENABLED=0` y, a propósito, **sin** `-buildmode=pie`, así que los ficheros ELF no llevan `PT_INTERP` y funcionan sin cambios sobre glibc, sobre musl (Alpine), en una imagen distroless y sobre `scratch`.
+
+Es una propiedad vigilada, no una esperanza. PIE hace que un binario de Go se enlace dinámicamente contra el cargador de la máquina que compila, y una vez publicó una imagen `linux/arm64` que no podía arrancar en absoluto y unos binarios `linux/amd64` de la release que pedían `/lib64/ld-linux-x86-64.so.2`. Por eso el `Dockerfile` busca una ruta de cargador en el binario que acaba de compilar y hace fallar la compilación, y el validador de la release de npm hace lo mismo sobre los bytes empaquetados. En los otros dos sistemas el flag no cambiaría nada: Go ya genera binarios con ASLR para Windows y macOS.
+
+Las consecuencias se ven en los paquetes:
+
+- Los wheels de linux de PyPI llevan etiquetas `musllinux` junto a las `manylinux`, y se instalan en `python:3.13-alpine`.
+- Ningún paquete de npm declara un `libc`, así que npm no se salta el paquete de linux en Alpine.
+- La imagen de Docker se construye sobre Alpine y ejecuta el mismo binario estático.
+
+## Canales de instalación
+
+Todos los canales salvo `go install` llevan el mismo binario de la release; ninguno compila nada ni ejecuta un script al instalar.
+
+| Canal                                                                   | Linux amd64 | Linux arm64 | macOS amd64 | macOS arm64 | Windows amd64 | Windows arm64 | Necesita en la máquina                      |
+| ----------------------------------------------------------------------- | ----------- | ----------- | ----------- | ----------- | ------------- | ------------- | ------------------------------------------- |
+| [Binario de la release](/libgen-mcp/es/install/binary/)                 | sí          | sí          | sí          | sí          | sí            | sí            | Nada                                        |
+| [npm](/libgen-mcp/es/install/npm/) (`@jmrp.io/libgen-mcp`)              | sí          | sí          | sí          | sí          | sí            | sí            | Node.js 18 o posterior                      |
+| [PyPI](/libgen-mcp/es/install/pypi/) (`libgen-mcp`)                     | sí          | sí          | sí          | sí          | sí            | sí            | Python 3.9 o posterior, para pip, pipx o uv |
+| [NuGet](/libgen-mcp/es/install/nuget/) (`libgen-mcp`)                   | sí          | sí          | sí          | sí          | sí            | sí            | SDK de .NET 10 (`dotnet tool` o `dnx`)      |
+| [Homebrew](/libgen-mcp/es/install/homebrew/) (`jmrplens/tap`)           | sí          | sí          | sí          | sí          | no            | no            | Homebrew                                    |
+| [Docker](/libgen-mcp/es/install/docker/) (`linux/amd64`, `linux/arm64`) | sí          | sí          | en una VM   | en una VM   | en una VM     | en una VM     | Cualquier runtime OCI                       |
+| [`.mcpb` de Claude Desktop](/libgen-mcp/es/install/claude-desktop/)     | sí          | sí          | sí          | sí          | sí            | emulado       | Claude Desktop (beta en Linux)              |
+| [`go install`](/libgen-mcp/es/install/binary/)                          | sí          | sí          | sí          | sí          | sí            | sí            | Go, que descarga 1.27.1 por sí mismo        |
+| [winget](/libgen-mcp/es/install/winget/)                                | —           | —           | —           | —           | pendiente     | pendiente     | Aún no publicado                            |
+
+Lo que lleva cada canal por plataforma:
+
+| Canal    | Artefacto por plataforma                                                                                                                                                                      |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Release  | `libgen-mcp-{linux,darwin,windows}-{amd64,arm64}` (`.exe` en Windows), más el `libgen-mcp` universal de macOS, todos listados en el `checksums.txt` firmado con cosign                        |
+| npm      | El lanzador `@jmrp.io/libgen-mcp` y un paquete opcional por plataforma: `-linux-x64`, `-linux-arm64`, `-darwin-x64`, `-darwin-arm64`, `-win32-x64`, `-win32-arm64`                            |
+| PyPI     | Un wheel `py3-none` por plataforma: `manylinux_2_17` + `manylinux2014` + `musllinux_1_1` para cada arquitectura de Linux, `macosx_11_0_x86_64`, `macosx_11_0_arm64`, `win_amd64`, `win_arm64` |
+| NuGet    | El paquete puntero `libgen-mcp` y un paquete por identificador de runtime: `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`, `win-x64`, `win-arm64`                                         |
+| Homebrew | Una fórmula que elige el binario de la release con `on_macos`/`on_linux` y `on_arm`/`on_intel`                                                                                                |
+| Docker   | Una imagen multiarquitectura, `ghcr.io/jmrplens/libgen-mcp` y `docker.io/jmrplens/libgen-mcp`, para `linux/amd64` y `linux/arm64`                                                             |
+| `.mcpb`  | `libgen-mcp-darwin.mcpb` (binario universal), `libgen-mcp-windows.mcpb` (amd64), `libgen-mcp-linux.mcpb` (los dos binarios de Linux y un lanzador), y el universal `libgen-mcp.mcpb`          |
+
+Notas que importan cuando una plataforma está en el límite:
+
+- **Los wheels de macOS de PyPI llevan la etiqueta `macosx_11_0`, pero el binario que contienen necesita macOS 13.** pip en macOS 11 o 12 instala el wheel, y luego la orden no arranca. Usa macOS 13 o posterior diga lo que diga la etiqueta.
+- **Windows on Arm y Claude Desktop.** El bundle `.mcpb` de Windows lleva el ejecutable amd64, que Windows on Arm ejecuta emulado. Todos los demás canales que sirven Windows tienen una compilación `arm64` nativa.
+- **Docker en macOS y Windows** ejecuta la imagen de Linux en la máquina virtual que proporciona Docker Desktop (o un equivalente), con la arquitectura de esa VM.
+- **El `.mcpb` de Linux.** El manifiesto de un bundle puede elegir un fichero por sistema operativo pero no por arquitectura, así que el bundle de Linux arranca un pequeño lanzador `/bin/sh` que elige el binario según `uname -m`. Los bundles por sistema aparecen con la release siguiente a 2.1.0. Hasta entonces, el universal `libgen-mcp.mcpb` es el que hay que descargar.
+- **`go install`** compila desde el código con tu cadena de herramientas. `go.mod` declara Go 1.27.1, y cualquier Go desde 1.21 descarga esa cadena por sí mismo salvo que `GOTOOLCHAIN=local` lo impida. El binario que produce se llama `server`, por el paquete `cmd/server`.
+- **winget** está pendiente de revisión en [microsoft/winget-pkgs#437507](https://github.com/microsoft/winget-pkgs/pull/437507).
+
+## Transportes
+
+| Transporte      | Cómo se elige                                                        | Para                                                                             |
+| --------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| stdio           | Por defecto, o `--transport stdio`                                   | Un cliente que arranca el servidor como subproceso, que son casi todos           |
+| Streamable HTTP | `--http <addr>`, o `--transport http`                                | Un cliente que se conecta a una URL, o varios clientes que comparten un servidor |
+| Cualquiera      | `--transport auto`: decide stdin (el valor por defecto de la imagen) | Una imagen de contenedor que sirve para los dos                                  |
+
+El transporte HTTP es **sin estado por defecto** y sirve `POST` en el endpoint; `--stateless=false` recupera el transporte con sesiones para un cliente que lo necesite. El transporte HTTP+SSE retirado del protocolo `2024-11-05` no se sirve: un cliente en esa revisión la habla sobre streamable HTTP o stdio. Todos los flags están en [Opciones de la línea de órdenes](/libgen-mcp/es/cli/), y la guía de despliegue HTTP es [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/).
+
+## Versiones del protocolo MCP
+
+Las versiones vienen del SDK de Go con el que se compila el servidor (`modelcontextprotocol/go-sdk` v1.8.0) y se leen de él en lugar de copiarse, así que una actualización del SDK las mueve. Lo que negocia un despliegue depende del transporte:
+
+| Revisión     | stdio | HTTP, sin estado (por defecto) | HTTP, `--stateless=false` |
+| ------------ | ----- | ------------------------------ | ------------------------- |
+| `2026-07-28` | no    | sí                             | no                        |
+| `2025-11-25` | sí    | sí                             | sí                        |
+| `2025-06-18` | sí    | sí                             | sí                        |
+| `2025-03-26` | sí    | sí                             | sí                        |
+| `2024-11-05` | sí    | sí                             | sí                        |
+
+- **`2026-07-28` es solo sin estado.** Esa revisión no tiene `initialize` ni sesión ([SEP-2575](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2575)): el cliente declara la versión en cada petición, así que solo un despliegue HTTP sin estado puede servirla.
+- **`initialize` negocia como mucho `2025-11-25`.** A un cliente que pide `2026-07-28` mediante `initialize`, en cualquier transporte, se le responde con `2025-11-25`, que es la revisión más reciente que aún tiene el handshake.
+- **Una cabecera `MCP-Protocol-Version` no admitida recibe `400` con el error JSON-RPC `-32022`**, cuyo `data.supported` enumera exactamente la columna de arriba para ese despliegue y `data.requested` repite lo que se pidió. El SDK responde a las revisiones antiguas en texto plano, que un cliente lee como «este es un servidor anterior a 2025» y vuelve al transporte SSE retirado; la respuesta estructurada es lo que le permite reintentar con una versión que funciona.
+- **Las tarjetas coinciden con el handshake.** La entrada `remotes` de la tarjeta de descubrimiento declara la misma lista, así que un despliegue con estado nunca anuncia la única revisión que rechazaría.
+
+## Capacidades anunciadas
+
+Las capacidades del handshake están **fijadas**, y cada campo es una promesa que el servidor cumple:
+
+```json
+{ "capabilities": { "tools": {}, "prompts": {} } }
+```
+
+- **Herramientas y prompts, con `listChanged: false`** (que se serializa como el objeto vacío de arriba). El catálogo queda fijo al arrancar el servidor y solo cambia con una release, así que el servidor nunca envía una notificación de cambio de lista. Con sus valores por defecto el SDK declararía `listChanged: true`, y un cliente que se lo crea abre un flujo `subscriptions/listen` que nunca se responde ni se cierra.
+- **Sin `logging`.** El logging de MCP está obsoleto desde `2026-07-28`, y el servidor registra en stderr. Si no, el SDK lo anunciaría por defecto.
+- **Sin recursos.** `resources/list`, `resources/templates/list` y `resources/read` responden con el error JSON-RPC `-32601` (método no encontrado) en lugar de con una lista vacía que sugeriría que aquí hay recursos. `resources/subscribe`, `resources/unsubscribe` y `completion/complete` responden lo mismo.
+- **Cuatro herramientas**: `search`, `get_details`, `download` y `read`. Un despliegue que no puede descargar el contenido de los ficheros, que es todo despliegue HTTP salvo que `LIBGEN_MCP_SERVER_FETCH` diga otra cosa, registra tres: falta `read`. Consulta [Herramientas](/libgen-mcp/es/tools/).
+- **Cuatro prompts**: `acquire_book`, `research_topic`, `get_paper` y `download_troubleshoot`.
+- **Los listados llevan una indicación de caché** ([SEP-2549](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549)): `tools/list` y `prompts/list` responden con `ttlMs: 3600000` y `cacheScope: "public"`.
+
+Dos tests sostienen la fijación: `TestAdvertisedCapabilitiesAreWhatThisServerServes` en `cmd/server`, y un test de extremo a extremo que ejercita `subscriptions/listen` por HTTP.
+
+## Iconos
+
+El servidor, cada herramienta y cada prompt llevan tres iconos, siempre en este orden:
+
+| Índice | Formato | Tamaño  | Tema        | Para                                     |
+| ------ | ------- | ------- | ----------- | ---------------------------------------- |
+| 0      | SVG     | `any`   | _(ninguno)_ | Clientes que aceptan `image/svg+xml`     |
+| 1      | WebP    | `16x16` | `light`     | Clientes que rechazan SVG, temas claros  |
+| 2      | WebP    | `16x16` | `dark`      | Clientes que rechazan SVG, temas oscuros |
+
+El SVG usa `currentColor`, así que una sola entrada sigue a cualquier tema. El par WebP existe porque un cliente puede admitir iconos y aun así rechazar SVG: la lista de permitidos de VS Code Copilot admite `image/webp` pero no `image/svg+xml`, y un icono solo en SVG no se veía allí. Un ráster no puede heredar un color, así que necesita una imagen por tema. El orden es un contrato publicado —la tarjeta del servidor reproduce los arrays tal cual, y un consumidor puede leer `icons[0]`— y [Arquitectura → Iconos](/libgen-mcp/es/architecture/#iconos) tiene los detalles.
+
+## Clientes
+
+Cualquier cliente MCP que hable stdio o streamable HTTP puede usar el servidor. Conviene saber algunos comportamientos antes de elegir un transporte para uno:
+
+- **La mayoría de clientes arrancan un proceso local por stdio**: Claude Code, Claude Desktop, Cursor, VS Code, LM Studio y Kiro lo hacen, y los botones de instalación del README escriben esa configuración. Las configuraciones por cliente están en [Conectar un cliente](/libgen-mcp/es/clients/).
+- **Un cliente que solo acepta una URL** necesita un despliegue HTTP: el tuyo, o el [endpoint alojado](/libgen-mcp/es/hosted/). Ahí `download` devuelve un enlace en lugar de escribir un fichero, porque un servidor remoto no puede escribir en tu disco.
+- **Los clientes basados en navegador** envían una cabecera `Origin` y se rechazan entre orígenes hasta que `--trusted-origins` nombra ese origen. Los clientes de escritorio y de línea de órdenes no envían ninguna.
+- **Una URL base que termina en `/mcp`** funciona: el endpoint responde también en su alias `/mcp`, bajo lo que monte `--http-path`.
+- **Elicitación en un despliegue sin estado.** Un cliente heredado (protocolo `2025-11-25` o anterior) sobre el transporte sin estado por defecto no se ve como capaz de elicitación, así que la pregunta de consentimiento de descarga toma su respuesta por defecto. Los clientes en `2026-07-28` preguntan y responden dentro del resultado de la herramienta y no se ven afectados. `--stateless=false` recupera el camino antiguo para los clientes heredados.
+- **Los clientes de escritorio no heredan el `PATH` de tu shell.** Dales un `command` absoluto, o instala por un canal que ponga el binario donde ellos buscan.
+
+## Gateways
+
+Todo lo que un cliente recibe de `tools/list` y `prompts/list` —cada descripción, título, descripción de esquema y argumento de prompt— es **prosa ASCII pura sin punto y coma**.
+
+La razón es un gateway: uno rechazó el alta de un proyecto hermano con `Description contains unsafe characters: ';'`, por puntos y comas que eran puntuación inglesa corriente. Un validador que habla de «caracteres inseguros» compara contra una clase de caracteres, así que ceñir el texto servido a una clase (ASCII, menos una lista corta) es la única forma de limpieza que el siguiente gateway no puede sorprender. `make check-gateway-chars` lee un intercambio real y falla ante cualquier carácter fuera de ella, así que un cambio no puede volver a introducir uno.
+
+La regla cubre la superficie servida, no los resultados: la salida de una herramienta son datos que pidió quien llama, y una cita truncada con `…` se queda como está.
+
+## Cadena de herramientas de Go
+
+El módulo es `github.com/jmrplens/libgen-mcp/v2` y necesita Go 1.27.1 para compilarse, que es la línea `go` de `go.mod`. El sufijo `/v2` es obligatorio: `go install github.com/jmrplens/libgen-mcp/cmd/server@latest` sin él resuelve la última release v1.
