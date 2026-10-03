@@ -11,7 +11,7 @@ import (
 // TestExtract_UnsupportedDJVU verifies that a .djvu file is reported as not
 // extractable with a non-empty reason.
 func TestExtract_UnsupportedDJVU(t *testing.T) {
-	c, err := Extract(context.Background(), "testdata/unsupported.djvu", Req{})
+	c, err := Extract(context.Background(), openFile(t, "testdata/unsupported.djvu"), Req{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,7 +25,7 @@ func TestExtract_UnsupportedDJVU(t *testing.T) {
 // as not extractable with a reason naming the extension, exercising the default
 // dispatch branch.
 func TestExtract_UnsupportedExtension(t *testing.T) {
-	c, err := Extract(context.Background(), "testdata/whatever.xyz", Req{})
+	c, err := Extract(context.Background(), openFile(t, "testdata/whatever.xyz"), Req{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,20 +38,18 @@ func TestExtract_UnsupportedExtension(t *testing.T) {
 }
 
 // TestExtract_UnsupportedExtensionOnAFileThatExists covers the sniff-fails branch
-// against real bytes.
+// against binary bytes.
 //
-// TestExtract_UnsupportedExtension above passes "testdata/whatever.xyz", which does
-// not exist — so sniffFormat returns "" because os.Open failed, and the branch that
-// actually reads and rejects a file's leading bytes is never reached. This writes a
-// real file with an unknown extension and unrecognizable contents, so a regression
-// in the sniffer is caught rather than masked by the missing-file shortcut.
+// TestExtract_UnsupportedExtension above reads "testdata/whatever.xyz", which is
+// plain prose. This writes a file of control bytes with an unknown extension, so
+// the sniffer is shown rejecting a binary that is no document as well as text.
 func TestExtract_UnsupportedExtensionOnAFileThatExists(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "real.xyz")
 	if err := os.WriteFile(path, []byte("\x00\x01\x02 not a document"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	c, err := Extract(context.Background(), path, Req{})
+	c, err := Extract(context.Background(), openFile(t, path), Req{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +78,7 @@ func TestExtract_ARecognizedExtensionIsTrustedOverTheContent(t *testing.T) {
 		t.Fatal(werr)
 	}
 
-	c, err := Extract(context.Background(), path, Req{})
+	c, err := Extract(context.Background(), openFile(t, path), Req{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +105,7 @@ func TestExtract_EmptyTXTIsReportedExtractable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c, err := Extract(context.Background(), path, Req{})
+	c, err := Extract(context.Background(), openFile(t, path), Req{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +128,7 @@ func TestExtract_EmptyTXTIsReportedExtractable(t *testing.T) {
 func TestExtract_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := Extract(ctx, "testdata/sample.pdf", Req{})
+	_, err := Extract(ctx, openFile(t, "testdata/sample.pdf"), Req{})
 	if err == nil {
 		t.Fatal("expected a context error, got nil")
 	}
@@ -190,7 +188,7 @@ func TestExtract_SniffsAnExtensionlessFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	nameless := writeTemp(t, "d41d8cd98f00b204e9800998ecf8427e", src)
-	c, err := Extract(context.Background(), nameless, Req{})
+	c, err := Extract(context.Background(), openFile(t, nameless), Req{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +208,7 @@ func TestExtract_SniffsAnExtensionlessFile(t *testing.T) {
 // caller is told plainly rather than handed empty text.
 func TestExtract_SniffingDoesNotRescueUnknownContent(t *testing.T) {
 	nameless := writeTemp(t, "abcdef", []byte("not a document at all"))
-	c, err := Extract(context.Background(), nameless, Req{})
+	c, err := Extract(context.Background(), openFile(t, nameless), Req{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -249,7 +247,7 @@ func TestOutlineAndSearchSniffToo(t *testing.T) {
 	}
 	nameless := writeTemp(t, "0123456789abcdef0123456789abcdef", src)
 
-	out, err := Outline(context.Background(), nameless)
+	out, err := Outline(context.Background(), openFile(t, nameless))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +258,7 @@ func TestOutlineAndSearchSniffToo(t *testing.T) {
 		t.Error("Outline() returned no entries for a bookmarked PDF")
 	}
 
-	res, err := Search(context.Background(), nameless, "the", SearchOpts{MaxMatches: 3})
+	res, err := Search(context.Background(), openFile(t, nameless), "the", SearchOpts{MaxMatches: 3})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -290,15 +288,15 @@ func TestEntryPointsAgreeOnFormat(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			chunk, cerr := Extract(context.Background(), tc.path, Req{})
+			chunk, cerr := Extract(context.Background(), openFile(t, tc.path), Req{})
 			if cerr != nil {
 				t.Fatal(cerr)
 			}
-			outline, oerr := Outline(context.Background(), tc.path)
+			outline, oerr := Outline(context.Background(), openFile(t, tc.path))
 			if oerr != nil {
 				t.Fatal(oerr)
 			}
-			search, serr := Search(context.Background(), tc.path, "the", SearchOpts{MaxMatches: 1})
+			search, serr := Search(context.Background(), openFile(t, tc.path), "the", SearchOpts{MaxMatches: 1})
 			if serr != nil {
 				t.Fatal(serr)
 			}

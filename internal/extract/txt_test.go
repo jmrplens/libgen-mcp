@@ -12,7 +12,7 @@ import (
 // TestExtract_TXT verifies that a plain-text file extracts its content and
 // reports the txt format.
 func TestExtract_TXT(t *testing.T) {
-	c, err := Extract(context.Background(), "testdata/sample.txt", Req{})
+	c, err := Extract(context.Background(), openFile(t, "testdata/sample.txt"), Req{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func TestExtract_TXT(t *testing.T) {
 // a small MaxChars truncates, sets HasMore/Truncated and the next cursor, and
 // never splits a UTF-8 rune.
 func TestExtract_TXTCharPagination(t *testing.T) {
-	c, err := Extract(context.Background(), "testdata/sample.txt", Req{Offset: 0, MaxChars: 10})
+	c, err := Extract(context.Background(), openFile(t, "testdata/sample.txt"), Req{Offset: 0, MaxChars: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestExtract_TXTOverCapMarksTruncated(t *testing.T) {
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	c, err := Extract(context.Background(), path, Req{})
+	c, err := Extract(context.Background(), openFile(t, path), Req{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestExtract_TXTOverCapMarksTruncated(t *testing.T) {
 // the file yields an empty chunk with no remaining content, rather than an
 // error or an out-of-range slice.
 func TestExtract_TXTOffsetPastEnd(t *testing.T) {
-	c, err := Extract(context.Background(), "testdata/sample.txt", Req{Offset: 1_000_000, MaxChars: 50})
+	c, err := Extract(context.Background(), openFile(t, "testdata/sample.txt"), Req{Offset: 1_000_000, MaxChars: 50})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestExtract_TXTOffsetPastEnd(t *testing.T) {
 func TestExtractTXT_ContextCancelledDirect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := extractTXT(ctx, "testdata/sample.txt", Req{}); err == nil {
+	if _, err := extractTXT(ctx, docFor(t, "testdata/sample.txt"), Req{}); err == nil {
 		t.Fatal("expected a context error, got nil")
 	}
 }
@@ -111,7 +111,7 @@ func TestExtractTXT_ReadError(t *testing.T) {
 	if err := os.Mkdir(dir, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	c, err := Extract(context.Background(), dir, Req{})
+	c, err := Extract(context.Background(), openFile(t, dir), Req{})
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -120,22 +120,5 @@ func TestExtractTXT_ReadError(t *testing.T) {
 	}
 	if !strings.Contains(c.Reason, "cannot read text file") {
 		t.Errorf("reason should note the read failure, got %q", c.Reason)
-	}
-}
-
-// TestExtract_TXTMissingFile verifies that a non-existent .txt path is reported
-// as not extractable with a reason (via the os.Open failure path) and a nil
-// error, rather than propagating a hard error to the caller.
-func TestExtract_TXTMissingFile(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "does-not-exist.txt")
-	c, err := Extract(context.Background(), path, Req{})
-	if err != nil {
-		t.Fatalf("expected nil error for a missing text file, got %v", err)
-	}
-	if c.Extractable {
-		t.Fatalf("expected not extractable, got %+v", c)
-	}
-	if !strings.Contains(c.Reason, "cannot open text file") {
-		t.Errorf("reason should note the open failure, got %q", c.Reason)
 	}
 }

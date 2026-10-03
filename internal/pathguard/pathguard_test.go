@@ -2,6 +2,7 @@ package pathguard
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -135,9 +136,21 @@ func TestRefusesASymlinkEscapingItsRoot(t *testing.T) {
 	}
 }
 
-// TestRefusesAPathThatIsNotARegularFile covers what CanonicalReadableFile adds
-// over the containment: a directory, a device node or a fifo is not a document,
-// and handing one to a reader is at best a confusing failure.
+// openReadable calls OpenReadableFile and closes whatever it returns when the
+// test ends, so a case that expects a refusal does not leak a descriptor when
+// the refusal it expects does not come.
+func openReadable(t *testing.T, path string, maxSize int64, roots Roots) (*os.File, error) {
+	t.Helper()
+	f, err := OpenReadableFile(path, maxSize, roots)
+	if f != nil {
+		t.Cleanup(func() { _ = f.Close() })
+	}
+	return f, err
+}
+
+// TestRefusesAPathThatIsNotARegularFile covers what OpenReadableFile adds over
+// the containment: a directory, a device node or a fifo is not a document, and
+// handing one to a reader is at best a confusing failure.
 func TestRefusesAPathThatIsNotARegularFile(t *testing.T) {
 	allowLocal(t)
 	dir := t.TempDir()
@@ -146,7 +159,7 @@ func TestRefusesAPathThatIsNotARegularFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := CanonicalReadableFile(sub, 0, rootsFor(dir))
+	_, err := openReadable(t, sub, 0, rootsFor(dir))
 	if err == nil {
 		t.Fatal("a directory was accepted as a file to read")
 	}
@@ -163,18 +176,18 @@ func TestSizeBoundIsEnforcedAndOptional(t *testing.T) {
 	dir := t.TempDir()
 	path := writeFile(t, dir, "big.txt", strings.Repeat("x", 100))
 
-	if _, err := CanonicalReadableFile(path, 10, rootsFor(dir)); err == nil {
+	if _, err := openReadable(t, path, 10, rootsFor(dir)); err == nil {
 		t.Error("a file over the bound was accepted")
 	}
-	if _, err := CanonicalReadableFile(path, 0, rootsFor(dir)); err != nil {
+	if _, err := openReadable(t, path, 0, rootsFor(dir)); err != nil {
 		t.Errorf("a zero bound must mean no bound, got %v", err)
 	}
 }
 
-// TestCanonicalReadableFileReportsAMissingFile covers the stat arm: a path that
+// TestOpenReadableFileReportsAMissingFile covers the stat arm: a path that
 // resolves but is gone by the time it is described is reported as what it is,
 // not as a containment refusal.
-func TestCanonicalReadableFileReportsAMissingFile(t *testing.T) {
+func TestOpenReadableFileReportsAMissingFile(t *testing.T) {
 	allowLocal(t)
 	dir := t.TempDir()
 	path := writeFile(t, dir, "gone.txt", "x")
@@ -182,12 +195,177 @@ func TestCanonicalReadableFileReportsAMissingFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := CanonicalReadableFile(path, 0, rootsFor(dir))
+	_, err := openReadable(t, path, 0, rootsFor(dir))
 	if err == nil {
 		t.Fatal("a missing file was accepted")
 	}
 	if strings.Contains(err.Error(), "outside the allowed directories") {
 		t.Errorf("err = %v, want a resolution failure rather than a containment refusal", err)
+	}
+}
+
+// TestOpenReadableFileOpensTheCheckedFile is the legitimate case: the
+// descriptor reads the file the caller named, and its Name is the canonical
+// path, which is what internal/extract dispatches on.
+func TestOpenReadableFileOpensTheCheckedFile(t *testing.T) {
+	allowLocal(t)
+	dir := t.TempDir()
+	path := writeFile(t, dir, "book.txt", "chapter one")
+
+	f, err := openReadable(t, path, 0, rootsFor(dir))
+	if err != nil {
+		t.Fatalf("OpenReadableFile() error = %v, want the file opened", err)
+	}
+	got, err := io.ReadAll(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "chapter one" {
+		t.Errorf("read %q, want the named file's content", got)
+	}
+	want, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Name() != want {
+		t.Errorf("Name() = %q, want the canonical path %q", f.Name(), want)
+	}
+}
+
+// swapBeforeOpen installs swap as the seam between OpenReadableFile's checks and
+// its open, for one test.
+func swapBeforeOpen(t *testing.T, swap func(canonicalPath string)) {
+	t.Helper()
+	beforeOpen = func(canonicalPath string) {
+		// Run once: the seam stands for one racing write, not for a principal
+		// that rewrites the tree on every call.
+		beforeOpen = nil
+		swap(canonicalPath)
+	}
+	t.Cleanup(func() { beforeOpen = nil })
+}
+
+// assertSwapRefused opens path with the swap installed and asserts nothing was
+// read from outside the roots: the call refuses, and in case it does not, the
+// descriptor it returned does not carry the secret.
+func assertSwapRefused(t *testing.T, path string, roots Roots, secret string) {
+	t.Helper()
+	f, err := openReadable(t, path, 0, roots)
+	if err == nil {
+		got, _ := io.ReadAll(f)
+		t.Fatalf("a file swapped after the check was opened; it read %q (the secret is %q)", got, secret)
+	}
+	if strings.Contains(err.Error(), secret) {
+		t.Errorf("err = %v, want a refusal that does not carry the outside file's content", err)
+	}
+}
+
+// TestOpenReadableFileRefusesALeafSwappedForASymlink is the race this function
+// exists to close, made deterministic: the checked file is replaced by a symlink
+// to a file outside every root between the check and the open, which is what a
+// local principal writing in an allowed root would do. A reader that reopened
+// the checked path by name would return the outside file's content.
+func TestOpenReadableFileRefusesALeafSwappedForASymlink(t *testing.T) {
+	allowLocal(t)
+	outsideDir, allowed := sandbox(t)
+	secret := writeFile(t, outsideDir, "secret.txt", "id_rsa")
+	path := writeFile(t, allowed, "book.txt", "harmless")
+	if err := os.Symlink(secret, filepath.Join(allowed, "probe")); err != nil {
+		t.Skipf("this platform cannot create a symlink: %v", err)
+	}
+
+	swapBeforeOpen(t, func(canonicalPath string) {
+		if err := os.Remove(canonicalPath); err != nil {
+			t.Error(err)
+			return
+		}
+		if err := os.Symlink(secret, canonicalPath); err != nil {
+			t.Error(err)
+		}
+	})
+	assertSwapRefused(t, path, rootsFor(allowed), "id_rsa")
+}
+
+// TestOpenReadableFileRefusesAnAncestorSwappedForASymlink is the same race one
+// level up, which O_NOFOLLOW on the leaf alone would not catch: the directory
+// holding the checked file is replaced by a symlink to a directory outside every
+// root that holds a file of the same name.
+func TestOpenReadableFileRefusesAnAncestorSwappedForASymlink(t *testing.T) {
+	allowLocal(t)
+	outsideDir, allowed := sandbox(t)
+	writeFile(t, outsideDir, "book.txt", "id_rsa")
+	shelf := filepath.Join(allowed, "shelf")
+	if err := os.Mkdir(shelf, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	path := writeFile(t, shelf, "book.txt", "harmless")
+	if err := os.Symlink(outsideDir, filepath.Join(allowed, "probe")); err != nil {
+		t.Skipf("this platform cannot create a symlink: %v", err)
+	}
+
+	swapBeforeOpen(t, func(canonicalPath string) {
+		dir := filepath.Dir(canonicalPath)
+		if err := os.RemoveAll(dir); err != nil {
+			t.Error(err)
+			return
+		}
+		if err := os.Symlink(outsideDir, dir); err != nil {
+			t.Error(err)
+		}
+	})
+	assertSwapRefused(t, path, rootsFor(allowed), "id_rsa")
+}
+
+// TestOpenReadableFileReportsARootRemovedBeforeTheOpen covers the open of the
+// root itself failing: the directory the path was found under is gone by the
+// time it is opened, which must be an error rather than an open by some other
+// route.
+func TestOpenReadableFileReportsARootRemovedBeforeTheOpen(t *testing.T) {
+	allowLocal(t)
+	_, allowed := sandbox(t)
+	root := filepath.Join(allowed, "root")
+	if err := os.Mkdir(root, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	path := writeFile(t, root, "book.txt", "harmless")
+
+	swapBeforeOpen(t, func(string) {
+		if err := os.RemoveAll(root); err != nil {
+			t.Error(err)
+		}
+	})
+	if _, err := openReadable(t, path, 0, rootsFor(root)); err == nil {
+		t.Fatal("a file whose root was removed before the open was opened")
+	}
+}
+
+// TestOpenReadableFileRefusesALeafSwappedForAFifo covers the swap the
+// containment does not care about and the call still must: a fifo planted after
+// the check. Opened blocking it would hang the call until some writer appeared,
+// so this test finishing at all is half of what it asserts.
+func TestOpenReadableFileRefusesALeafSwappedForAFifo(t *testing.T) {
+	allowLocal(t)
+	dir := t.TempDir()
+	path := writeFile(t, dir, "book.txt", "harmless")
+	if err := makeFIFO(filepath.Join(dir, "probe")); err != nil {
+		t.Skipf("this platform cannot create a fifo: %v", err)
+	}
+
+	swapBeforeOpen(t, func(canonicalPath string) {
+		if err := os.Remove(canonicalPath); err != nil {
+			t.Error(err)
+			return
+		}
+		if err := makeFIFO(canonicalPath); err != nil {
+			t.Error(err)
+		}
+	})
+	_, err := openReadable(t, path, 0, rootsFor(dir))
+	if err == nil {
+		t.Fatal("a fifo swapped in after the check was opened as a file to read")
+	}
+	if !strings.Contains(err.Error(), "not a regular file") {
+		t.Errorf("err = %v, want it to say the opened file is not a regular file", err)
 	}
 }
 

@@ -60,9 +60,10 @@ const (
 // renders on one line.
 var snippetReplacer = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ", "\t", " ")
 
-// Search finds occurrences of query within the document at path and returns
-// them as Matches with one-line context snippets. It dispatches on the
-// lowercased file extension: PDF, EPUB and TXT are searched; DjVu, comic
+// Search finds occurrences of query within the open file f and returns them as
+// Matches with one-line context snippets. It reads f and never reopens the file
+// by name; the caller keeps ownership of f. It dispatches on the lowercased
+// extension of f's name: PDF, EPUB and TXT are searched; DjVu, comic
 // archives and proprietary e-book formats are reported as not extractable. A
 // scanned or text-free PDF is likewise reported as not extractable. A canceled
 // ctx yields the context error. An empty or whitespace-only query yields zero
@@ -71,19 +72,23 @@ var snippetReplacer = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ", "\t
 // The whole search runs behind the time budget in guard.go, so a document no
 // parser can finish yields a not-extractable result rather than a call that
 // never returns.
-func Search(ctx context.Context, path, query string, o SearchOpts) (SearchResult, error) {
+func Search(ctx context.Context, f *os.File, query string, o SearchOpts) (SearchResult, error) {
+	d, err := newDocument(f)
+	if err != nil {
+		return SearchResult{}, err
+	}
 	res, reason, err := guardedRead(ctx, func(ctx context.Context) (SearchResult, error) {
-		return searchChecked(ctx, path, query, o)
+		return searchChecked(ctx, d, query, o)
 	})
 	if reason != "" {
-		return SearchResult{Format: formatHint(path), Reason: reason}, nil
+		return SearchResult{Format: formatHint(d), Reason: reason}, nil
 	}
 	return res, err
 }
 
 // searchChecked is Search's work: normalize the options, then dispatch on
 // format. It is separate so the watchdog has a single function to run.
-func searchChecked(ctx context.Context, path, query string, o SearchOpts) (SearchResult, error) {
+func searchChecked(ctx context.Context, d document, query string, o SearchOpts) (SearchResult, error) {
 	if err := ctx.Err(); err != nil {
 		return SearchResult{}, err
 	}
@@ -97,14 +102,14 @@ func searchChecked(ctx context.Context, path, query string, o SearchOpts) (Searc
 		o.StartMatch = 0
 	}
 
-	ext := strings.ToLower(filepath.Ext(path))
+	ext := strings.ToLower(filepath.Ext(d.name))
 	switch ext {
 	case ".pdf":
-		return searchPDF(ctx, path, query, o)
+		return searchPDF(ctx, d, query, o)
 	case ".epub":
-		return searchEPUB(ctx, path, query, o)
+		return searchEPUB(ctx, d, query, o)
 	case ".txt":
-		return searchTXT(ctx, path, query, o)
+		return searchTXT(ctx, d, query, o)
 	case ".djvu", ".cbr", ".cbz", ".mobi", ".azw", ".azw3":
 		return SearchResult{
 			Format: strings.TrimPrefix(ext, "."),
@@ -112,11 +117,11 @@ func searchChecked(ctx context.Context, path, query string, o SearchOpts) (Searc
 		}, nil
 	default:
 		// Same reasoning as Extract: an extensionless file is identified by content.
-		switch sniffFormat(path) {
+		switch sniffFormat(d) {
 		case "pdf":
-			return searchPDF(ctx, path, query, o)
+			return searchPDF(ctx, d, query, o)
 		case "epub":
-			return searchEPUB(ctx, path, query, o)
+			return searchEPUB(ctx, d, query, o)
 		}
 		return SearchResult{Reason: UnrecognizedReason(ext)}, nil
 	}
@@ -125,25 +130,24 @@ func searchChecked(ctx context.Context, path, query string, o SearchOpts) (Searc
 // searchPDF searches a PDF page by page. The ledongthuc/pdf reader can panic on
 // malformed or encrypted input, so the read is guarded by recover(): a panic
 // becomes a not-extractable result rather than a crash.
-func searchPDF(ctx context.Context, path, query string, o SearchOpts) (result SearchResult, err error) {
+func searchPDF(ctx context.Context, d document, query string, o SearchOpts) (result SearchResult, err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			result = SearchResult{Format: "pdf", Reason: malformedPDFReason(rec)}
 			err = nil
 		}
 	}()
-	return scanPDFMatches(ctx, path, query, o)
+	return scanPDFMatches(ctx, d, query, o)
 }
 
-// scanPDFMatches opens the PDF, collects every match across all pages (recording
-// each hit's page and in-page rune offset), and windows the result. If no page
-// yields any text, it reports the scanned/no-text-layer condition.
-func scanPDFMatches(ctx context.Context, path, query string, o SearchOpts) (SearchResult, error) {
-	f, r, err := pdf.Open(path)
+// scanPDFMatches parses the PDF, collects every match across all pages
+// (recording each hit's page and in-page rune offset), and windows the result.
+// If no page yields any text, it reports the scanned/no-text-layer condition.
+func scanPDFMatches(ctx context.Context, d document, query string, o SearchOpts) (SearchResult, error) {
+	r, err := pdf.NewReader(d.r, d.size)
 	if err != nil {
 		return SearchResult{Format: "pdf", Reason: invalidPDFReason(err)}, nil
 	}
-	defer func() { _ = f.Close() }()
 
 	if cyclic := pageTreeReason(r); cyclic != "" {
 		return SearchResult{Format: "pdf", Reason: cyclic}, nil
@@ -176,18 +180,12 @@ func scanPDFMatches(ctx context.Context, path, query string, o SearchOpts) (Sear
 	return res, nil
 }
 
-// searchTXT searches a plain-text file over its full rune slice.
-func searchTXT(ctx context.Context, path, query string, o SearchOpts) (SearchResult, error) {
+// searchTXT searches a plain-text document over its full rune slice.
+func searchTXT(ctx context.Context, d document, query string, o SearchOpts) (SearchResult, error) {
 	if e := ctx.Err(); e != nil {
 		return SearchResult{}, e
 	}
-	f, err := os.Open(path)
-	if err != nil {
-		return SearchResult{Format: "txt", Reason: cannotOpenTextReason(err)}, nil
-	}
-	defer func() { _ = f.Close() }()
-
-	data, err := io.ReadAll(io.LimitReader(f, maxTextFileBytes))
+	data, err := io.ReadAll(io.LimitReader(d.section(), maxTextFileBytes))
 	if err != nil {
 		return SearchResult{Format: "txt", Reason: cannotReadTextReason(err)}, nil
 	}
@@ -199,15 +197,14 @@ func searchTXT(ctx context.Context, path, query string, o SearchOpts) (SearchRes
 }
 
 // searchEPUB searches an EPUB over the concatenated plain text of its spine.
-func searchEPUB(ctx context.Context, path, query string, o SearchOpts) (SearchResult, error) {
+func searchEPUB(ctx context.Context, d document, query string, o SearchOpts) (SearchResult, error) {
 	if e := ctx.Err(); e != nil {
 		return SearchResult{}, e
 	}
-	zr, err := zip.OpenReader(path)
+	zr, err := zip.NewReader(d.r, d.size)
 	if err != nil {
 		return SearchResult{Format: "epub", Reason: cannotOpenEPUBReason(err)}, nil
 	}
-	defer func() { _ = zr.Close() }()
 
 	// readEPUBText also reports whether the 8 MiB extraction cap was hit; search
 	// scans whatever text was extracted, so the truncation flag is not needed here.

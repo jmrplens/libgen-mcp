@@ -58,7 +58,7 @@ func TestOutline_EPUB3Nav(t *testing.T) {
 	}
 	path := writeEPUB(t, t.TempDir(), "nav.epub", files)
 
-	res, err := Outline(context.Background(), path)
+	res, err := Outline(context.Background(), openFile(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestOutline_EPUB2NCX(t *testing.T) {
 	}
 	path := writeEPUB(t, t.TempDir(), "ncx.epub", files)
 
-	res, err := Outline(context.Background(), path)
+	res, err := Outline(context.Background(), openFile(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestOutline_EPUB2NCXViaSpineToc(t *testing.T) {
 	}
 	path := writeEPUB(t, t.TempDir(), "ncx-spine-toc.epub", files)
 
-	res, err := Outline(context.Background(), path)
+	res, err := Outline(context.Background(), openFile(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func TestOutline_EPUB2NCXNested(t *testing.T) {
 	}
 	path := writeEPUB(t, t.TempDir(), "ncx-nested.epub", files)
 
-	res, err := Outline(context.Background(), path)
+	res, err := Outline(context.Background(), openFile(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -253,7 +253,7 @@ func TestOutline_EPUB3NavWithoutTocType(t *testing.T) {
 	}
 	path := writeEPUB(t, t.TempDir(), "nav-no-toctype.epub", files)
 
-	res, err := Outline(context.Background(), path)
+	res, err := Outline(context.Background(), openFile(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,7 +291,7 @@ func TestOutline_EPUB3NavMissingFile(t *testing.T) {
 	}
 	path := writeEPUB(t, t.TempDir(), "nav-missing.epub", files)
 
-	res, err := Outline(context.Background(), path)
+	res, err := Outline(context.Background(), openFile(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,7 +327,7 @@ func TestOutline_EPUB3NavNoList(t *testing.T) {
 	}
 	path := writeEPUB(t, t.TempDir(), "nav-no-ol.epub", files)
 
-	res, err := Outline(context.Background(), path)
+	res, err := Outline(context.Background(), openFile(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -373,7 +373,7 @@ func TestOutline_EPUB3NavSpanAndBareLI(t *testing.T) {
 	}
 	path := writeEPUB(t, t.TempDir(), "nav-span-bare.epub", files)
 
-	res, err := Outline(context.Background(), path)
+	res, err := Outline(context.Background(), openFile(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -398,7 +398,7 @@ func TestOutline_EPUB3NavSpanAndBareLI(t *testing.T) {
 // give up on the file.
 func TestOutline_EPUBNoToc(t *testing.T) {
 	path := buildEPUB(t, t.TempDir())
-	res, err := Outline(context.Background(), path)
+	res, err := Outline(context.Background(), openFile(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -432,14 +432,14 @@ func TestOutline_EPUBNoTocAndNoText(t *testing.T) {
 </package>`,
 		"OEBPS/chapter1.xhtml": `<html><body><img src="scan-001.png"/></body></html>`,
 	})
-	res, err := Outline(context.Background(), path)
+	res, err := Outline(context.Background(), openFile(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if res.Extractable {
 		t.Fatalf("an EPUB with no text must not be reported as merely TOC-less, got %+v", res)
 	}
-	chunk, err := Extract(context.Background(), path, Req{})
+	chunk, err := Extract(context.Background(), openFile(t, path), Req{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -449,20 +449,20 @@ func TestOutline_EPUBNoTocAndNoText(t *testing.T) {
 	}
 }
 
-// TestOutline_TXTMissingFile verifies the TXT twin: outline mode used to declare
-// any path ending in .txt a readable document with no table of contents, without
-// so much as opening it. An unreadable file must be reported exactly as the text
-// path reports it.
-func TestOutline_TXTMissingFile(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "does-not-exist.txt")
-	res, err := Outline(context.Background(), path)
+// TestOutline_TXTUnreadableFile verifies the TXT twin: outline mode used to
+// declare any path ending in .txt a readable document with no table of contents,
+// without so much as reading it. An unreadable file must be reported exactly as
+// the text path reports it.
+func TestOutline_TXTUnreadableFile(t *testing.T) {
+	path := unreadableFixture(t, t.TempDir(), "unreadable.txt")
+	res, err := Outline(context.Background(), openFile(t, path))
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 	if res.Extractable {
 		t.Fatalf("expected not extractable, got %+v", res)
 	}
-	chunk, err := Extract(context.Background(), path, Req{})
+	chunk, err := Extract(context.Background(), openFile(t, path), Req{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -509,9 +509,9 @@ func TestOutline_DiagnosisMatchesTextPath(t *testing.T) {
 		"unknown suffix":  "testdata/whatever.xyz",
 		"epub with text":  buildEPUB(t, dir),
 		"not a zip":       notAZip,
-		"missing txt":     filepath.Join(dir, "gone.txt"),
+		"unreadable txt":  unreadableFixture(t, dir, "gone.txt"),
 		"extensionless":   sniffableCopy(t, dir, "testdata/scanned.pdf", "noextension"),
-		"missing pdf":     filepath.Join(dir, "gone.pdf"),
+		"unreadable pdf":  unreadableFixture(t, dir, "gone.pdf"),
 		"blank then text": writeBytes(t, dir, "coverthentext.pdf", blankThenTextPDF()),
 		"null page pdf":   writeBytes(t, dir, "nullpage.pdf", nullPagePDF()),
 		// A PDF no mode can read at all belongs here for the same reason as the rest:
@@ -523,11 +523,11 @@ func TestOutline_DiagnosisMatchesTextPath(t *testing.T) {
 	}
 	for name, p := range paths {
 		t.Run(name, func(t *testing.T) {
-			outline, err := Outline(context.Background(), p)
+			outline, err := Outline(context.Background(), openFile(t, p))
 			if err != nil {
 				t.Fatalf("%s: Outline: %v", name, err)
 			}
-			chunk, err := Extract(context.Background(), p, Req{})
+			chunk, err := Extract(context.Background(), openFile(t, p), Req{})
 			if err != nil {
 				t.Fatalf("%s: Extract: %v", name, err)
 			}
@@ -551,7 +551,7 @@ func TestOutline_DiagnosisMatchesTextPath(t *testing.T) {
 // exercises exactly that guard.
 func TestEpubNoOutlineResult_CtxCancelledDuringTextProbe(t *testing.T) {
 	path := buildEPUB(t, t.TempDir())
-	if _, err := epubOutline(passErr(3), path); err == nil {
+	if _, err := epubOutline(passErr(3), docFor(t, path)); err == nil {
 		t.Fatal("expected the context error to propagate from the text probe, got nil")
 	}
 }
@@ -584,7 +584,7 @@ func TestOutline_EPUBMalformed(t *testing.T) {
 	path := writeEPUB(t, t.TempDir(), "broken.epub", map[string]string{
 		"README.txt": "not an epub",
 	})
-	res, err := Outline(context.Background(), path)
+	res, err := Outline(context.Background(), openFile(t, path))
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -599,7 +599,7 @@ func TestOutline_EPUBMalformed(t *testing.T) {
 // TestOutline_TXT verifies that a plain-text file is reported as extractable
 // with no entries and no error: plain text has no outline.
 func TestOutline_TXT(t *testing.T) {
-	res, err := Outline(context.Background(), "testdata/sample.txt")
+	res, err := Outline(context.Background(), openFile(t, "testdata/sample.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -614,7 +614,7 @@ func TestOutline_TXT(t *testing.T) {
 // TestOutline_UnsupportedFormat verifies that a DjVu container is reported as
 // not extractable with a non-empty reason.
 func TestOutline_UnsupportedFormat(t *testing.T) {
-	res, err := Outline(context.Background(), "testdata/unsupported.djvu")
+	res, err := Outline(context.Background(), openFile(t, "testdata/unsupported.djvu"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -630,7 +630,7 @@ func TestOutline_UnsupportedFormat(t *testing.T) {
 // reported as not extractable with a reason naming it, exercising Outline's
 // default dispatch branch.
 func TestOutline_UnsupportedExtension(t *testing.T) {
-	res, err := Outline(context.Background(), "testdata/whatever.xyz")
+	res, err := Outline(context.Background(), openFile(t, "testdata/whatever.xyz"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -648,7 +648,7 @@ func TestOutline_ContextCancelled(t *testing.T) {
 	path := buildEPUB(t, t.TempDir())
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := Outline(ctx, path)
+	_, err := Outline(ctx, openFile(t, path))
 	if err == nil {
 		t.Fatal("expected a context error, got nil")
 	}
@@ -719,12 +719,12 @@ func TestEpubOutline_ContextCancelledDirect(t *testing.T) {
 	path := buildEPUB(t, t.TempDir())
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := epubOutline(ctx, path); err == nil {
+	if _, err := epubOutline(ctx, docFor(t, path)); err == nil {
 		t.Fatal("expected a context error, got nil")
 	}
 }
 
-// TestOutline_EPUBNotAZip verifies epubOutline's zip.OpenReader failure branch: a
+// TestOutline_EPUBNotAZip verifies epubOutline's zip.NewReader failure branch: a
 // .epub whose bytes are not a valid ZIP archive is reported as not extractable
 // with the same "cannot open EPUB archive" reason the text and find paths give
 // (distinct from the valid-ZIP structural failure that TestOutline_EPUBMalformed
@@ -734,7 +734,7 @@ func TestOutline_EPUBNotAZip(t *testing.T) {
 	if err := os.WriteFile(path, []byte("this is not a zip archive"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	res, err := Outline(context.Background(), path)
+	res, err := Outline(context.Background(), openFile(t, path))
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -753,7 +753,7 @@ func TestOutline_EPUBNotAZip(t *testing.T) {
 // nav-error return, and epubOutline's context-error branch).
 func TestEpubOutline_CtxCancelledDuringNav(t *testing.T) {
 	path := buildEPUB(t, t.TempDir())
-	if _, err := epubOutline(passErr(1), path); err == nil {
+	if _, err := epubOutline(passErr(1), docFor(t, path)); err == nil {
 		t.Fatal("expected a context error propagated from navEntries, got nil")
 	}
 }
@@ -767,7 +767,7 @@ func TestOutline_EPUBMalformedOPFViaOutline(t *testing.T) {
 		"OEBPS/content.opf":      `<?xml version="1.0"?><package><manifest><item`,
 	}
 	path := writeEPUB(t, t.TempDir(), "bad-opf.epub", files)
-	res, err := Outline(context.Background(), path)
+	res, err := Outline(context.Background(), openFile(t, path))
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -785,7 +785,7 @@ func TestOutline_EPUBMalformedOPFViaOutline(t *testing.T) {
 func TestOutline_EPUB3NavNoNavElement(t *testing.T) {
 	files := epub3NavFiles(`<div><p>No nav element here.</p></div>`)
 	path := writeEPUB(t, t.TempDir(), "nav-no-navel.epub", files)
-	res, err := Outline(context.Background(), path)
+	res, err := Outline(context.Background(), openFile(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -805,7 +805,7 @@ func TestOutline_EPUB3NavOLInWrapper(t *testing.T) {
 		`<nav epub:type="toc"><div><ol><li><a href="chapter1.xhtml">Wrapped Chapter</a></li></ol></div></nav>`,
 	)
 	path := writeEPUB(t, t.TempDir(), "nav-ol-wrapper.epub", files)
-	res, err := Outline(context.Background(), path)
+	res, err := Outline(context.Background(), openFile(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -824,7 +824,7 @@ func TestWalkOL_CtxCancelledEntry(t *testing.T) {
 			`<ol><li><a href="chapter1.xhtml#s">Sub</a></li></ol></li></ol></nav>`,
 	)
 	path := writeEPUB(t, t.TempDir(), "nav-walk-cancel.epub", files)
-	if _, err := epubOutline(passErr(2), path); err == nil {
+	if _, err := epubOutline(passErr(2), docFor(t, path)); err == nil {
 		t.Fatal("expected a context error from walkOL, got nil")
 	}
 }
@@ -838,7 +838,7 @@ func TestAppendLI_CtxCancelledNested(t *testing.T) {
 			`<ol><li><a href="chapter1.xhtml#s">Sub</a></li></ol></li></ol></nav>`,
 	)
 	path := writeEPUB(t, t.TempDir(), "nav-appendli-cancel.epub", files)
-	if _, err := epubOutline(passErr(3), path); err == nil {
+	if _, err := epubOutline(passErr(3), docFor(t, path)); err == nil {
 		t.Fatal("expected a context error from appendLI's nested walk, got nil")
 	}
 }
@@ -866,7 +866,7 @@ func TestNcxEntries_CtxCancelledEntry(t *testing.T) {
 <navMap><navPoint id="np1"><navLabel><text>Chapter</text></navLabel><content src="chapter1.xhtml"/></navPoint></navMap>
 </ncx>`
 	path := writeEPUB(t, t.TempDir(), "ncx-entry-cancel.epub", epub2Files(ncxOPF, ncx))
-	if _, err := epubOutline(passErr(2), path); err == nil {
+	if _, err := epubOutline(passErr(2), docFor(t, path)); err == nil {
 		t.Fatal("expected a context error from ncxEntries, got nil")
 	}
 }
@@ -880,7 +880,7 @@ func TestNcxEntries_CtxCancelledFlatten(t *testing.T) {
 <navMap><navPoint id="np1"><navLabel><text>Chapter</text></navLabel><content src="chapter1.xhtml"/></navPoint></navMap>
 </ncx>`
 	path := writeEPUB(t, t.TempDir(), "ncx-flatten-cancel.epub", epub2Files(ncxOPF, ncx))
-	if _, err := epubOutline(passErr(3), path); err == nil {
+	if _, err := epubOutline(passErr(3), docFor(t, path)); err == nil {
 		t.Fatal("expected a context error from flattenNCX, got nil")
 	}
 }
@@ -898,7 +898,7 @@ func TestFlattenNCX_CtxCancelledRecursion(t *testing.T) {
 </navMap>
 </ncx>`
 	path := writeEPUB(t, t.TempDir(), "ncx-recurse-cancel.epub", epub2Files(ncxOPF, ncx))
-	if _, err := epubOutline(passErr(4), path); err == nil {
+	if _, err := epubOutline(passErr(4), docFor(t, path)); err == nil {
 		t.Fatal("expected a context error from flattenNCX recursion, got nil")
 	}
 }
@@ -908,7 +908,7 @@ func TestFlattenNCX_CtxCancelledRecursion(t *testing.T) {
 // the archive, with no nav document, yields an extractable EPUB with no entries.
 func TestOutline_NCXMissingFile(t *testing.T) {
 	path := writeEPUB(t, t.TempDir(), "ncx-missing-file.epub", epub2Files(ncxOPF, ""))
-	res, err := Outline(context.Background(), path)
+	res, err := Outline(context.Background(), openFile(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -935,7 +935,7 @@ func TestOutline_NCXHrefNoMatch(t *testing.T) {
   </spine>
 </package>`
 	path := writeEPUB(t, t.TempDir(), "ncx-href-nomatch.epub", epub2Files(opf, ""))
-	res, err := Outline(context.Background(), path)
+	res, err := Outline(context.Background(), openFile(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -63,21 +63,29 @@ func RequireLocalAccess(what, alternative string) error {
 // CanonicalFile resolves path to an existing local file, through symlinks, and
 // returns it canonicalized provided it lies under one of roots.
 func CanonicalFile(path string, roots Roots) (string, error) {
-	if err := RequireLocalAccess("path", "md5 or doi"); err != nil {
-		return "", err
+	canonicalPath, _, err := containedFile(path, roots)
+	return canonicalPath, err
+}
+
+// containedFile is [CanonicalFile] that also returns the root the canonical
+// path was found under, which is what [OpenReadableFile] opens it relative to.
+func containedFile(path string, roots Roots) (canonicalPath, root string, err error) {
+	if accessErr := RequireLocalAccess("path", "md5 or doi"); accessErr != nil {
+		return "", "", accessErr
 	}
 	absolutePath, err := absClean(path, "path")
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	canonicalPath, err := filepath.EvalSymlinks(absolutePath)
+	canonicalPath, err = filepath.EvalSymlinks(absolutePath)
 	if err != nil {
-		return "", fmt.Errorf("resolve path %s: %w", absolutePath, err)
+		return "", "", fmt.Errorf("resolve path %s: %w", absolutePath, err)
 	}
-	if !withinAny(canonicalPath, roots.dirs()) {
-		return "", outsideError("path", canonicalPath, roots.EnvName)
+	root, ok := containingRoot(canonicalPath, roots.dirs())
+	if !ok {
+		return "", "", outsideError("path", canonicalPath, roots.EnvName)
 	}
-	return canonicalPath, nil
+	return canonicalPath, root, nil
 }
 
 // CanonicalOutputPath resolves a destination that does not have to exist yet,
@@ -108,40 +116,103 @@ func CanonicalOutputPath(path string, roots Roots) (string, error) {
 	return canonicalPath, nil
 }
 
-// CanonicalReadableFile is [CanonicalFile] plus the two conditions a reader
-// needs: the path must name a regular file, and when maxSize is positive it must
-// not be larger.
+// beforeOpen runs between [OpenReadableFile]'s checks and its open. It is nil
+// outside tests: a test sets it to swap the checked file for something else at
+// exactly the moment a racing local principal would, so the refusal can be
+// asserted deterministically rather than by winning a race.
+var beforeOpen func(canonicalPath string)
+
+// OpenReadableFile resolves path the way [CanonicalFile] does, opens it, and
+// returns the open file, provided it is a regular file and, when maxSize is
+// positive, no larger than maxSize. The returned file's Name is the canonical
+// path, and the caller owns closing it.
 //
-// It returns a path rather than an open descriptor, and that is a real
-// limitation rather than a preference. Handing back a *os.File would close the
-// window between checking a path and opening it — a local principal able to
-// write in an allowed root, and the OS temporary directory is always one and is
-// world-writable, can replace the leaf in between. Closing it needs the code
-// that finally reads the document to accept a descriptor, which here means five
-// call sites in internal/extract, each of which opens the file itself. That is
-// its own change; what is here is the containment, and the leaf swap is
-// documented rather than claimed.
+// It returns a descriptor rather than a path because a path is a question asked
+// again by every later open, and the answer can change in between: a local
+// principal able to write in an allowed root — the OS temporary directory is
+// always one, and /tmp is world-writable — can replace the checked file, or a
+// directory above it, with a symlink to a file outside every root after the
+// check has passed. Whatever reads the document must therefore read this
+// descriptor and never reopen the file by name.
+//
+// What is defended, on every platform this server ships for:
+//
+//   - The open is made relative to the root the check found the path under,
+//     through [os.Root], so each component is walked by the kernel from that
+//     root's own descriptor and a symlink, junction or ".." that would leave it
+//     makes the open fail. A leaf or an ancestor swapped after the check cannot
+//     redirect the open outside the roots. On unix this is openat with
+//     O_NOFOLLOW per component, the same refusal [OpenNoFollow] gives the
+//     download's partial file; on Windows it is the handle-relative equivalent,
+//     so Windows gets the same containment even though it has no O_NOFOLLOW.
+//   - The regular-file and size conditions are re-checked on the open
+//     descriptor, so a file swapped for a directory, a device or a fifo after
+//     the check is refused. On unix the open is non-blocking, so a fifo planted
+//     in that window cannot hang the call before the descriptor is examined.
+//
+// What is not: a swap to a different file that is itself inside the roots
+// still opens, and is a file the caller could have named directly. A hard link
+// to an outside file, made inside a root, is not a path-level escape at all and
+// is out of reach of any path check; on Linux fs.protected_hardlinks is what
+// stops an unprivileged principal making one to a file it cannot read.
 //
 // maxSize of zero means no size bound. The caller decides: the text legs of
 // internal/extract already cap themselves at 8 MiB, and a PDF is read by seeking
 // rather than loaded whole, so a byte cap there would refuse large legitimate
 // books without bounding the work.
-func CanonicalReadableFile(path string, maxSize int64, roots Roots) (string, error) {
-	canonicalPath, err := CanonicalFile(path, roots)
+func OpenReadableFile(path string, maxSize int64, roots Roots) (*os.File, error) {
+	canonicalPath, root, err := containedFile(path, roots)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	// Lstat, not Stat: canonicalPath is already symlink-free, so the two agree
-	// unless the leaf became a symlink between resolution and here — and in that
-	// race Lstat is the answer that refuses.
+	// Lstat before the open, so a directory or a device is refused with its own
+	// diagnosis without being opened at all. It proves nothing about what the
+	// open will reach; the checks after the open are the ones that hold.
 	info, err := os.Lstat(canonicalPath)
 	if err != nil {
-		return "", fmt.Errorf("stat %s: %w", canonicalPath, err)
+		return nil, fmt.Errorf("stat %s: %w", canonicalPath, err)
 	}
 	if checkErr := checkRegularAndSize(canonicalPath, info, maxSize); checkErr != nil {
-		return "", checkErr
+		return nil, checkErr
 	}
-	return canonicalPath, nil
+	if beforeOpen != nil {
+		beforeOpen(canonicalPath)
+	}
+	f, err := openInRoot(root, canonicalPath)
+	if err != nil {
+		return nil, err
+	}
+	opened, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, fmt.Errorf("stat %s: %w", canonicalPath, err)
+	}
+	if checkErr := checkRegularAndSize(canonicalPath, opened, maxSize); checkErr != nil {
+		_ = f.Close()
+		return nil, checkErr
+	}
+	return f, nil
+}
+
+// openInRoot opens canonicalPath for reading relative to root, which must
+// contain it, refusing any resolution that would leave root.
+func openInRoot(root, canonicalPath string) (*os.File, error) {
+	rel, err := filepath.Rel(root, canonicalPath)
+	if err != nil {
+		return nil, fmt.Errorf("open %s: %w", canonicalPath, err)
+	}
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		return nil, fmt.Errorf("open %s: %w", canonicalPath, err)
+	}
+	// The file outlives the root: closing the root's descriptor does not close
+	// one opened through it.
+	defer func() { _ = r.Close() }()
+	f, err := r.OpenFile(rel, os.O_RDONLY|readOpenFlag, 0)
+	if err != nil {
+		return nil, fmt.Errorf("open %s: it no longer resolves to the file that was checked inside %s: %w", canonicalPath, root, err)
+	}
+	return f, nil
 }
 
 // OpenNoFollow opens path with the caller's flags and mode, refusing a symlink
@@ -349,12 +420,18 @@ func canonicalDirPath(dir string) (string, error) {
 
 // withinAny reports whether path lies under any of the given roots.
 func withinAny(path string, roots []string) bool {
+	_, ok := containingRoot(path, roots)
+	return ok
+}
+
+// containingRoot returns the first of roots that path lies under.
+func containingRoot(path string, roots []string) (string, bool) {
 	for _, base := range roots {
 		if withinBase(path, base) {
-			return true
+			return base, true
 		}
 	}
-	return false
+	return "", false
 }
 
 // withinBase reports whether path is base or lies under it.

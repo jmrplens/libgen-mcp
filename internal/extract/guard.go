@@ -182,16 +182,16 @@ func runGuarded[T any](ctx context.Context, fn func(context.Context) (T, error))
 	return out
 }
 
-// formatHint names the format of the file at path from its extension, falling
+// formatHint names the format of document d from its extension, falling
 // back to its bytes, so a read that gave up before it could identify the
 // document still reports what the document looked like. It returns "" when
 // nothing matches, which is what the read modes report for an unrecognized file
 // anyway.
-func formatHint(path string) string {
-	ext := strings.ToLower(filepath.Ext(path))
+func formatHint(d document) string {
+	ext := strings.ToLower(filepath.Ext(d.name))
 	switch ext {
 	case ".pdf", ".epub", ".txt", ".djvu", ".cbr", ".cbz", ".mobi", ".azw", ".azw3":
 		return strings.TrimPrefix(ext, ".")
 	}
-	return sniffFormat(path)
+	return sniffFormat(d)
 }

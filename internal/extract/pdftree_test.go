@@ -94,14 +94,17 @@ func TestReadModes_CyclicPageTreeCannotHang(t *testing.T) {
 		toc     OutlineResult
 		errs    [3]error
 	)
+	// Opened here, on the test goroutine: mustReturnWithin runs its function on
+	// another one, where a failed open could not stop the test.
+	f := openFile(t, path)
 	mustReturnWithin(t, 10*time.Second, "Extract", func() {
-		chunk, errs[0] = Extract(context.Background(), path, Req{})
+		chunk, errs[0] = Extract(context.Background(), f, Req{})
 	})
 	mustReturnWithin(t, 10*time.Second, "Search", func() {
-		matches, errs[1] = Search(context.Background(), path, "anything", SearchOpts{})
+		matches, errs[1] = Search(context.Background(), f, "anything", SearchOpts{})
 	})
 	mustReturnWithin(t, 10*time.Second, "Outline", func() {
-		toc, errs[2] = Outline(context.Background(), path)
+		toc, errs[2] = Outline(context.Background(), f)
 	})
 	for i, err := range errs {
 		if err != nil {
@@ -132,15 +135,15 @@ func TestReadModes_CyclicPageTreeCannotHang(t *testing.T) {
 // walked the tree pathologically — say, once per page — would blow it.
 func TestReadModes_LegitimatePDFUnaffected(t *testing.T) {
 	start := time.Now()
-	chunk, err := Extract(context.Background(), "testdata/sample.pdf", Req{StartPage: 1, MaxPages: 5, MaxChars: 100000})
+	chunk, err := Extract(context.Background(), openFile(t, "testdata/sample.pdf"), Req{StartPage: 1, MaxPages: 5, MaxChars: 100000})
 	if err != nil || !chunk.Extractable || !strings.Contains(chunk.Text, "Hands-On Software Architecture") {
 		t.Fatalf("text mode regressed on a valid PDF: err=%v chunk=%+v", err, chunk)
 	}
-	res, err := Search(context.Background(), "testdata/sample.pdf", "Second page", SearchOpts{})
+	res, err := Search(context.Background(), openFile(t, "testdata/sample.pdf"), "Second page", SearchOpts{})
 	if err != nil || !res.Extractable || res.TotalMatches == 0 {
 		t.Fatalf("find mode regressed on a valid PDF: err=%v res=%+v", err, res)
 	}
-	toc, err := Outline(context.Background(), "testdata/bookmarked.pdf")
+	toc, err := Outline(context.Background(), openFile(t, "testdata/bookmarked.pdf"))
 	if err != nil || !toc.Extractable || len(toc.Entries) == 0 {
 		t.Fatalf("outline mode regressed on a bookmarked PDF: err=%v toc=%+v", err, toc)
 	}
@@ -165,7 +168,7 @@ func TestPageTree_AcceptsDeepButFiniteNesting(t *testing.T) {
 	if err := os.WriteFile(path, nestedPageTreePDF(maxPageTreeDepth), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	chunk, err := Extract(context.Background(), path, Req{})
+	chunk, err := Extract(context.Background(), openFile(t, path), Req{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +190,7 @@ func TestPageTree_RejectsNestingPastTheBound(t *testing.T) {
 	if err := os.WriteFile(path, nestedPageTreePDF(maxPageTreeDepth+1), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	chunk, err := Extract(context.Background(), path, Req{})
+	chunk, err := Extract(context.Background(), openFile(t, path), Req{})
 	if err != nil {
 		t.Fatal(err)
 	}

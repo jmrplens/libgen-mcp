@@ -98,7 +98,7 @@ func TestPDFReasonHelpers(t *testing.T) {
 // reports the correct format and total page count, and signals HasMore when
 // further pages remain.
 func TestExtract_PDF(t *testing.T) {
-	c, err := Extract(context.Background(), "testdata/sample.pdf", Req{StartPage: 1, MaxPages: 1, MaxChars: 10000})
+	c, err := Extract(context.Background(), openFile(t, "testdata/sample.pdf"), Req{StartPage: 1, MaxPages: 1, MaxChars: 10000})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestExtract_PDF(t *testing.T) {
 // TestExtract_PDFSecondPage verifies that StartPage=2 extracts the second page
 // of the sample PDF.
 func TestExtract_PDFSecondPage(t *testing.T) {
-	c, err := Extract(context.Background(), "testdata/sample.pdf", Req{StartPage: 2, MaxPages: 1})
+	c, err := Extract(context.Background(), openFile(t, "testdata/sample.pdf"), Req{StartPage: 2, MaxPages: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestExtract_PDFSecondPage(t *testing.T) {
 // TestExtract_ScannedPDFNoTextLayer verifies that a PDF with no text layer is
 // reported as not extractable with a reason mentioning the missing text layer.
 func TestExtract_ScannedPDFNoTextLayer(t *testing.T) {
-	c, err := Extract(context.Background(), "testdata/scanned.pdf", Req{})
+	c, err := Extract(context.Background(), openFile(t, "testdata/scanned.pdf"), Req{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func TestExtract_ScannedPDFNoTextLayer(t *testing.T) {
 // mentions the out-of-range condition, rather than the misleading "scanned/no
 // text layer" reason used for genuinely empty in-range pages.
 func TestExtract_PDFStartPageBeyondEnd(t *testing.T) {
-	c, err := Extract(context.Background(), "testdata/sample.pdf", Req{StartPage: 99})
+	c, err := Extract(context.Background(), openFile(t, "testdata/sample.pdf"), Req{StartPage: 99})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +173,7 @@ func TestExtract_PDFStartPageBeyondEnd(t *testing.T) {
 // document (MaxPages larger than the page count) reads every page, ends the
 // scan on the natural loop boundary, and reports HasMore false.
 func TestExtract_PDFMultiPage(t *testing.T) {
-	c, err := Extract(context.Background(), "testdata/sample.pdf", Req{StartPage: 1, MaxPages: 5, MaxChars: 100000})
+	c, err := Extract(context.Background(), openFile(t, "testdata/sample.pdf"), Req{StartPage: 1, MaxPages: 5, MaxChars: 100000})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +195,7 @@ func TestExtract_PDFMultiPage(t *testing.T) {
 // before a subsequent page once the accumulated character budget is reached,
 // marking the chunk Truncated with HasMore and a next-page cursor.
 func TestExtract_PDFMaxCharsStop(t *testing.T) {
-	c, err := Extract(context.Background(), "testdata/sample.pdf", Req{StartPage: 1, MaxPages: 5, MaxChars: 5})
+	c, err := Extract(context.Background(), openFile(t, "testdata/sample.pdf"), Req{StartPage: 1, MaxPages: 5, MaxChars: 5})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +216,7 @@ func TestExtract_PDFMaxCharsStop(t *testing.T) {
 func TestExtractPDF_ContextCancelledDirect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := extractPDF(ctx, "testdata/sample.pdf", Req{}); err == nil {
+	if _, err := extractPDF(ctx, docFor(t, "testdata/sample.pdf"), Req{}); err == nil {
 		t.Fatal("expected a context error, got nil")
 	}
 }
@@ -228,7 +228,7 @@ func TestExtractPDF_ContextCancelledDirect(t *testing.T) {
 func TestReadPDFPages_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := readPDFPages(ctx, "testdata/sample.pdf", 1, 5, defaultMaxChars); err == nil {
+	if _, err := readPDFPages(ctx, docFor(t, "testdata/sample.pdf"), 1, 5, defaultMaxChars); err == nil {
 		t.Fatal("expected a context error, got nil")
 	}
 }
@@ -242,7 +242,7 @@ func TestExtractPDF_NullPage(t *testing.T) {
 	if err := os.WriteFile(path, nullPagePDF(), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	c, err := Extract(context.Background(), path, Req{})
+	c, err := Extract(context.Background(), openFile(t, path), Req{})
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -256,13 +256,13 @@ func TestExtractPDF_NullPage(t *testing.T) {
 
 // TestExtract_PDFMalformed verifies that a file with a .pdf extension whose
 // bytes are not a valid PDF is reported as not extractable with a reason (via
-// the pdf.Open failure path) and a nil error, rather than crashing the caller.
+// the pdf.NewReader failure path) and a nil error, rather than crashing the caller.
 func TestExtract_PDFMalformed(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "broken.pdf")
 	if err := os.WriteFile(path, []byte("%PDF-1.7 not really a pdf at all"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	c, err := Extract(context.Background(), path, Req{})
+	c, err := Extract(context.Background(), openFile(t, path), Req{})
 	if err != nil {
 		t.Fatalf("expected nil error for malformed PDF, got %v", err)
 	}

@@ -38,7 +38,7 @@ func malformedPDFReason(rec any) string {
 	return fmt.Sprintf("cannot read PDF (malformed or encrypted): %v", rec)
 }
 
-// probePDFTextLayer reports whether the PDF at path has any extractable text.
+// probePDFTextLayer reports whether the PDF document d has any extractable text.
 // It exists so the outline path can reach the same verdict as the text path
 // about the same file: a scanned PDF has no table of contents *because* it has
 // no text layer, and saying only "no table of contents" sends the caller off to
@@ -47,17 +47,16 @@ func malformedPDFReason(rec any) string {
 // The reader can panic on malformed or encrypted input, so the probe is guarded
 // by recover(): a panic becomes pdfTextUnreadable rather than a crash. Only ctx
 // cancellation yields a non-nil error.
-func probePDFTextLayer(ctx context.Context, path string) (state pdfTextState, reason string, err error) {
+func probePDFTextLayer(ctx context.Context, d document) (state pdfTextState, reason string, err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			state, reason, err = pdfTextUnreadable, malformedPDFReason(rec), nil
 		}
 	}()
-	f, r, oerr := pdf.Open(path)
+	r, oerr := pdf.NewReader(d.r, d.size)
 	if oerr != nil {
 		return pdfTextUnreadable, invalidPDFReason(oerr), nil
 	}
-	defer func() { _ = f.Close() }()
 
 	if cyclic := pageTreeReason(r); cyclic != "" {
 		return pdfTextUnreadable, cyclic, nil
@@ -110,7 +109,7 @@ type pdfScan struct {
 // The ledongthuc/pdf reader can panic on malformed or encrypted input, so the
 // whole read is guarded by recover(): a panic becomes a not-extractable Chunk
 // rather than a crash. A canceled ctx yields the context error.
-func extractPDF(ctx context.Context, path string, r Req) (chunk Chunk, err error) {
+func extractPDF(ctx context.Context, d document, r Req) (chunk Chunk, err error) {
 	if e := ctx.Err(); e != nil {
 		return Chunk{}, e
 	}
@@ -134,17 +133,16 @@ func extractPDF(ctx context.Context, path string, r Req) (chunk Chunk, err error
 		}
 	}()
 
-	return readPDFPages(ctx, path, startPage, maxPages, maxChars)
+	return readPDFPages(ctx, d, startPage, maxPages, maxChars)
 }
 
-// readPDFPages opens the PDF, scans the requested page range and assembles the
+// readPDFPages parses the PDF, scans the requested page range and assembles the
 // final Chunk, including no-text-layer detection.
-func readPDFPages(ctx context.Context, path string, startPage, maxPages, maxChars int) (Chunk, error) {
-	f, r, err := pdf.Open(path)
+func readPDFPages(ctx context.Context, d document, startPage, maxPages, maxChars int) (Chunk, error) {
+	r, err := pdf.NewReader(d.r, d.size)
 	if err != nil {
 		return Chunk{Format: "pdf", Reason: invalidPDFReason(err)}, nil
 	}
-	defer func() { _ = f.Close() }()
 
 	if cyclic := pageTreeReason(r); cyclic != "" {
 		return Chunk{Format: "pdf", Reason: cyclic}, nil

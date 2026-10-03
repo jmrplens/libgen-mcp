@@ -2,7 +2,7 @@ package extract
 
 import (
 	"context"
-	"os"
+	"io"
 	"strings"
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
@@ -53,30 +53,23 @@ const noPDFOutlineReason = "no embedded table of contents (none found, or it cou
 // document that has no text at all is worse than an error — it tells the caller
 // the pages are readable and costs it another round trip to find out they are
 // not.
-func pdfOutline(ctx context.Context, filePath string) (OutlineResult, error) {
+func pdfOutline(ctx context.Context, d document) (OutlineResult, error) {
 	if err := ctx.Err(); err != nil {
 		return OutlineResult{}, err
 	}
-	entries := pdfBookmarkEntries(ctx, filePath)
+	entries := pdfBookmarkEntries(ctx, d)
 	if len(entries) > 0 {
 		return OutlineResult{Format: "pdf", Extractable: true, Entries: entries}, nil
 	}
-	return pdfNoOutlineResult(ctx, filePath)
+	return pdfNoOutlineResult(ctx, d)
 }
 
-// pdfBookmarkEntries opens the PDF and flattens whatever bookmarks pdfcpu can
-// read from it. Every failure — a file that will not open, a bookmark read that
-// errors or panics — yields no entries rather than a diagnosis of its own: the
-// text-layer probe that follows produces one, in the same words the text path
-// would use for the same file.
-func pdfBookmarkEntries(ctx context.Context, filePath string) []OutlineEntry {
-	f, err := os.Open(filePath)
-	if err != nil {
-		return nil
-	}
-	defer func() { _ = f.Close() }()
-
-	bms, ok := readBookmarks(ctx, f)
+// pdfBookmarkEntries flattens whatever bookmarks pdfcpu can read from the PDF.
+// Every failure — a bookmark read that errors or panics — yields no entries
+// rather than a diagnosis of its own: the text-layer probe that follows produces
+// one, in the same words the text path would use for the same file.
+func pdfBookmarkEntries(ctx context.Context, d document) []OutlineEntry {
+	bms, ok := readBookmarks(ctx, d.section())
 	if !ok || len(bms) == 0 {
 		return nil
 	}
@@ -90,8 +83,8 @@ func pdfBookmarkEntries(ctx context.Context, filePath string) []OutlineEntry {
 // layer? A readable one is extractable with no entries (a valid document without
 // a TOC); a text-free one is reported as scanned; an unreadable one carries the
 // reader's own diagnosis.
-func pdfNoOutlineResult(ctx context.Context, filePath string) (OutlineResult, error) {
-	state, reason, err := probePDFTextLayer(ctx, filePath)
+func pdfNoOutlineResult(ctx context.Context, d document) (OutlineResult, error) {
+	state, reason, err := probePDFTextLayer(ctx, d)
 	if err != nil {
 		return OutlineResult{}, err
 	}
@@ -109,7 +102,7 @@ func pdfNoOutlineResult(ctx context.Context, filePath string) (OutlineResult, er
 // closure so a panic on malformed input becomes ok=false ("no outline") rather
 // than a crash. A non-nil pdfcpu error is likewise reported as ok=false, and so
 // is a read the caller's context ended.
-func readBookmarks(ctx context.Context, f *os.File) (bms []pdfcpu.Bookmark, ok bool) {
+func readBookmarks(ctx context.Context, f io.ReadSeeker) (bms []pdfcpu.Bookmark, ok bool) {
 	defer func() {
 		if recover() != nil {
 			bms, ok = nil, false

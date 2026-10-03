@@ -301,18 +301,18 @@ func TestReadModes_ReturnWithinTheBudget(t *testing.T) {
 	shrinkReadBudget(t, -time.Second)
 	awaitNoStuckReads(t)
 
-	chunk, err := Extract(context.Background(), "testdata/sample.pdf", Req{})
+	chunk, err := Extract(context.Background(), openFile(t, "testdata/sample.pdf"), Req{})
 	if err != nil || chunk.Extractable || chunk.Reason != unresponsiveReadReason {
 		t.Errorf("text mode: want %q, got %+v (err %v)", unresponsiveReadReason, chunk, err)
 	}
 	if chunk.Format != "pdf" {
 		t.Errorf("a read that gave up should still say what it was reading, got %q", chunk.Format)
 	}
-	res, err := Search(context.Background(), "testdata/sample.pdf", "page", SearchOpts{})
+	res, err := Search(context.Background(), openFile(t, "testdata/sample.pdf"), "page", SearchOpts{})
 	if err != nil || res.Extractable || res.Reason != unresponsiveReadReason {
 		t.Errorf("find mode: want %q, got %+v (err %v)", unresponsiveReadReason, res, err)
 	}
-	toc, err := Outline(context.Background(), "testdata/sample.pdf")
+	toc, err := Outline(context.Background(), openFile(t, "testdata/sample.pdf"))
 	if err != nil || toc.Extractable || toc.Reason != unresponsiveReadReason {
 		t.Errorf("outline mode: want %q, got %+v (err %v)", unresponsiveReadReason, toc, err)
 	}
@@ -336,10 +336,16 @@ func TestFormatHint(t *testing.T) {
 		nameless:          "pdf",
 		"mystery.unknown": "",
 	}
-	for path, want := range cases {
-		t.Run(path, func(t *testing.T) {
-			if got := formatHint(path); got != want {
-				t.Errorf("formatHint(%q) = %q, want %q", path, got, want)
+	for name, want := range cases {
+		t.Run(filepath.Base(name), func(t *testing.T) {
+			// The named cases are empty files: their extension must answer before
+			// any byte is looked at.
+			path := name
+			if !filepath.IsAbs(path) {
+				path = writeBytes(t, t.TempDir(), name, nil)
+			}
+			if got := formatHint(docFor(t, path)); got != want {
+				t.Errorf("formatHint(%q) = %q, want %q", name, got, want)
 			}
 		})
 	}

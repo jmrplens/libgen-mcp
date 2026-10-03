@@ -12,7 +12,7 @@ import (
 // word that only appears on page 2 returns at least one match anchored to that
 // page, with a snippet containing the term and the pdf format reported.
 func TestSearch_PDFFindsSecondPage(t *testing.T) {
-	res, err := Search(context.Background(), "testdata/sample.pdf", "Second", SearchOpts{})
+	res, err := Search(context.Background(), openFile(t, "testdata/sample.pdf"), "Second", SearchOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestSearch_PDFFindsSecondPage(t *testing.T) {
 // case-insensitive: searching "hands-on" finds the "Hands-On" heading in the
 // sample PDF.
 func TestSearch_CaseInsensitiveDefault(t *testing.T) {
-	res, err := Search(context.Background(), "testdata/sample.pdf", "hands-on", SearchOpts{})
+	res, err := Search(context.Background(), openFile(t, "testdata/sample.pdf"), "hands-on", SearchOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestSearch_CaseInsensitiveDefault(t *testing.T) {
 // MaxMatches==1 returns one match with HasMore and NextMatch==1, and resuming
 // at StartMatch==1 returns the following match at a later offset.
 func TestSearch_Pagination(t *testing.T) {
-	first, err := Search(context.Background(), "testdata/sample.txt", "the", SearchOpts{MaxMatches: 1})
+	first, err := Search(context.Background(), openFile(t, "testdata/sample.txt"), "the", SearchOpts{MaxMatches: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestSearch_Pagination(t *testing.T) {
 	if !first.HasMore || first.NextMatch != 1 {
 		t.Fatalf("want HasMore and NextMatch==1, got %+v", first)
 	}
-	second, err := Search(context.Background(), "testdata/sample.txt", "the", SearchOpts{MaxMatches: 1, StartMatch: 1})
+	second, err := Search(context.Background(), openFile(t, "testdata/sample.txt"), "the", SearchOpts{MaxMatches: 1, StartMatch: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestSearch_Pagination(t *testing.T) {
 // TestSearch_NoMatches verifies that an absent term yields zero matches,
 // HasMore false and no error, while still reporting the format as extractable.
 func TestSearch_NoMatches(t *testing.T) {
-	res, err := Search(context.Background(), "testdata/sample.txt", "zzzznotpresent", SearchOpts{})
+	res, err := Search(context.Background(), openFile(t, "testdata/sample.txt"), "zzzznotpresent", SearchOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestSearch_NoMatches(t *testing.T) {
 // TestSearch_EmptyQuery verifies that a whitespace-only query returns zero
 // matches without an error and reports the format as extractable.
 func TestSearch_EmptyQuery(t *testing.T) {
-	res, err := Search(context.Background(), "testdata/sample.txt", "   ", SearchOpts{})
+	res, err := Search(context.Background(), openFile(t, "testdata/sample.txt"), "   ", SearchOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestSearch_EmptyQuery(t *testing.T) {
 // word returns a match with a character offset set and the epub format.
 func TestSearch_EPUB(t *testing.T) {
 	path := buildEPUB(t, t.TempDir())
-	res, err := Search(context.Background(), path, "beta", SearchOpts{})
+	res, err := Search(context.Background(), openFile(t, path), "beta", SearchOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestSearch_EPUB(t *testing.T) {
 // TestSearch_TXT verifies that searching the sample text file for "brown"
 // returns a match whose snippet contains the term.
 func TestSearch_TXT(t *testing.T) {
-	res, err := Search(context.Background(), "testdata/sample.txt", "brown", SearchOpts{})
+	res, err := Search(context.Background(), openFile(t, "testdata/sample.txt"), "brown", SearchOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +167,7 @@ func TestSearch_IgnoresWhitespaceDifferences(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tc.body), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			res, err := Search(context.Background(), path, "Overseas Harriette", SearchOpts{})
+			res, err := Search(context.Background(), openFile(t, path), "Overseas Harriette", SearchOpts{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -194,7 +194,7 @@ func TestSearch_WhitespaceInsensitiveMatchIsNotSubstringNoise(t *testing.T) {
 	if err := os.WriteFile(path, []byte("the OverseasHarriette Kane papers"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	res, err := Search(context.Background(), path, "Overseas Harold", SearchOpts{})
+	res, err := Search(context.Background(), openFile(t, path), "Overseas Harold", SearchOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestSearch_WhitespaceInsensitiveMatchIsNotSubstringNoise(t *testing.T) {
 // as not extractable with a reason mentioning the missing text layer, and never
 // panics.
 func TestSearch_ScannedPDFNoText(t *testing.T) {
-	res, err := Search(context.Background(), "testdata/scanned.pdf", "anything", SearchOpts{})
+	res, err := Search(context.Background(), openFile(t, "testdata/scanned.pdf"), "anything", SearchOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +222,7 @@ func TestSearch_ScannedPDFNoText(t *testing.T) {
 // TestSearch_UnsupportedFormat verifies that an unsupported container format is
 // reported as not extractable with a non-empty reason.
 func TestSearch_UnsupportedFormat(t *testing.T) {
-	res, err := Search(context.Background(), "testdata/unsupported.djvu", "anything", SearchOpts{})
+	res, err := Search(context.Background(), openFile(t, "testdata/unsupported.djvu"), "anything", SearchOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +235,7 @@ func TestSearch_UnsupportedFormat(t *testing.T) {
 // unrecognized extension (neither supported nor a known container) is reported
 // as not extractable with a reason naming the extension.
 func TestSearch_UnsupportedExtension(t *testing.T) {
-	res, err := Search(context.Background(), "testdata/whatever.xyz", "q", SearchOpts{})
+	res, err := Search(context.Background(), openFile(t, "testdata/whatever.xyz"), "q", SearchOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +251,7 @@ func TestSearch_UnsupportedExtension(t *testing.T) {
 // normalized to zero, so the first window of matches is returned rather than
 // an out-of-range slice.
 func TestSearch_NegativeStartMatch(t *testing.T) {
-	res, err := Search(context.Background(), "testdata/sample.txt", "the", SearchOpts{StartMatch: -5})
+	res, err := Search(context.Background(), openFile(t, "testdata/sample.txt"), "the", SearchOpts{StartMatch: -5})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +262,7 @@ func TestSearch_NegativeStartMatch(t *testing.T) {
 	// even if a negative StartMatch were clamped to the LAST match instead of the
 	// first. Compare against the explicit first window instead, which is the only
 	// thing "normalized to zero" can mean.
-	base, err := Search(context.Background(), "testdata/sample.txt", "the", SearchOpts{StartMatch: 0})
+	base, err := Search(context.Background(), openFile(t, "testdata/sample.txt"), "the", SearchOpts{StartMatch: 0})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -448,7 +448,7 @@ func TestFindMatches_UnicodeCaseFolding(t *testing.T) {
 	}
 }
 
-// TestSearchPDF_MalformedOpen verifies scanPDFMatches' pdf.Open failure branch: a
+// TestSearchPDF_MalformedOpen verifies scanPDFMatches' pdf.NewReader failure branch: a
 // .pdf whose bytes are not a valid PDF is reported as not extractable with a
 // "not a valid PDF" reason rather than crashing.
 func TestSearchPDF_MalformedOpen(t *testing.T) {
@@ -456,7 +456,7 @@ func TestSearchPDF_MalformedOpen(t *testing.T) {
 	if err := os.WriteFile(path, []byte("%PDF-1.7 not really a pdf"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	res, err := Search(context.Background(), path, "anything", SearchOpts{})
+	res, err := Search(context.Background(), openFile(t, path), "anything", SearchOpts{})
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -474,7 +474,7 @@ func TestSearchPDF_MalformedOpen(t *testing.T) {
 func TestScanPDFMatches_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := scanPDFMatches(ctx, "testdata/sample.pdf", "the", SearchOpts{SnippetChars: 160}); err == nil {
+	if _, err := scanPDFMatches(ctx, docFor(t, "testdata/sample.pdf"), "the", SearchOpts{SnippetChars: 160}); err == nil {
 		t.Fatal("expected a context error, got nil")
 	}
 }
@@ -488,7 +488,7 @@ func TestSearchPDF_NullPage(t *testing.T) {
 	if err := os.WriteFile(path, nullPagePDF(), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	res, err := Search(context.Background(), path, "anything", SearchOpts{})
+	res, err := Search(context.Background(), openFile(t, path), "anything", SearchOpts{})
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -506,25 +506,8 @@ func TestSearchPDF_NullPage(t *testing.T) {
 func TestSearchTXT_ContextCancelledDirect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := searchTXT(ctx, "testdata/sample.txt", "the", SearchOpts{SnippetChars: 160}); err == nil {
+	if _, err := searchTXT(ctx, docFor(t, "testdata/sample.txt"), "the", SearchOpts{SnippetChars: 160}); err == nil {
 		t.Fatal("expected a context error, got nil")
-	}
-}
-
-// TestSearchTXT_MissingFile verifies searchTXT's os.Open failure branch: a
-// non-existent .txt path is reported as not extractable with a reason noting the
-// file could not be opened.
-func TestSearchTXT_MissingFile(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "does-not-exist.txt")
-	res, err := Search(context.Background(), path, "the", SearchOpts{})
-	if err != nil {
-		t.Fatalf("expected nil error, got %v", err)
-	}
-	if res.Extractable {
-		t.Fatalf("expected not extractable, got %+v", res)
-	}
-	if !strings.Contains(res.Reason, "cannot open text file") {
-		t.Errorf("reason should note the open failure, got %q", res.Reason)
 	}
 }
 
@@ -536,7 +519,7 @@ func TestSearchTXT_ReadError(t *testing.T) {
 	if err := os.Mkdir(dir, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	res, err := Search(context.Background(), dir, "the", SearchOpts{})
+	res, err := Search(context.Background(), openFile(t, dir), "the", SearchOpts{})
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -555,12 +538,12 @@ func TestSearchEPUB_ContextCancelledDirect(t *testing.T) {
 	path := buildEPUB(t, t.TempDir())
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := searchEPUB(ctx, path, "beta", SearchOpts{SnippetChars: 160}); err == nil {
+	if _, err := searchEPUB(ctx, docFor(t, path), "beta", SearchOpts{SnippetChars: 160}); err == nil {
 		t.Fatal("expected a context error, got nil")
 	}
 }
 
-// TestSearchEPUB_NotAZip verifies searchEPUB's zip.OpenReader failure branch: a
+// TestSearchEPUB_NotAZip verifies searchEPUB's zip.NewReader failure branch: a
 // .epub whose bytes are not a valid ZIP archive is reported as not extractable
 // with a reason noting the archive could not be opened.
 func TestSearchEPUB_NotAZip(t *testing.T) {
@@ -568,7 +551,7 @@ func TestSearchEPUB_NotAZip(t *testing.T) {
 	if err := os.WriteFile(path, []byte("this is not a zip archive"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	res, err := Search(context.Background(), path, "beta", SearchOpts{})
+	res, err := Search(context.Background(), openFile(t, path), "beta", SearchOpts{})
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -587,7 +570,7 @@ func TestSearchEPUB_StructuralError(t *testing.T) {
 	path := writeEPUB(t, t.TempDir(), "no-container.epub", map[string]string{
 		"README.txt": "not an epub",
 	})
-	res, err := Search(context.Background(), path, "beta", SearchOpts{})
+	res, err := Search(context.Background(), openFile(t, path), "beta", SearchOpts{})
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -604,7 +587,7 @@ func TestSearchEPUB_StructuralError(t *testing.T) {
 // as the context error rather than a result.
 func TestSearchEPUB_ContextCancelledMidSpine(t *testing.T) {
 	path := buildEPUB(t, t.TempDir())
-	if _, err := searchEPUB(passErr(1), path, "beta", SearchOpts{SnippetChars: 160}); err == nil {
+	if _, err := searchEPUB(passErr(1), docFor(t, path), "beta", SearchOpts{SnippetChars: 160}); err == nil {
 		t.Fatal("expected a context error propagated from the spine walk, got nil")
 	}
 }
@@ -614,7 +597,7 @@ func TestSearchEPUB_ContextCancelledMidSpine(t *testing.T) {
 func TestSearch_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := Search(ctx, "testdata/sample.pdf", "Second", SearchOpts{})
+	_, err := Search(ctx, openFile(t, "testdata/sample.pdf"), "Second", SearchOpts{})
 	if err == nil {
 		t.Fatal("expected a context error, got nil")
 	}
