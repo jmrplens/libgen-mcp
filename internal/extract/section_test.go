@@ -462,8 +462,87 @@ func TestResolveSection_CapsTheCandidates(t *testing.T) {
 		entries[i] = OutlineEntry{Index: i + 1, Title: "Exercises"}
 	}
 	_, err := resolveSection(entries, SectionRef{Title: "exercises"})
-	if err == nil || !strings.HasSuffix(err.Error(), `10 "Exercises" and 2 more`) {
+	if err == nil || !strings.Contains(err.Error(), `10 "Exercises" and 2 more.`) {
 		t.Errorf("err = %v, want ten candidates and the count of the rest", err)
+	}
+	if !strings.HasSuffix(err.Error(), untrustedTitles) {
+		t.Errorf("err = %v, want it to frame the quoted titles as untrusted", err)
+	}
+}
+
+// TestSection_PDFEntryPastTheLastPage verifies a bookmark pointing past the end
+// of the document is refused by name as a broken entry, not reported as an
+// unreadable file.
+func TestSection_PDFEntryPastTheLastPage(t *testing.T) {
+	entries := []OutlineEntry{{Index: 1, Title: "Phantom", Page: 99}}
+	_, err := pdfSection(context.Background(), docFor(t, sectionsPDF), entries, 0, Req{})
+	var se *SectionError
+	if !errors.As(err, &se) || !strings.Contains(err.Error(), `entry 1 "Phantom" points to page 99, past the document's last page (8)`) {
+		t.Errorf("err = %v, want a SectionError naming the entry and the last page", err)
+	}
+	if err != nil && !strings.HasSuffix(err.Error(), untrustedTitles) {
+		t.Errorf("err = %v, want it to frame the quoted title as untrusted", err)
+	}
+}
+
+// TestSection_EPUBEscapedFragment verifies a link whose fragment is
+// percent-encoded reaches the element whose id is the decoded text, so the
+// entry before it stops at that heading instead of both sections reading the
+// same text from the document start.
+func TestSection_EPUBEscapedFragment(t *testing.T) {
+	ncx := `<?xml version="1.0" encoding="utf-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><navMap>
+<navPoint id="a"><navLabel><text>Intro</text></navLabel><content src="chapter1.xhtml"/></navPoint>
+<navPoint id="b"><navLabel><text>Cafe</text></navLabel><content src="chapter1.xhtml#caf%C3%A9"/></navPoint>
+<navPoint id="c"><navLabel><text>Percent</text></navLabel><content src="chapter1.xhtml#50%25"/></navPoint>
+</navMap></ncx>`
+	files := epub2Files(ncxOPF, ncx)
+	files["OEBPS/chapter1.xhtml"] = `<html><body><p>intro</p><h1 id="café">Cafe</h1><p>coffee</p>` +
+		`<h1 id="50%">Percent</h1><p>half</p></body></html>`
+	path := writeEPUB(t, t.TempDir(), "escaped-fragment.epub", files)
+
+	testCases := []struct{ name, title, want string }{
+		{name: "the entry before stops at the heading", title: "intro", want: "intro"},
+		{name: "the escaped fragment is found", title: "cafe", want: "Cafecoffee"},
+		{name: "an id holding a percent sign is found", title: "percent", want: "Percenthalf"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			sc, err := Section(context.Background(), openFile(t, path), SectionRef{Title: tc.title}, wholeSection)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.TrimSpace(sc.Text); got != tc.want {
+				t.Errorf("section %q = %q, want %q", tc.title, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestSection_EPUBArchiveNameWithLiteralEscapes verifies a content document the
+// archive stores under its escaped spelling, which Extract reads, is reachable
+// from an outline link too, since both resolve to the decoded name.
+func TestSection_EPUBArchiveNameWithLiteralEscapes(t *testing.T) {
+	opf := `<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="2.0"><manifest>
+<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+<item id="r" href="raw%20name.xhtml" media-type="application/xhtml+xml"/>
+</manifest><spine toc="ncx"><itemref idref="r"/></spine></package>`
+	ncx := `<?xml version="1.0" encoding="utf-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><navMap>
+<navPoint id="a"><navLabel><text>Raw</text></navLabel><content src="raw%20name.xhtml#top"/></navPoint>
+</navMap></ncx>`
+	path := writeEPUB(t, t.TempDir(), "literal-escapes.epub", map[string]string{
+		"META-INF/container.xml": outlineContainerXML,
+		"OEBPS/content.opf":      opf,
+		"OEBPS/toc.ncx":          ncx,
+		"OEBPS/raw%20name.xhtml": `<html><body><h1 id="top">Raw</h1><p>stored escaped</p></body></html>`,
+	})
+	sc, err := Section(context.Background(), openFile(t, path), SectionRef{Index: 1}, wholeSection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(sc.Text); got != "Rawstored escaped" {
+		t.Errorf("section = %q, want the document stored under its escaped name", got)
 	}
 }
 

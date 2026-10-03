@@ -1108,6 +1108,54 @@ func TestValidateSectionInput(t *testing.T) {
 	}
 }
 
+// TestValidateSectionCursor verifies a cursor is refused in a mode it was not
+// issued by: a section cursor with outline or find, and any other cursor with
+// section. A malformed cursor is left for the branch that reports it.
+func TestValidateSectionCursor(t *testing.T) {
+	fromSection := encodeCursor(readCursor{Page: 6, Sec: 5})
+	sequential := encodeCursor(readCursor{Page: 6})
+	testCases := []struct {
+		name string
+		in   ReadInput
+		want string
+	}{
+		{name: "section cursor alone", in: ReadInput{Cursor: fromSection}},
+		{name: "section cursor with section", in: ReadInput{Cursor: fromSection, Section: "5"}},
+		{name: "sequential cursor alone", in: ReadInput{Cursor: sequential}},
+		{name: "malformed cursor with section", in: ReadInput{Cursor: "!!", Section: "5"}},
+		{name: "section cursor with outline", in: ReadInput{Cursor: fromSection, Outline: true}, want: "outline"},
+		{name: "section cursor with find", in: ReadInput{Cursor: fromSection, Find: "x"}, want: "find"},
+		{name: "sequential cursor with section", in: ReadInput{Cursor: sequential, Section: "5"}, want: "did not come from a section read"},
+		{name: "find cursor with section", in: ReadInput{Cursor: encodeCursor(readCursor{Match: 3}), Section: "5"}, want: "did not come from a section read"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateSectionInput(tc.in)
+			if tc.want == "" {
+				if err != nil {
+					t.Errorf("err = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("err = %v, want it to contain %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestReadTool_SectionCursorWithFindIsRefused verifies the refusal reaches the
+// caller as a tool error before anything is fetched.
+func TestReadTool_SectionCursorWithFindIsRefused(t *testing.T) {
+	h := readHandler(nil, readTestCfg())
+	_, _, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{
+		Path: sectionsPDFPath, Find: "Page", Cursor: encodeCursor(readCursor{Page: 6, Sec: 5}),
+	})
+	if err == nil || !strings.Contains(err.Error(), "continues a section read") {
+		t.Errorf("err = %v, want the section-cursor refusal", err)
+	}
+}
+
 // TestParseSectionRef verifies digits are an entry number and anything else a
 // title, including a title that starts with a number.
 func TestParseSectionRef(t *testing.T) {

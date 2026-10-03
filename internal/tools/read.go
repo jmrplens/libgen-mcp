@@ -143,6 +143,9 @@ func validateReadInput(in ReadInput) error {
 // and find are modes of their own, and start_page and offset would move the
 // start of a section whose start the outline already fixes.
 func validateSectionInput(in ReadInput) error {
+	if err := validateSectionCursor(in); err != nil {
+		return err
+	}
 	if strings.TrimSpace(in.Section) == "" {
 		return nil
 	}
@@ -153,6 +156,28 @@ func validateSectionInput(in ReadInput) error {
 		return errors.New("section cannot be combined with find: search the whole document with find, or read the section without it")
 	case in.StartPage > 0 || in.Offset > 0:
 		return errors.New("section fixes where reading starts, so omit start_page and offset: continue a long section with the cursor")
+	}
+	return nil
+}
+
+// validateSectionCursor refuses a cursor sent to a mode it was not issued by.
+// A cursor from a section read carries the section, so sent with outline or
+// find it would be read as another mode's position. A cursor from any other
+// read, sent with section, would resume the section at a position nobody
+// computed for it. A malformed cursor is left to the branch that decodes it,
+// which reports it as invalid.
+func validateSectionCursor(in ReadInput) error {
+	if !wellFormedCursor(in.Cursor) {
+		return nil
+	}
+	fromSection := sectionCursor(in.Cursor) > 0
+	switch {
+	case fromSection && in.Outline:
+		return errors.New("this cursor continues a section read and cannot be used with outline: drop the cursor")
+	case fromSection && strings.TrimSpace(in.Find) != "":
+		return errors.New("this cursor continues a section read and cannot be used with find: drop the cursor to search")
+	case !fromSection && strings.TrimSpace(in.Section) != "":
+		return errors.New("this cursor did not come from a section read: drop section to continue that read, or drop the cursor to start the section")
 	}
 	return nil
 }
@@ -176,6 +201,16 @@ func parseSectionRef(s string) (extract.SectionRef, error) {
 		return extract.SectionRef{}, errors.New("section number must be an entry number from outline mode, starting at 1")
 	}
 	return extract.SectionRef{Index: n}, nil
+}
+
+// wellFormedCursor reports whether s is a cursor this server could have
+// issued. An absent cursor is not one.
+func wellFormedCursor(s string) bool {
+	if s == "" {
+		return false
+	}
+	_, err := decodeCursor(s)
+	return err == nil
 }
 
 // sectionCursor returns the section a cursor was issued for, or 0 when the

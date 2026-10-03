@@ -769,7 +769,9 @@ carries the extent in `section`, and `next_steps` says when the section has ende
 `max_pages` and `max_chars` bound each chunk as usual. A long section continues with the
 `cursor`, which remembers the section, and the chunk that reaches the section's end reports
 `has_more: false` even though the document goes on. `section` cannot be combined with
-`outline`, `find`, `start_page` or `offset`. A readable document with no table of contents is
+`outline`, `find`, `start_page` or `offset`, and a cursor is refused in a mode other than the
+one that issued it: a section cursor with `outline` or `find`, or another read's cursor with
+`section`. A readable document with no table of contents is
 refused with a pointer to `start_page`/`offset` and `find`, and an unreadable one reports
 `extractable: false` exactly as the other modes do.
 

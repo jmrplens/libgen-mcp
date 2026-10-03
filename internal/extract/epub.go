@@ -168,19 +168,24 @@ func (st *spineText) anchorRecorder(name string, base int) func(id string, at in
 	}
 }
 
-// readSpineEntry reads the content document a spine item's href names, and
-// reports the archive name it was read under. The href is decoded first, since
-// it is a URL; an archive that stored the name with its escapes intact is read
-// under the href as written. ok is false when the item names nothing readable,
-// which the spine walk skips.
+// readSpineEntry reads the content document a spine item's href names. The
+// href is decoded first, since it is a URL, and an archive that stored the
+// name with its escapes intact is read under the href as written.
+//
+// The name it reports is the decoded one whichever spelling was read, because
+// it keys the anchors and an outline link is resolved to the decoded name too
+// (linkTarget). Keying them by the archive's literal spelling instead would
+// leave a document Extract reads unreachable from every outline entry. ok is
+// false when the item names nothing readable, which the spine walk skips.
 func readSpineEntry(zr *zip.Reader, baseDir, href string) (name string, data []byte, clipped, ok bool) {
 	if href == "" {
 		return "", nil, false, false
 	}
-	for _, candidate := range []string{archiveName(baseDir, href), path.Join(baseDir, href)} {
+	name = archiveName(baseDir, href)
+	for _, candidate := range []string{name, path.Join(baseDir, href)} {
 		body, cut, err := readZipEntry(zr, candidate)
 		if err == nil {
-			return candidate, body, cut, true
+			return name, body, cut, true
 		}
 	}
 	return "", nil, false, false
