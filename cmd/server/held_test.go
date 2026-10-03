@@ -294,6 +294,20 @@ func shortContext(t *testing.T) context.Context {
 	return ctx
 }
 
+// awaitCall receives a held call's outcome, or fails the test once callWait
+// passes. The call goes out on a background context, so a bare receive would
+// wait for go test's own deadline if a broken ceiling never let it finish.
+func awaitCall(t *testing.T, done <-chan error) error {
+	t.Helper()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(callWait):
+		t.Fatal("the held call did not finish after it was released")
+		return nil
+	}
+}
+
 // holdCall starts one call in the background and returns where its reply
 // arrives.
 func holdCall(base, body string, headers map[string]string) <-chan error {
@@ -348,10 +362,10 @@ func TestProcessCeiling_RefusesACallPastTheHeldCeiling(t *testing.T) {
 	})
 
 	h.releaseAll()
-	if err := <-first; err != nil {
+	if err := awaitCall(t, first); err != nil {
 		t.Errorf("the first held call was not served once released: %v", err)
 	}
-	if err := <-second; err != nil {
+	if err := awaitCall(t, second); err != nil {
 		t.Errorf("the second held call was not served once released: %v", err)
 	}
 	waitUntil(t, func() bool { return ceilings.held.open.Load() == 0 })
@@ -396,7 +410,7 @@ func TestProcessCeiling_AModernCallCountsOnce(t *testing.T) {
 		t.Errorf("one modern call holds %d slots, want 1", got)
 	}
 	h.releaseAll()
-	if err := <-done; err != nil {
+	if err := awaitCall(t, done); err != nil {
 		t.Errorf("the modern call was not served: %v", err)
 	}
 	waitUntil(t, func() bool { return ceilings.held.open.Load() == 0 })
@@ -416,7 +430,7 @@ func TestProcessCeiling_ALegacyCallIsCountedWhereTheSDKDispatchesIt(t *testing.T
 		t.Errorf("one legacy call holds %d slots, want 1", got)
 	}
 	h.releaseAll()
-	if err := <-done; err != nil {
+	if err := awaitCall(t, done); err != nil {
 		t.Errorf("the legacy call was not served: %v", err)
 	}
 	waitUntil(t, func() bool { return ceilings.held.open.Load() == 0 })
