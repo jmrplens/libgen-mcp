@@ -120,7 +120,8 @@
     "env_file": {
       "type": "string",
       "title": "Settings file",
-      "description": "Absolute path to a dotenv file to load settings from, in addition to ~/.libgen-mcp.env. What this bundle passes wins over both. A .env in the working directory is never loaded.",
+      "description": "Absolute path to a dotenv file to load settings from, in addition to ~/.libgen-mcp.env. A field on this page that has a value wins over both files, and a field left blank is read from them. A .env in the working directory is never loaded.",
+      "default": "",
       "required": false
     },
     "unpaywall_email": {

@@ -2,12 +2,16 @@ package config
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // resetEnvFileState puts the two once-per-process memos back so each case starts
@@ -55,11 +59,9 @@ func inDir(t *testing.T, dir string) {
 
 // unsetEnv removes a variable for one test, restoring it afterwards.
 //
-// Not t.Setenv(name, ""): an empty value is still SET, and godotenv fills in
-// only what os.LookupEnv reports as unset — so clearing a variable that way
-// pins it to the empty string and no dotenv file can supply it. That is the
-// right production behavior (a client passing "" in its env block said
-// something) and exactly the wrong fixture for a precedence case.
+// Not t.Setenv(name, "") alone: that leaves the variable set, and a fixture
+// meant to be "unset" should be unset, not merely blank. Blank is its own case,
+// covered by TestABlankValueDoesNotBlockTheFiles: a dotenv file fills it.
 func unsetEnv(t *testing.T, name string) {
 	t.Helper()
 	t.Setenv(name, "")
@@ -476,6 +478,158 @@ func TestAnAbsentHomeFileSaysNothing(t *testing.T) {
 	}
 	if out := logged(); strings.Contains(out, "home directory") {
 		t.Errorf("a deployment with no home file was told about one:\n%s", out)
+	}
+}
+
+// TestABlankValueDoesNotBlockTheFiles is the precedence rule for a variable the
+// client passed with nothing in it.
+//
+// Every read on this surface takes a blank value as unset, so a client that
+// passes "" has asked for the default, and the default is what a dotenv file
+// overrides. godotenv's own rule pinned such a variable to nothing instead,
+// which made a setting in either file silently ineffective. Whitespace counts
+// as blank, as it does for the HTTP flag overlay.
+func TestABlankValueDoesNotBlockTheFiles(t *testing.T) {
+	for _, tc := range []struct {
+		name, process, named, home, want string
+	}{
+		{name: "blank, home file", process: "", home: "home@example.org", want: "home@example.org"},
+		{name: "whitespace, home file", process: "  ", home: "home@example.org", want: "home@example.org"},
+		{name: "blank, named file wins over home", process: "", named: "named@example.org", home: "home@example.org", want: "named@example.org"},
+		{name: "a value still wins over both", process: "client@example.org", named: "named@example.org", home: "home@example.org", want: "client@example.org"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := resetEnvFileState(t)
+			inDir(t, t.TempDir())
+			writeEnvFile(t, filepath.Join(home, EnvFileName), "LIBGEN_MCP_UNPAYWALL_EMAIL="+tc.home)
+			if tc.named != "" {
+				t.Setenv(EnvFileVar, writeEnvFile(t, filepath.Join(t.TempDir(), "named.env"), "LIBGEN_MCP_UNPAYWALL_EMAIL="+tc.named))
+			} else {
+				unsetEnv(t, EnvFileVar)
+			}
+			t.Setenv("LIBGEN_MCP_UNPAYWALL_EMAIL", tc.process)
+
+			LoadEnvFiles()
+
+			if got := os.Getenv("LIBGEN_MCP_UNPAYWALL_EMAIL"); got != tc.want {
+				t.Errorf("LIBGEN_MCP_UNPAYWALL_EMAIL = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestABlankNamedFileVariableCannotBeFilledIntoANomination is the memo's case
+// again, for the shape a bundle passes: the variable set and empty, which a home
+// file is now allowed to fill. The file it then names must still not be read.
+func TestABlankNamedFileVariableCannotBeFilledIntoANomination(t *testing.T) {
+	home := resetEnvFileState(t)
+	writeEnvFile(t, filepath.Join(home, EnvFileName), EnvFileVar+"=.env")
+	dir := t.TempDir()
+	writeEnvFile(t, filepath.Join(dir, ".env"), "LIBGEN_MIRROR=https://attacker.example")
+	inDir(t, dir)
+	t.Setenv(EnvFileVar, "")
+	unsetEnv(t, "LIBGEN_MIRROR")
+
+	LoadEnvFiles()
+	report := LoadEnvFiles()
+
+	if got := os.Getenv("LIBGEN_MIRROR"); got != "" {
+		t.Errorf("a home file filled a blank %s and the file it named was loaded (LIBGEN_MIRROR=%q)", EnvFileVar, got)
+	}
+	if report.ExplicitPath != "" {
+		t.Errorf("ExplicitPath = %q, want none: the variable was blank when the process started", report.ExplicitPath)
+	}
+}
+
+// bundleManifest is the Claude Desktop bundle's manifest, relative to this
+// package.
+var bundleManifest = filepath.Join("..", "..", "mcpb", "manifest.json")
+
+// bundleEnvironment returns the environment Claude Desktop builds from the
+// bundle's manifest, following getMcpConfigForManifest in
+// github.com/modelcontextprotocol/mcpb (src/shared/config.ts): each field's
+// default, replaced by what the user saved, substituted into the env block as a
+// string. A field the user saved blank is the empty string.
+func bundleEnvironment(t *testing.T, saved map[string]string) map[string]string {
+	t.Helper()
+	raw, err := os.ReadFile(bundleManifest)
+	if err != nil {
+		t.Fatalf("reading %s: %v", bundleManifest, err)
+	}
+	var manifest struct {
+		Server struct {
+			MCPConfig struct {
+				Env map[string]string `json:"env"`
+			} `json:"mcp_config"`
+		} `json:"server"`
+		UserConfig map[string]struct {
+			Default any `json:"default"`
+		} `json:"user_config"`
+	}
+	if err = json.Unmarshal(raw, &manifest); err != nil {
+		t.Fatalf("parsing %s: %v", bundleManifest, err)
+	}
+	values := map[string]string{}
+	for key, field := range manifest.UserConfig {
+		if field.Default != nil {
+			values[key] = fmt.Sprint(field.Default)
+		}
+	}
+	maps.Copy(values, saved)
+	env := map[string]string{}
+	for name, template := range manifest.Server.MCPConfig.Env {
+		key := strings.TrimSuffix(strings.TrimPrefix(template, "${user_config."), "}")
+		value, ok := values[key]
+		if !ok {
+			t.Fatalf("%s maps to %s, which has no default and was not saved: the host would pass the placeholder itself", name, template)
+		}
+		env[name] = value
+	}
+	return env
+}
+
+// TestTheBundleEnvironmentTakesItsBlankSettingsFromTheFiles reproduces the
+// Claude Desktop install end to end.
+//
+// The bundle maps every field to a variable. A field left blank arrives as the
+// empty string, and before blank counted as unset that pinned the variable: the
+// CORE key or Unpaywall address a user kept in ~/.libgen-mcp.env was never
+// read. A field that carries a default in the manifest still arrives with that
+// default, and still wins over both files, which is what the bundle's own
+// description of the settings-file field promises.
+func TestTheBundleEnvironmentTakesItsBlankSettingsFromTheFiles(t *testing.T) {
+	home := resetEnvFileState(t)
+	// Only the download directory is saved, because the manifest's default for
+	// it is the user's real one. Every other field is what the dialog offers
+	// untouched: its default, which for the four blank ones is the empty string.
+	// Read before inDir, since the manifest's path is relative to this package.
+	env := bundleEnvironment(t, map[string]string{"download_dir": t.TempDir()})
+	inDir(t, t.TempDir())
+	for name, value := range env {
+		t.Setenv(name, value)
+	}
+	writeEnvFile(t, filepath.Join(home, EnvFileName),
+		"LIBGEN_MIRROR=https://libgen.example",
+		"LIBGEN_MCP_UNPAYWALL_EMAIL=home@example.org",
+		"LIBGEN_MCP_CORE_KEY=home-core-key",
+		"LIBGEN_MCP_TIMEOUT=30s")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	if cfg.Mirror != "https://libgen.example" {
+		t.Errorf("Mirror = %q, want the home file's value under a blank field", cfg.Mirror)
+	}
+	if cfg.UnpaywallEmail != "home@example.org" {
+		t.Errorf("UnpaywallEmail = %q, want the home file's value under a blank field", cfg.UnpaywallEmail)
+	}
+	if cfg.CoreKey != "home-core-key" {
+		t.Errorf("CoreKey = %q, want the home file's value under a blank field", cfg.CoreKey)
+	}
+	if cfg.Timeout != 10*time.Second {
+		t.Errorf("Timeout = %v, want the bundle's 10s default: a field with a value wins over the files", cfg.Timeout)
 	}
 }
 
