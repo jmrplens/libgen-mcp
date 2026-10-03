@@ -63,7 +63,7 @@ Después pídele a Claude un libro o un artículo. Las cuatro herramientas de la
 
 ## Ajustes
 
-Todos los ajustes son opcionales. Cada uno corresponde a una variable de entorno que lee el servidor, y un campo vacío deja en su sitio el valor por defecto del servidor.
+Todos los ajustes son opcionales. Cada uno corresponde a una variable de entorno que lee el servidor, y un campo vacío deja el ajuste a los archivos dotenv de más abajo y, si no lo traen, al valor por defecto del servidor.
 
 | Ajuste                        | Por defecto                 | Variable                        | Qué hace                                                                                                       |
 | ----------------------------- | --------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------- |
@@ -78,7 +78,7 @@ Todos los ajustes son opcionales. Cada uno corresponde a una variable de entorno
 
 Los nombres de los ajustes son los que muestra Claude Desktop, en inglés.
 
-**El archivo de ajustes es para todo lo que el formulario no tiene.** Una variable que pasa la extensión gana sobre los dos archivos dotenv, así que usa el archivo para los ajustes sin campo, como `LIBGEN_MCP_EXTRA_SOURCES` o `LIBGEN_MCP_SOURCES`. Un `.env` en el directorio de trabajo de Claude Desktop no se lee nunca. Cada variable se describe en [Configuración](/libgen-mcp/es/configuration/).
+**El formulario y el archivo de ajustes se reparten el trabajo según qué campos tengan valor.** La extensión pasa cada campo como su variable, y un campo con valor gana sobre los dos archivos dotenv (el indicado en Settings file y después `~/.libgen-mcp.env`). Un campo que se deja en blanco llega vacío, y el servidor toma esa variable vacía de los archivos, así que Mirror, Unpaywall email y CORE API key pueden vivir en un archivo mientras sus campos sigan vacíos. Download directory, Request timeout, Maximum download size y Log level empiezan con su valor por defecto, así que llegan con ese valor y ganan sobre un archivo: cámbialos en el formulario. Usa el archivo para todo lo que el formulario no tiene, como `LIBGEN_MCP_EXTRA_SOURCES` o `LIBGEN_MCP_SOURCES`. Un `.env` en el directorio de trabajo de Claude Desktop no se lee nunca. Cada variable se describe en [Configuración](/libgen-mcp/es/configuration/).
 
 La clave de CORE está marcada como sensible, así que Claude Desktop la guarda cifrada con una clave que protege el sistema operativo (donde lo hay) y la oculta en el formulario.
 

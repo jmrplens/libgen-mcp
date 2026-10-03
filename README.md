@@ -379,11 +379,11 @@ by registering the tools and prompts for real and walking the tree, and
 | Discovery providers      |     8 |
 | `LIBGEN_MCP_*` variables |    57 |
 | Go packages              |    52 |
-| Test files               |   261 |
+| Test files               |   262 |
 
 | Test surface         | Files |
 | -------------------- | ----: |
-| unit (internal)      |   105 |
+| unit (internal)      |   106 |
 | unit (cmd)           |   101 |
 | HTTP end-to-end      |    31 |
 | stdio end-to-end     |    11 |

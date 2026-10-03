@@ -72,22 +72,25 @@ import { Aside } from "@astrojs/starlight/components";
 	to the default.
 </Aside>
 
-There are three places a setting can come from, and they are tried in this order — the first one where the variable is **set** wins, which is not quite the same as the first one that has a value:
+There are three places a setting can come from, and they are tried in this order — the first one that gives the variable a value that is not blank wins:
 
 1. **The process environment**, which is what your MCP client passed. Set these in the client's `env` block (see [Connect a client](/libgen-mcp/clients/)), in your shell, or with `-e` flags on `docker run`. A handful also have flags; see below.
 2. **The file `LIBGEN_MCP_ENV_FILE` names**, if you named one. Give it an absolute path.
 3. **`~/.libgen-mcp.env`**, a dotenv file in your home directory.
 
-<Aside type="caution">
-	**An exported variable with an empty value is set, and it wins.** A dotenv
-	file only fills in names the process environment does not already carry, so
-	`LIBGEN_MIRROR=` in a client's `env` block — or a `-e LIBGEN_MIRROR` on
-	`docker run` with nothing after it — suppresses the value in both dotenv files
-	and the setting falls back to its documented default. That is the right
-	behavior (an empty value is something you said) and it is the one that
-	surprises people, because the file is there and reads correctly. To let a file
-	supply a variable, leave it out of the environment entirely rather than
-	setting it to nothing.
+<Aside type="note">
+	**A variable passed with an empty value does not block the files.** A dotenv
+	file fills in every name the process environment leaves unset **or blank**
+	(empty, or only whitespace), so `LIBGEN_MIRROR=` in a client's `env` block —
+	or a `-e LIBGEN_MIRROR` on `docker run` with nothing after it — lets
+	`LIBGEN_MIRROR` in either file take effect, and the documented default applies
+	only when neither file has it. That is what makes the files usable under a
+	client that passes every setting it has a field for: Claude Desktop's
+	extension passes each field it shows, and a field left blank arrives as the
+	empty string. A blank value could never say more than "use the default"
+	anyway, since every variable here reads blank as unset. The cost is that a
+	client cannot clear a file's value by passing nothing; to override one, pass a
+	different value.
 </Aside>
 
 <Aside type="danger">

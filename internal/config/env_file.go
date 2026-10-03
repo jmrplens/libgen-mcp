@@ -29,6 +29,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -98,7 +99,7 @@ func newAnnounceOnce() *sync.Once { return &sync.Once{} }
 // explicitEnvFile resolves EnvFileVar once per process, before any file this
 // server loads has had a chance to write it.
 //
-// godotenv sets every key the environment does not already carry, so reading
+// A loaded file sets every key the environment gives no value, so reading
 // the variable afresh on a later call would honor a value an earlier call's own
 // home file supplied — which is how a home file naming ".env" loads the
 // working-directory file the same run had just announced it was ignoring.
@@ -150,11 +151,13 @@ type EnvFileReport struct {
 // It is separate from [Load] because the environment has to be complete before
 // Load reads any of it, and because a caller may want the report.
 //
-// Every load is best-effort, a missing file being the normal case, and godotenv
-// never overwrites a variable that is already set. The resulting precedence,
-// highest first, is:
+// Every load is best-effort, a missing file being the normal case, and a file
+// never overwrites a variable that already has a value. A variable that is set
+// but blank has none: see [loadDotenv]. The resulting precedence, highest
+// first, is:
 //
-//  1. the process environment, which is what the MCP client passed;
+//  1. the process environment, which is what the MCP client passed, for every
+//     variable it gave a non-blank value;
 //  2. the file [EnvFileVar] names, if any;
 //  3. ~/.libgen-mcp.env.
 //
@@ -167,14 +170,14 @@ func LoadEnvFiles() EnvFileReport {
 	if explicit := explicitEnvFile(); explicit != "" {
 		report.ExplicitPath = absolutePath(explicit)
 		report.ExplicitRelative = !filepath.IsAbs(explicit)
-		if err := godotenv.Load(explicit); err != nil {
+		if err := loadDotenv(explicit); err != nil {
 			report.ExplicitErr = err
 		}
 	}
 
 	if home, err := os.UserHomeDir(); err == nil {
 		homePath := filepath.Join(home, EnvFileName)
-		switch loadErr := godotenv.Load(homePath); {
+		switch loadErr := loadDotenv(homePath); {
 		case loadErr == nil:
 			report.HomePath = homePath
 		case !errors.Is(loadErr, os.ErrNotExist):
@@ -190,6 +193,40 @@ func LoadEnvFiles() EnvFileReport {
 	report.IgnoredPath, report.IgnoredKeys = ignoredWorkingDirEnvFile(report.ExplicitPath)
 	envFileAnnounceOnce.Do(report.announce)
 	return report
+}
+
+// loadDotenv sets each variable the dotenv file at path defines, unless the
+// environment already gives that variable a value. It returns the read error
+// unwrapped, so a missing file still satisfies errors.Is(err, os.ErrNotExist).
+//
+// A variable that is set to a blank string counts as having no value, which is
+// where this differs from godotenv.Load: that leaves any variable it can find
+// in the environment alone, an empty one included. The difference is what lets
+// a file configure a client that passes every setting it knows about. Claude
+// Desktop's bundle maps each of its fields to a variable, and a field the user
+// left blank arrives as the empty string; under godotenv's rule that pinned the
+// variable to nothing, and the same setting written in ~/.libgen-mcp.env or the
+// named file was silently ignored.
+//
+// Blank cannot mean anything else here. Every LIBGEN_MCP_* read and
+// LIBGEN_MIRROR take a blank value as unset and fall back to the default, and
+// the OpenTelemetry specification requires the same of the OTEL_* names, so a
+// client passing "" was never able to say more than "use the default" — which
+// is exactly what a file is there to override.
+func loadDotenv(path string) error {
+	values, err := godotenv.Read(path)
+	if err != nil {
+		return err
+	}
+	for key, value := range values {
+		if current, ok := os.LookupEnv(key); ok && strings.TrimSpace(current) != "" {
+			continue
+		}
+		if setErr := os.Setenv(key, value); setErr != nil {
+			return fmt.Errorf("setting %s from %s: %w", key, path, setErr)
+		}
+	}
+	return nil
 }
 
 // ignoredWorkingDirEnvFile reports the working-directory .env that was not
