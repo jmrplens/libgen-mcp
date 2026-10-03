@@ -16,7 +16,7 @@ citation file. To cut a release:
    `date-released:` alone, the stamper writes the tag's date.
 
    In `server.json`, bump **`.version` and the `version` field of the npm, PyPI
-   and NuGet entries — and nothing else.** Leave the `.mcpb` identifier, its
+   and NuGet entries — and nothing else.** Leave the `.mcpb` entries, their
    `fileSha256` and both OCI identifiers pointing at the **published** release:
    the stamper rewrites all three at release time, and bumping them by hand
    declares files that do not exist yet, which `make check-server-json-packages`
@@ -69,8 +69,8 @@ Everything else runs, and that is the point:
   the four values the policy has to carry. The rule generalises: a credential
   exchange that *mints* runs in a rehearsal; only the upload that spends it is
   skipped.
-- **The `.mcpb` is packed and `server.json` is stamped**, locally, and nothing is
-  uploaded.
+- **The four `.mcpb` bundles are packed and `server.json` is stamped**, locally,
+  and nothing is uploaded.
 - **syft and oras are installed and the image SBOMs are generated**, from the two
   smoke images the docker job's daemon holds, with the package-count guard. The
   installs and the scan are the part of that feature that can rot, so they are
@@ -138,11 +138,17 @@ other — the root schema sets `additionalProperties: false` and has no `logo` o
 **What `server.json` declares is four real packages**, and each one's shape is
 load-bearing:
 
-- **`registryType: "mcpb"` means the bundle, not a binary.** It names
-  `libgen-mcp.mcpb`, whose `fileSha256` cannot come from `checksums.txt` — the
-  bundle is built after GoReleaser runs, and appending it to that file would
-  invalidate the signature over it. The stamper hashes the path passed as its
-  **third** argument instead, and refuses a run in which nothing got a hash.
+- **`registryType: "mcpb"` means the bundle, not a binary.** A release declares
+  one per operating system (`libgen-mcp-darwin.mcpb`, `-windows.mcpb`,
+  `-linux.mcpb`); the universal `libgen-mcp.mcpb` is uploaded but never
+  declared, because a registry entry has no platform field and each system must
+  be served by exactly one declared bundle. Their `fileSha256` cannot come from
+  `checksums.txt` — the bundles are built after GoReleaser runs, and appending
+  them to that file would invalidate the signature over it. The stamper takes
+  the three as its comma-separated **third** argument, rebuilds the `mcpb`
+  entries from them (so the first per-OS release turns the single universal
+  entry into three), refuses a set that is not one bundle per system before it
+  writes anything, and refuses a run in which nothing got a hash.
 - **The two `oci` entries carry their digest**, which only exists once the image
   index has been pushed. So the `docker` job publishes the digest as an output,
   the `release` job `needs:` it, and the stamper takes it as its **fourth**

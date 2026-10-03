@@ -112,9 +112,9 @@ default patterns. Where each one lands, and what refuses a package without it:
   `twine check --strict` where twine is installed.
 - **NuGet**: all seven packages carry both at the root, beside the nuspec's MIT
   expression and its `licenseUrl`; `validate_nuget.py` checks them.
-- **Claude Desktop bundle**: `build-mcpb.sh` packs both and refuses a `dist/`
-  whose notices are missing or do not open with the generator's header;
-  `make check-mcpb` drives those refusals.
+- **Claude Desktop bundles**: `build-mcpb.sh` packs both into each of the four
+  bundles and refuses a `dist/` whose notices are missing or do not open with
+  the generator's header; `make check-mcpb` drives those refusals.
 - **Image**: the Dockerfile's builder generates notices from the image's own
   binary and installs them with LICENSE in `/usr/share/licenses/libgen-mcp`;
   `scripts/smoke-test-image.sh` requires both, the notices naming the platform
@@ -140,11 +140,51 @@ release's image pinned under the new version — a manifest whose identifier rea
 correctly and resolves to the wrong bytes. `make check-stamper` drives the
 refusal against a fixture, offline, in CI's `server.json` job.
 
-The `.mcpb` bundle has the same problem from the other direction: its
-`fileSha256` cannot come from `checksums.txt`, because the bundle is built after
-GoReleaser runs and appending it to that file would invalidate the signature over
-it. The stamper hashes the path passed as its third argument instead, and refuses
-a run in which nothing got a hash.
+The `.mcpb` bundles have the same problem from the other direction: their
+`fileSha256` cannot come from `checksums.txt`, because the bundles are built after
+GoReleaser runs and appending them to that file would invalidate the signature
+over it. The stamper hashes the bundles passed as its third argument instead,
+and refuses a run in which nothing got a hash.
+
+## One bundle per operating system
+
+`build-mcpb.sh` packs four bundles from the same binaries:
+`libgen-mcp-darwin.mcpb` (the universal Mach-O), `libgen-mcp-windows.mcpb` (the
+amd64 executable), `libgen-mcp-linux.mcpb` (the launcher and both Linux
+binaries) and the universal `libgen-mcp.mcpb`, which carries all of them. Each
+per-OS manifest is derived from `mcpb/manifest.json` by `mcpb/platform.jq` and
+lists only its own platform, so Claude Desktop refuses it on another system. All
+four are uploaded and attested; **`server.json` declares only the three per-OS
+ones**, and the reasons are a registry rule and a directory's:
+
+- **A registry entry has no platform field.** A client offered the universal
+  bundle beside the three per-OS ones could not tell which to install, so each
+  system must be served by exactly one declared bundle. The stamper refuses a
+  set that is not one bundle per system before it writes anything (the
+  universal bundle, given among them, serves three), and
+  `validate-server-json-packages.sh` holds the declared entries to the same
+  rule. Several `mcpb` entries are otherwise unremarkable to the registry.
+- **Directories stop reading a bundle past 50 MiB or 256 MiB unpacked.** The
+  single bundle of 2.1.0 was 45 MiB with five binaries, within 5 MiB of the
+  first limit, and every user downloaded four servers they do not run. The
+  packer reports each bundle's size in the job summary and warns when a
+  declared one passes either figure.
+
+The universal bundle stays a release asset because links to
+`releases/latest/download/libgen-mcp.mcpb` exist outside this repository.
+
+The entries are **written by the stamp, not by hand**: entries naming per-OS
+assets of a release that does not carry them would fail
+`check-server-json-packages` on every push to `main`, and their hashes cannot be
+known before the bundles are built. The stamper rebuilds the `mcpb` entries from
+the bundles it is given, copying the first entry's transport and environment,
+so the first release that builds per-OS bundles turns `main`'s single universal
+entry into three, and a re-run writes the same file. The `mcp-registry` and
+`commit-manifests` jobs fetch the three by name, each held to its own attestation,
+and the default patterns of `fetch-release-assets.sh` are one per operating
+system (`libgen-mcp-linux-*` and the rest), because `libgen-mcp-*` would also
+match the per-OS bundles and hand the npm, PyPI and NuGet jobs files they never
+use.
 
 ## Ordering: who has to publish before whom
 
@@ -170,13 +210,13 @@ whose external half does not exist yet. The winget job is skipped whole on a
 dispatch: it opens a pull request against `microsoft/winget-pkgs`, and there is
 no dry form of that.
 
-## The release is a draft until the bundle is attached
+## The release is a draft until the bundles are attached
 
 GoReleaser creates the GitHub release with `draft: true`, and the workflow flips
 it after the `.mcpb` upload — **before** the registry publish, because a draft
 release's assets are not publicly downloadable and the registry fetches the
-bundle `server.json` declares. With `draft: false` the release was public for the
-minutes it took to build and attach that bundle.
+bundles `server.json` declares. With `draft: false` the release was public for the
+minutes it took to build and attach them.
 
 ## What a rehearsal proves, and what it cannot
 
@@ -188,7 +228,7 @@ gh workflow run release.yml --ref main -f tag=v1.7.3
 Everything that can be undone runs. GoReleaser builds the real matrix, the image
 is built for both platforms and **exported to an OCI layout** so its digest is
 real and the `server.json` stamp is exercised rather than skipped, the SBOMs are
-generated, the `.mcpb` is packed, every publisher job runs against the
+generated, the four `.mcpb` bundles are packed, every publisher job runs against the
 rehearsal's own build, and **both trusted-publishing exchanges run** — they mint
 a credential and spend nothing, and a policy that has drifted is exactly what a
 rehearsal should catch.

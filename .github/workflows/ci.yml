@@ -181,19 +181,22 @@ jobs:
       # one, which holds only for the archive layout validate_nuget.py demands.
       - name: The published-package verifier waits out lag and never a mismatch
         run: make check-verify-published
-      # server.json pins the Claude Desktop bundle by hash, and the bundle is
-      # built once per release. What it must be is checked here, offline, so a
-      # bundle that installs and never starts on one platform fails a pull
-      # request instead of a tag: the manifest's platforms and overrides, the
+      # server.json pins one Claude Desktop bundle per operating system by
+      # hash, and the bundles are built once per release. What they must be is
+      # checked here, offline, so a bundle that installs and never starts on
+      # one platform fails a pull request instead of a tag: the manifest's
+      # platforms and overrides and the per-OS manifests derived from it, the
       # Linux launcher that picks amd64 or arm64 by uname -m (under /bin/sh,
       # dash, busybox sh and bash --posix, whichever the runner has, plus
-      # shellcheck), and the packer's refusals over the release job's dist/.
+      # shellcheck), the packer's refusals over the release job's dist/, the
+      # fetch that holds each bundle to its attestation, and the registry
+      # check that each system is served by exactly one declared bundle.
       # The runner's busybox is busybox-static, whose own uname and chmod run
       # whatever PATH says, so under it the launcher cases that need a stub
       # assert the real machine's binary or are skipped with the reason.
       # shellcheck, jq, zip and unzip come from the runner image. Off CI a test
       # skips when one is missing; here, where GitHub sets CI, it fails instead.
-      - name: The Claude Desktop bundle starts on every platform it lists
+      - name: The Claude Desktop bundles start on every platform they list
         run: make check-mcpb
       # The npm launcher is the process a client or a supervisor signals, and
       # under npx not even that: npm passes the signal only to the shell it runs

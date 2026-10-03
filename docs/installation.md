@@ -412,23 +412,37 @@ its slots and its listener.
 ## Claude Desktop (`.mcpb`)
 
 **What you get.** A `.mcpb` extension bundle that Claude Desktop installs on its
-own, on macOS (universal), Windows (amd64, which Windows on Arm runs under
-emulation) and Linux (amd64 and arm64, for the Claude Desktop Linux beta). No
-Docker, no Node, no `PATH` to edit. On Linux the bundle starts a small launcher
-that picks the binary for the machine by `uname -m`, because the manifest can
-choose a file per operating system but not per architecture.
+own. No Docker, no Node, no `PATH` to edit. Each release publishes one bundle per
+operating system, carrying only the server that system runs:
 
-**Install.** Download
-[`libgen-mcp.mcpb`](https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp.mcpb),
-open it with Claude Desktop, and confirm. On Linux, install it from Claude
-Desktop's **Extensions > Install Extension…** instead: the Linux app registers
-no handler for `.mcpb` files, so opening the file does nothing.
+| System                                         | Bundle                                                                                                               | Download |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | -------- |
+| macOS (universal: Apple Silicon and Intel)     | [`libgen-mcp-darwin.mcpb`](https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp-darwin.mcpb)   | ~18 MiB  |
+| Windows (amd64, which Windows on Arm emulates) | [`libgen-mcp-windows.mcpb`](https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp-windows.mcpb) | ~10 MiB  |
+| Linux (amd64 and arm64, Claude Desktop beta)   | [`libgen-mcp-linux.mcpb`](https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp-linux.mcpb)     | ~18 MiB  |
 
-**Verify.** The bundle carries SLSA build provenance like every other release
+Each bundle lists only its own system, so Claude Desktop refuses one opened on
+another with a message rather than installing a server that cannot start. On
+Linux the bundle starts a small launcher that picks the binary for the machine by
+`uname -m`, because a manifest can choose a file per operating system but not
+per architecture.
+
+[`libgen-mcp.mcpb`](https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp.mcpb)
+is the universal bundle, which carries all three systems' servers in about
+45 MiB. It installs as the same extension and is still published for the links
+that point at it; the per-OS bundles first appear with the release after 2.1.0,
+and until then the universal one is the bundle to download.
+
+**Install.** Download the bundle for your system, open it with Claude Desktop,
+and confirm. On Linux, install it from Claude Desktop's **Extensions > Install
+Extension…** instead: the Linux app registers no handler for `.mcpb` files, so
+opening the file does nothing.
+
+**Verify.** Every bundle carries SLSA build provenance like every other release
 asset:
 
 ```bash
-gh attestation verify libgen-mcp.mcpb -R jmrplens/libgen-mcp \
+gh attestation verify libgen-mcp-linux.mcpb -R jmrplens/libgen-mcp \
   --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
 ```
 

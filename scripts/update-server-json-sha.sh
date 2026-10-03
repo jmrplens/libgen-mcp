@@ -3,13 +3,18 @@
 # version-pinned download URLs, and SHA256 hashes from GoReleaser's
 # checksums.txt.
 #
-# Usage: update-server-json-sha.sh <checksums-file> <version> [mcpb-file] [oci-digest]
+# Usage: update-server-json-sha.sh <checksums-file> <version> [mcpb-files] [oci-digest]
 #
 #   <checksums-file>  GoReleaser's checksums.txt
 #   <version>         Release version without the leading v
-#   [mcpb-file]       The .mcpb bundle, hashed here because GoReleaser does not
-#                     build it and appending it to the signed checksums.txt
-#                     would invalidate checksums.txt.sigstore.json
+#   [mcpb-files]      The Claude Desktop bundles to declare, comma-separated:
+#                     in a release, the three per-OS bundles
+#                     scripts/build-mcpb.sh packs (libgen-mcp-darwin.mcpb,
+#                     -windows.mcpb and -linux.mcpb). Each is hashed here
+#                     because GoReleaser does not build it and appending it to
+#                     the signed checksums.txt would invalidate
+#                     checksums.txt.sigstore.json. Empty leaves the declared
+#                     bundles as they are
 #   [oci-digest]      sha256:<64 hex> of the pushed image index, required
 #                     whenever an OCI identifier is digest-pinned
 #
@@ -19,9 +24,9 @@
 
 set -euo pipefail
 
-CHECKSUMS_FILE="${1:?Usage: $0 <checksums-file> <version> [mcpb-file] [oci-digest]}"
-VERSION="${2:?Usage: $0 <checksums-file> <version> [mcpb-file] [oci-digest]}"
-MCPB_FILE="${3:-}"
+CHECKSUMS_FILE="${1:?Usage: $0 <checksums-file> <version> [mcpb-files] [oci-digest]}"
+VERSION="${2:?Usage: $0 <checksums-file> <version> [mcpb-files] [oci-digest]}"
+MCPB_FILES_ARG="${3:-}"
 OCI_DIGEST="${4:-}"
 SERVER_JSON="server.json"
 
@@ -57,9 +62,59 @@ if [[ "$oci_count" -gt 0 ]]; then
     exit 1
   fi
 fi
-if [[ -n "$MCPB_FILE" && ! -f "$MCPB_FILE" ]]; then
-  echo "ERROR: mcpb bundle not found: $MCPB_FILE" >&2
-  exit 1
+# The bundles step 4b declares are read and checked here too, so a set this
+# script refuses leaves server.json as it found it. What makes a set acceptable
+# is explained at step 4b.
+bundles_json='[]'
+if [[ -n "$MCPB_FILES_ARG" ]]; then
+  if ! command -v unzip &>/dev/null; then
+    echo "ERROR: unzip is required to read the platforms each bundle serves" >&2
+    exit 1
+  fi
+  IFS=',' read -r -a MCPB_FILES <<<"$MCPB_FILES_ARG"
+  for mcpb_file in "${MCPB_FILES[@]}"; do
+    if [[ ! -f "$mcpb_file" ]]; then
+      echo "ERROR: mcpb bundle not found: $mcpb_file" >&2
+      exit 1
+    fi
+    mcpb_name=$(basename "$mcpb_file")
+    if ! mcpb_platforms=$(unzip -p "$mcpb_file" manifest.json 2>/dev/null |
+      jq -c '.compatibility.platforms // [] | if type == "array" then . else error("not a list") end' 2>/dev/null); then
+      echo "ERROR: $mcpb_name carries no manifest.json with a compatibility.platforms list this script can read" >&2
+      exit 1
+    fi
+    mcpb_hash=$(sha256sum "$mcpb_file" | cut -d' ' -f1)
+    bundles_json=$(jq -c --arg name "$mcpb_name" --arg sha "$mcpb_hash" --argjson platforms "$mcpb_platforms" \
+      '. + [{name: $name, sha: $sha, platforms: $platforms}]' <<<"$bundles_json")
+  done
+
+  mcpb_problems=$(jq -r '
+    [.[].platforms[]] as $served
+    | (map(.name) | group_by(.) | map(select(length > 1) | .[0]) | .[]
+        | "\(.) is given more than once"),
+      (.[] | select(.platforms | length != 1)
+        | "\(.name) serves \(.platforms | length) platforms (\(.platforms | join(", "))), and a declared bundle serves exactly one"),
+      ($served | unique | .[] | select(IN("darwin", "win32", "linux") | not)
+        | "\(.) is not a platform Claude Desktop reports"),
+      (("darwin", "win32", "linux") as $platform
+        | ([$served[] | select(. == $platform)] | length) as $count
+        | select($count != 1)
+        | if $count == 0 then "no bundle given serves \($platform)"
+          else "\($platform) is served by \($count) bundles" end)
+  ' <<<"$bundles_json")
+  if [[ -n "$mcpb_problems" ]]; then
+    while IFS= read -r problem; do
+      echo "ERROR: $problem" >&2
+    done <<<"$mcpb_problems"
+    echo "ERROR: the bundles given are not one per operating system; $SERVER_JSON was left as it was" >&2
+    exit 1
+  fi
+
+  mcpb_entries=$(jq '[.packages[] | select(.registryType == "mcpb")] | length' "$SERVER_JSON")
+  if [[ "$mcpb_entries" -eq 0 ]]; then
+    echo "ERROR: $SERVER_JSON declares no mcpb entry to take the bundles' transport, environment and release URL from" >&2
+    exit 1
+  fi
 fi
 
 # 1. Top-level version
@@ -124,25 +179,40 @@ while read -r hash filename; do
   fi
 done <"$CHECKSUMS_FILE"
 
-# 4b. Hash the .mcpb bundle. It is built after GoReleaser runs, so it is not in
-# checksums.txt — and appending it there would invalidate the signature over
-# that file. The bundle must therefore exist before this script runs.
-if [[ -n "$MCPB_FILE" ]]; then
-  mcpb_hash=$(sha256sum "$MCPB_FILE" | cut -d' ' -f1)
-  mcpb_name=$(basename "$MCPB_FILE")
-  mcpb_match=$(jq --arg name "$mcpb_name" \
-    '[.packages[] | select(.identifier | endswith($name))] | length' "$SERVER_JSON")
-  if [[ "$mcpb_match" -eq 0 ]]; then
-    echo "ERROR: no package identifier ends with $mcpb_name" >&2
-    exit 1
-  fi
-  jq --arg hash "$mcpb_hash" --arg name "$mcpb_name" \
-    '(.packages[] | select(.identifier | endswith($name))).fileSha256 = $hash' \
-    "$SERVER_JSON" >tmp.$$.json && mv tmp.$$.json "$SERVER_JSON"
-  echo "SHA256 for $mcpb_name: ${mcpb_hash:0:16}..."
-  ((updated++)) || true
+# 4b. Declare the .mcpb bundles. They are built after GoReleaser runs, so they
+# are not in checksums.txt, and appending them there would invalidate the
+# cosign signature over that file. The bundles must therefore exist before this
+# script runs.
+#
+# server.json ends up with one mcpb entry per bundle given and no other. The
+# entries are rebuilt from the bundles rather than updated in place, so the
+# first release that builds per-OS bundles replaces the single universal entry
+# with three, and a re-run with the same bundles writes the same entries. Each
+# entry copies the first mcpb entry server.json held, its transport and its
+# environment variables, and takes that entry's release URL with the bundle's
+# own file name as its identifier.
+#
+# A registry entry has no platform field, so a client cannot choose between
+# bundles by system: the compatibility.platforms list inside each one is what
+# tells them apart, and refuses one opened on the wrong system. The bundles
+# given must therefore each serve exactly one system, and serve darwin, win32
+# and linux once each between them. The universal bundle, which serves all
+# three, stays a release asset for existing links and is refused here, since
+# beside the per-OS ones it would make every system installable two ways.
+if [[ -n "$MCPB_FILES_ARG" ]]; then
+  jq --argjson bundles "$bundles_json" '
+    (.packages | map(.registryType == "mcpb") | index(true)) as $first
+    | .packages[$first] as $template
+    | ($template.identifier | sub("/[^/]*$"; "")) as $release
+    | [$bundles[] | $template + {identifier: ($release + "/" + .name), fileSha256: .sha}] as $declared
+    | .packages = .packages[:$first] + $declared + (.packages[$first:] | map(select(.registryType != "mcpb")))
+  ' "$SERVER_JSON" >tmp.$$.json && mv tmp.$$.json "$SERVER_JSON"
+  while IFS=$'\t' read -r mcpb_name mcpb_hash; do
+    echo "SHA256 for $mcpb_name: ${mcpb_hash:0:16}..."
+    ((updated++)) || true
+  done < <(jq -r '.[] | [.name, .sha] | @tsv' <<<"$bundles_json")
 else
-  echo "NOTE: no mcpb bundle given, leaving its fileSha256 untouched"
+  echo "NOTE: no mcpb bundle given, leaving the declared bundles untouched"
 fi
 
 total=$(jq '.packages | length' "$SERVER_JSON")
