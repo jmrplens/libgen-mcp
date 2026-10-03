@@ -243,6 +243,10 @@ func main() {
 	// ldflags stamp this package's version, and internal/version is what builds
 	// the User-Agent every outbound request carries.
 	buildversion.Set(version)
+	// ContinueOnError so a command line the parser refuses comes back to
+	// mainWithExit, which logs the refusal and exits with the status the parser
+	// would have used: see parseServerFlags.
+	flag.CommandLine.Init(os.Args[0], flag.ContinueOnError)
 	// Wrap the real logic so deferred cleanup (signal reset) runs before exit;
 	// this avoids log.Fatal skipping defers on the error path.
 	os.Exit(mainWithExit())
@@ -250,31 +254,18 @@ func main() {
 
 // mainWithExit parses flags, wires the signal context and runs the server,
 // returning the process exit code.
+//
+// A start that does not happen is reported in exactly two places, and both
+// report it at ERROR as the last record: refuseStart for everything decided
+// before run (the command line, the environment under it, every flag
+// combination), and exitCodeFor for what run itself returns. A refusal added
+// to planStart is reported by the first without anything else to remember.
 func mainWithExit() int {
-	httpAddr := flag.String("http", "", "serve streamable HTTP here instead of stdio: an address (e.g. :8080) or a unix socket path (e.g. /run/mcp.sock, recognized by the path separator; a bare name like mcp.sock is read as a host)")
-	showVersion := flag.Bool("version", false, "print version and exit")
-	healthcheck := flag.Bool("healthcheck", false, "probe the running instance's /health and exit 0 when it answers, 1 when it does not. The listener is read off that instance's own command line — its --http, --http-path, --tls-cert and --transport — so a socket, a moved port, a mount under a prefix and TLS this process terminates are all probed correctly. A target may be given instead: an http(s) URL, unix:<path>, or host:port. This is not cmd/probe, which checks the live mirrors")
-	shutdown := flag.Bool("shutdown", false, "ask every other instance of this binary on this machine to exit, then kill what is left after "+shutdownGracePeriod.String()+". For an upgrade that swaps the binary while the old process still holds a download slot and a listener")
-	stateless := flag.Bool("stateless", true, "stateless streamable HTTP (default; required for MCP protocol 2026-07-28): no Mcp-Session-Id, each POST self-contained, GET/DELETE return 405; use -stateless=false for legacy stateful sessions")
-	jsonResponse := flag.Bool("json-response", false, "return application/json responses instead of text/event-stream (SSE)")
-	maxBody := flag.Int64("max-request-body-bytes", 0, "maximum streamable HTTP request body size in bytes; 0 uses the SDK default (4 MiB)")
-	socketMode := flag.String("http-socket-mode", "0660", "permission mode for a unix socket given to --http, as octal with or without a leading 0. Ignored for a TCP address, and refused on platforms without file modes")
-	tlsCert := flag.String("tls-cert", "", "PEM certificate file; terminate TLS in this process instead of leaving it to a proxy in front. Requires --tls-key")
-	tlsKey := flag.String("tls-key", "", "PEM private key file for --tls-cert")
-	httpPath := flag.String("http-path", "/", "URL path the MCP endpoint answers on (e.g. /libgen). Every route — the endpoint, /health and the server card — is mounted under it, and any other path answers 404. Set it when a reverse proxy forwards its prefix instead of rewriting it away; leave it at / when the proxy strips the prefix or the server is reached directly")
-	trustedOrigins := flag.String("trusted-origins", "", "comma-separated browser origins allowed to call this server cross-origin, as scheme://host[:port] (e.g. https://claude.ai). Empty (default) refuses every cross-origin browser request; \"*\" accepts any. Non-browser clients send no Origin and are unaffected either way")
-	transportSelector := flag.String("transport", "", "which transport to serve: stdio, http, or auto. Empty (default) keeps the historical rule — a --http value means HTTP, no value means stdio. auto reads it off standard input: a pipe, terminal, file or socket means stdio, and only /dev/null (a container started without -i) means HTTP. --http still supplies the address HTTP binds, defaulting to "+defaultHTTPAddr)
-	publicURL := flag.String("public-url", "", "origin clients reach this deployment at, e.g. https://mcp.example.org/libgen. Its host is the one this server answers to in the Host header, which a reverse proxy forwards from the client; without it, or without --trusted-proxies naming the proxy, a proxied request carrying a public name is refused as a DNS-rebinding attempt")
-	trustedProxyHeader := flag.String("trusted-proxy-header", "", "header a trusted proxy fills with the address it heard the request from (e.g. X-Real-IP or X-Forwarded-For). Read only from a peer listed in --trusted-proxies, and required together with it; without both, every caller is told apart by the address the connection came from")
-	trustedProxies := flag.String("trusted-proxies", "", "comma-separated addresses and CIDR ranges of the proxies whose --trusted-proxy-header is believed (e.g. 127.0.0.1/32). The literal "+unixPeerEntry+" trusts every peer of a unix-socket listener, and is refused on a TCP address")
-	rateLimitRPS := flag.Float64("rate-limit-rps", defaultRateLimitRPS, "inbound requests per second allowed from one charged address, for the methods that reach a mirror or spend this process. 0 or less turns the limit off. On a listener whose every peer is this machine — a loopback bind or a unix socket — it is off unless --trusted-proxies names the proxy in front, because otherwise every caller is charged to one address; passing it explicitly there is refused rather than downgraded")
-	rateLimitBurst := flag.Int("rate-limit-burst", defaultRateLimitBurst, "how many of those requests one charged address may make at once before the refill rate applies")
-	drainDelay := flag.Duration("drain-delay", 0, "how long GET /health answers 503 draining before the listener is closed on shutdown. 0 (default) closes at once. Set it to at least one probe interval of whatever is in front, or the balancer learns this instance is going by the connection failing — after it has already sent work to it. Capped at "+maxDrainDelay.String())
-	maxInflight := flag.Int("max-inflight-per-client", 0, "how many download or read calls one charged address may have in flight. Unset means the configured "+config.EnvName("MAX_CONCURRENT_DOWNLOADS")+", so the bound starts at the whole download semaphore; 0 or less turns the per-caller bound off. A ceiling is exactly as real as the identity underneath it, so behind a proxy it needs --trusted-proxy-header and --trusted-proxies too")
-	sessionTimeout := flag.Duration("session-timeout", defaultSessionTimeout, "close a legacy stateful session that has gone this long without a request from its client. 0 never closes one, which leaves a client that crashed holding its session for the life of the process. Applies to --stateless=false only, and passing it under the default stateless transport is refused rather than ignored. Capped at "+maxSessionTimeout.String())
-	httpIdleTimeout := flag.Duration("http-idle-timeout", defaultHTTPIdleTimeout, "close a kept-alive connection that has gone this long between requests. 0 (default) never closes one, which is what this server did before the flag existed. It bounds the gap between requests, never a response being written, so an SSE stream is not what it reclaims")
+	f := defineServerFlags()
 	registerEnvBackedFlags()
-	flag.Parse()
+	if code, proceed := parseServerFlags(); !proceed {
+		return code
+	}
 	// Asked now, before the environment overlay sets flags through the same
 	// set, so a stdio run can say which ignored flag was typed and which came
 	// from a variable.
@@ -286,24 +277,17 @@ func mainWithExit() int {
 	applyEnvBackedFlags()
 
 	if code, handled := runUtility(utilityFlags{
-		version:     *showVersion,
-		healthcheck: *healthcheck,
-		shutdown:    *shutdown,
-		tlsCert:     *tlsCert,
+		version:     *f.showVersion,
+		healthcheck: *f.healthcheck,
+		shutdown:    *f.shutdown,
+		tlsCert:     *f.tlsCert,
 	}); handled {
 		return code
 	}
 
-	if envErr := readTheEnvironmentUnderTheFlags(); envErr != nil {
-		log.Print(envErr)
-		return 1
-	}
-
-	// A negative cap disables the SDK limit outright, which must not be reachable
-	// from a flag: this server is meant to face untrusted clients.
-	if *maxBody < 0 {
-		log.Printf("--max-request-body-bytes must be >= 0, got %d", *maxBody)
-		return 1
+	plan, err := planStart(f, typed)
+	if err != nil {
+		return refuseStart(exitRefused, err)
 	}
 
 	// Cancel the root context on the first SIGINT/SIGTERM so both transports can
@@ -315,147 +299,7 @@ func mainWithExit() int {
 	ctx, stop := watchStopSignals(context.Background())
 	defer stop()
 
-	// Both refused before anything is served, for the same reason the origin list
-	// is: a deployment that believes it is serving TLS, or that its socket is
-	// group-only, and is wrong about it has nothing to look at afterwards.
-	if tlsErr := validateTLSFiles(*tlsCert, *tlsKey); tlsErr != nil {
-		log.Print(tlsErr)
-		return 1
-	}
-	// Resolved before anything reads the listener, because after --transport
-	// exists the flag is no longer the answer: `--transport http` with no --http
-	// binds an address nobody typed, and `--transport stdio` with one binds
-	// nothing at all. Everything downstream — the socket mode, the listen
-	// specification, the remote-download mode, the private-address hatch — takes
-	// decision.Addr rather than the flag.
-	decision, transportErr := resolveTransport(*transportSelector, *httpAddr)
-	if transportErr != nil {
-		log.Print(transportErr)
-		return 1
-	}
-	// Named in run, once the configured handler is in place, never refused:
-	// see http_only_flags.go.
-	decision.Ignored = httpOnlyFlagsIgnored(decision.HTTP, flag.CommandLine, typed)
-	mode, modeErr := resolveSocketMode(decision.Addr, *socketMode)
-	if modeErr != nil {
-		log.Print(modeErr)
-		return 1
-	}
-	// Refused before anything is served, and for the same reason the origin list
-	// and the socket mode are: an operator who believes a forwarded address is
-	// being read, and whose callers are all charged to the proxy anyway, has
-	// nothing to look at afterwards — and the opposite mistake hands every caller
-	// the key their own traffic is counted under.
-	proxyEntries := commaSeparated(*trustedProxies)
-	if proxyErr := validateTrustedProxyConfig(proxyEntries, *trustedProxyHeader, decision.Addr); proxyErr != nil {
-		log.Print(proxyErr)
-		return 1
-	}
-	// Already validated above, so the error here is unreachable; parsing again
-	// rather than threading the value out of the check keeps the check callable
-	// on its own, which is what its own tests do.
-	proxies, _ := parseTrustedProxies(proxyEntries)
-	// A declaration nobody can act on is worse than none: the guard would keep
-	// refusing the very name the operator wrote, and the refusal would keep
-	// telling them to pass the flag they already passed.
-	if urlErr := validatePublicURL(*publicURL); urlErr != nil {
-		log.Print(urlErr)
-		return 1
-	}
-	charge := chargePolicy{header: strings.TrimSpace(*trustedProxyHeader), proxies: proxies}
-	if len(proxyEntries) > 0 {
-		// Said once at startup because it is the only place it can be seen: the
-		// rule decides which address every later per-caller budget is keyed on,
-		// and a list that names the wrong hop looks exactly like a correct one
-		// from outside — every caller simply shares the proxy's key.
-		log.Printf("--trusted-proxy-header %s is read from %s, and from no other peer; every other caller is told apart by the address it connects from",
-			charge.header, strings.Join(proxyEntries, ", "))
-	}
-	// Refused rather than downgraded when the listener cannot tell two callers
-	// apart: an operator who asked for a bound deserves to be told it cannot do
-	// what they think it does.
-	limit, limitErr := resolveRateLimit(decision.Addr, charge, *rateLimitRPS, *rateLimitBurst, isFlagPassed("rate-limit-rps"))
-	if limitErr != nil {
-		log.Print(limitErr)
-		return 1
-	}
-	if decision.HTTP {
-		log.Printf("inbound rate limit: %s", limit.describe())
-	}
-	// Refused rather than clamped: past a few minutes a drain delay is not a
-	// handover, it is a shutdown that appears to hang — and every supervisor
-	// kills the process long before it elapses, so the operator would be waiting
-	// for something that never happens.
-	if *drainDelay < 0 || *drainDelay > maxDrainDelay {
-		log.Printf("--drain-delay %s must be between 0 and %s", *drainDelay, maxDrainDelay)
-		return 1
-	}
-
-	// The same refusal the rate limit makes, for the same reason: an operator
-	// who set an idle timeout on sessions this transport does not create has
-	// configured nothing, and nothing is the one outcome a startup log cannot
-	// distinguish from a working setting.
-	if timeoutErr := checkIdleTimeouts(idleTimeouts{
-		session:         *sessionTimeout,
-		sessionExplicit: isFlagPassed("session-timeout"),
-		httpIdle:        *httpIdleTimeout,
-		stateless:       *stateless,
-	}); timeoutErr != nil {
-		log.Print(timeoutErr)
-		return 1
-	}
-
-	// Refused at startup rather than at the first request: a server mounted on a
-	// path it cannot match would answer 404 to everything, which looks like a
-	// proxy fault and is the hardest kind of misconfiguration to find.
-	if pathErr := validateBasePath(*httpPath); pathErr != nil {
-		log.Print(pathErr)
-		return 1
-	}
-
-	// Parsed before anything is served: a malformed origin fails startup rather
-	// than being dropped, because an operator who believes an origin is trusted
-	// and whose browser clients are refused anyway has nothing to look at.
-	trusted, originErr := transport.ParseTrustedOrigins(*trustedOrigins)
-	if originErr != nil {
-		log.Print(originErr)
-		return 1
-	}
-	if slices.Contains(trusted, transport.AnyOrigin) {
-		log.Printf("--trusted-origins=%s: cross-origin protection is off, every browser origin is accepted", transport.AnyOrigin)
-	}
-
-	opts := transport.Options{
-		Stateless:           *stateless,
-		JSONResponse:        *jsonResponse,
-		MaxRequestBodyBytes: *maxBody,
-		TrustedOrigins:      trusted,
-		BasePath:            normalizeBasePath(*httpPath),
-		// Zero in stateless mode, which is what the SDK wants there anyway: the
-		// refusal above has already stopped an operator who asked for something
-		// else, so this is the mode's own answer rather than a value discarded.
-		SessionTimeout: sessionTimeoutFor(*sessionTimeout, *stateless),
-	}
-	spec := listenSpec{
-		addr:       decision.Addr,
-		socketMode: mode,
-		tlsCert:    *tlsCert,
-		tlsKey:     *tlsKey,
-		// Built from the RESOLVED address, for the reason the private-address
-		// hatch reads it too: a `--transport http` deployment with no --http
-		// binds an address nobody typed, and a guard built from the flag would
-		// declare a host the listener never had.
-		guard:  newHostGuard(decision.Addr, *publicURL, proxies),
-		charge: charge,
-		// Nil on stdio, which every layer that reads it treats as "no per-caller
-		// state at all" rather than as an empty table.
-		records:     newClientRecordsFor(decision.HTTP, limit, charge),
-		inflight:    inflightFlag{value: *maxInflight, explicit: isFlagPassed("max-inflight-per-client")},
-		drainDelay:  *drainDelay,
-		idleTimeout: *httpIdleTimeout,
-		publicURL:   strings.TrimSpace(*publicURL),
-	}
-	return exitCodeFor(run(ctx, spec, opts, decision))
+	return exitCodeFor(run(ctx, plan.spec, plan.opts, plan.decision))
 }
 
 // exitCodeFor turns what run returned into the process's exit code, reporting
