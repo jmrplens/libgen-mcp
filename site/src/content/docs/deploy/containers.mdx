@@ -93,10 +93,11 @@ Published on the host's loopback, the server sees every caller as the Docker bri
 <Aside type="caution" title="Mounting a volume elsewhere">
 	A volume mounted at a path the image does not have, such as `/data`, is
 	created owned by root. The server then cannot write there: as
-	`LIBGEN_MCP_DOWNLOAD_DIR` it refuses to start, and as `XDG_CACHE_HOME` it
-	quietly runs without a mirror cache. Use `/home/appuser`, `chown 10001:10001`
-	a bind-mounted directory, or run the container as the directory's owner with
-	`user:`.
+	`LIBGEN_MCP_DOWNLOAD_DIR` it refuses to start, and as `XDG_CACHE_HOME` it runs
+	without a mirror cache and says so once, at `WARN`: [`the mirror cache cannot
+	be written`](/libgen-mcp/troubleshooting/#docker). Use `/home/appuser`, `chown
+	10001:10001` a bind-mounted directory, or run the container as the directory's
+	owner with `user:`.
 </Aside>
 
 ## nginx in front, over a shared unix socket

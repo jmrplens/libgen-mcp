@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -297,15 +298,49 @@ func (m *Manager) readCache() (*cacheFile, error) {
 // tests to exercise the defensive marshal-error branch below.
 var jsonMarshal = json.Marshal
 
+// writeCache stores list on disk for the next process. It is best-effort: a
+// cache that cannot be written costs the next start a discovery, never this
+// call its answer, so a failure is reported (once, see warnUnwritableCache)
+// and otherwise ignored.
 func (m *Manager) writeCache(list []string) {
 	data, err := jsonMarshal(cacheFile{FetchedAt: time.Now(), Mirrors: list})
 	if err != nil {
 		return
 	}
-	if os.MkdirAll(filepath.Dir(m.CachePath), 0o750) != nil {
+	dir := filepath.Dir(m.CachePath)
+	if mkdirErr := os.MkdirAll(dir, 0o750); mkdirErr != nil {
+		warnUnwritableCache(dir, mkdirErr)
 		return
 	}
-	_ = os.WriteFile(m.CachePath, data, 0o600) // best-effort cache
+	if writeErr := os.WriteFile(m.CachePath, data, 0o600); writeErr != nil {
+		warnUnwritableCache(dir, writeErr)
+	}
+}
+
+// UnwritableCacheMessage is the record a cache that cannot be written is
+// reported under, exported so a test outside the package can find it.
+const UnwritableCacheMessage = "the mirror cache cannot be written, so every start discovers the mirrors again"
+
+// unwritableCacheOnce makes the report one per process. Every family writes
+// its own file into the same directory, and a long-running server rewrites
+// it once a day, so a report per failure would repeat the one fact the first
+// one stated. A variable so a test can start from a fresh one.
+var unwritableCacheOnce = &sync.Once{}
+
+// warnUnwritableCache reports, once per process, that the cache directory
+// cannot be written.
+//
+// It was silent, and on a read-only root filesystem that silence was the
+// whole symptom: the server worked, and every start paid a discovery against
+// the catalog site the cache exists to spare, with nothing saying why. The
+// directory is os.UserCacheDir's, so what moves it is the variable that
+// function reads.
+func warnUnwritableCache(dir string, err error) {
+	unwritableCacheOnce.Do(func() {
+		slog.Warn(UnwritableCacheMessage,
+			"dir", dir, "error", err,
+			"hint", "give the server a writable cache directory: a writable HOME, or XDG_CACHE_HOME on Linux (in the container image, a volume at /home/appuser)")
+	})
 }
 
 func orderPreferred(list []string, preferred string) []string {

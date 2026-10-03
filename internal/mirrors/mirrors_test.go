@@ -1,9 +1,11 @@
 package mirrors
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,6 +13,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -313,9 +316,59 @@ func TestReadCacheErrors(t *testing.T) {
 	}
 }
 
-// TestWriteCacheMkdirError verifies that writeCache silently gives up (writing no
-// file) when the cache directory cannot be created.
+// captureUnwritableCacheWarnings starts the once-per-process report afresh and
+// returns a reader of the records logged until the test ends.
+func captureUnwritableCacheWarnings(t *testing.T) func() []map[string]any {
+	t.Helper()
+	previousOnce := unwritableCacheOnce
+	unwritableCacheOnce = &sync.Once{}
+	var buf bytes.Buffer
+	var mu sync.Mutex
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&lockedBuffer{mu: &mu, buf: &buf}, nil)))
+	t.Cleanup(func() {
+		slog.SetDefault(previous)
+		unwritableCacheOnce = previousOnce
+	})
+	return func() []map[string]any {
+		mu.Lock()
+		defer mu.Unlock()
+		var records []map[string]any
+		for line := range strings.SplitSeq(strings.TrimSpace(buf.String()), "\n") {
+			if line == "" {
+				continue
+			}
+			var record map[string]any
+			if err := json.Unmarshal([]byte(line), &record); err != nil {
+				t.Fatalf("decoding %q: %v", line, err)
+			}
+			if record["msg"] == UnwritableCacheMessage {
+				records = append(records, record)
+			}
+		}
+		return records
+	}
+}
+
+// lockedBuffer serializes writes to a buffer the test reads.
+type lockedBuffer struct {
+	mu  *sync.Mutex
+	buf *bytes.Buffer
+}
+
+// Write appends p under the lock.
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+// TestWriteCacheMkdirError verifies that writeCache gives up (writing no file)
+// when the cache directory cannot be created, and says so once, naming the
+// directory: on a read-only root that is the only evidence that every start
+// rediscovers the mirrors.
 func TestWriteCacheMkdirError(t *testing.T) {
+	records := captureUnwritableCacheWarnings(t)
 	file := filepath.Join(t.TempDir(), "afile")
 	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
@@ -326,6 +379,54 @@ func TestWriteCacheMkdirError(t *testing.T) {
 	m.writeCache([]string{"https://libgen.li"})
 	if _, err := os.Stat(cachePath); err == nil {
 		t.Fatal("writeCache() should not create a file when MkdirAll fails")
+	}
+
+	got := records()
+	if len(got) != 1 {
+		t.Fatalf("got %d reports, want 1: %v", len(got), got)
+	}
+	if got[0]["level"] != "WARN" || got[0]["dir"] != filepath.Dir(cachePath) {
+		t.Errorf("report = %v, want a WARN naming %s", got[0], filepath.Dir(cachePath))
+	}
+	if hint, _ := got[0]["hint"].(string); !strings.Contains(hint, "HOME") {
+		t.Errorf("hint = %q, want it to say what moves the directory", hint)
+	}
+}
+
+// TestWriteCacheWriteErrorIsReportedOncePerProcess covers the other failure,
+// a directory that exists and a file that cannot be written into it, and the
+// rule that keeps the report from repeating: both families, and every daily
+// rewrite after them, fail the same way for the same reason.
+func TestWriteCacheWriteErrorIsReportedOncePerProcess(t *testing.T) {
+	records := captureUnwritableCacheWarnings(t)
+	dir := t.TempDir()
+	// A cache path that is itself a directory: MkdirAll of its parent
+	// succeeds, and the write fails.
+	// sequential: fixture setup, not a table of cases
+	for _, name := range []string{"mirrors.json", "annas-mirrors.json"} {
+		if err := os.Mkdir(filepath.Join(dir, name), 0o750); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// sequential: the second and third writes are what the once is about
+	for _, name := range []string{"mirrors.json", "annas-mirrors.json", "mirrors.json"} {
+		m := &Manager{CachePath: filepath.Join(dir, name)}
+		m.writeCache([]string{"https://libgen.li"})
+	}
+
+	if got := records(); len(got) != 1 {
+		t.Errorf("got %d reports for three failed writes, want 1: %v", len(got), got)
+	}
+}
+
+// TestWriteCacheThatSucceedsReportsNothing is the ordinary case.
+func TestWriteCacheThatSucceedsReportsNothing(t *testing.T) {
+	records := captureUnwritableCacheWarnings(t)
+	m := &Manager{CachePath: filepath.Join(t.TempDir(), "cache", "mirrors.json")}
+	m.writeCache([]string{"https://libgen.li"})
+	if got := records(); len(got) != 0 {
+		t.Errorf("a cache that was written was reported unwritable: %v", got)
 	}
 }
 

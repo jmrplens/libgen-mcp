@@ -94,9 +94,10 @@ Publicado en el loopback del host, el servidor ve a todos los llamantes como la 
 	Un volumen montado en una ruta que la imagen no tiene, como `/data`, se crea
 	con root como propietario. El servidor no puede escribir ahí: como
 	`LIBGEN_MCP_DOWNLOAD_DIR` se niega a arrancar, y como `XDG_CACHE_HOME`
-	funciona sin caché de mirrors sin avisar. Usa `/home/appuser`, haz `chown
-	10001:10001` de un directorio montado desde el host, o ejecuta el contenedor
-	como el propietario del directorio con `user:`.
+	funciona sin caché de mirrors y lo dice una vez, en `WARN`: [`the mirror cache
+	cannot be written`](/libgen-mcp/es/troubleshooting/#docker). Usa
+	`/home/appuser`, haz `chown 10001:10001` de un directorio montado desde el
+	host, o ejecuta el contenedor como el propietario del directorio con `user:`.
 </Aside>
 
 ## nginx delante, con un socket unix compartido
