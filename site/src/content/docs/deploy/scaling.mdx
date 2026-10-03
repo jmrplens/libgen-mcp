@@ -150,7 +150,7 @@ Three settings have to agree for a replica to leave without failing a request:
 
 ## Detecting configuration drift
 
-Replicas behind one balancer must serve the same catalog, or a client sees different tools depending on which one it reaches and nothing else reports it. `GET /health` carries `config_digest`, twelve hex characters over the settings that decide the served surface: the configured sources, `extra_sources`, `server_fetch`, `remote_downloads`, `enrich`, `confirm_downloads`, the base path, statelessness, and the three limits that change what an identical call returns. It is order-free where a setting is a set, and it is a fingerprint, not a secret. Compare it, and `build`, across the fleet:
+Replicas behind one balancer must serve the same catalog, or a client sees different tools depending on which one it reaches and nothing else reports it. `GET /health` carries `config_digest`, twelve hex characters over the settings that decide the served surface: the enabled sources, `extra_sources`, `server_fetch`, `remote_downloads`, `enrich`, `confirm_downloads`, the base path, statelessness, and the three limits that change what an identical call returns. It is order-free where a setting is a set, and it is a fingerprint, not a secret. Compare it, and `build`, across the fleet:
 
 ```bash
 for replica in 10.0.0.11:8080 10.0.0.12:8080 10.0.0.13:8080; do
@@ -160,7 +160,9 @@ done | sort -u
 
 One line out means the replicas agree. During a rolling update two lines are expected, one per build.
 
-**The digest does not cover credentials.** `LIBGEN_MCP_UNPAYWALL_EMAIL` and `LIBGEN_MCP_CORE_KEY` each gate a download source, and a gated source is absent from `download`'s `source` enum. Two replicas with the same configuration where only one holds the key publish the same digest and different tool schemas. The enumerating server card covers that: it carries the full `tools/list` output, and its strong `ETag` is computed over its bytes, so replicas that serve the same catalog publish the same validator.
+**The digest sees which credentials are set, never what they are.** `LIBGEN_MCP_UNPAYWALL_EMAIL` and `LIBGEN_MCP_CORE_KEY` each gate a download source, and a gated source is absent from `download`'s `source` enum. The digest covers the sources actually enabled, so two replicas where only one holds the CORE key publish different digests. Two replicas holding different keys publish the same one, because they serve the same catalog: the values are never in the digest, hashed or otherwise. A key that is set on every replica but wrong on one is therefore invisible here, and shows up only as that replica's downloads failing.
+
+The enumerating server card is the second check, and the exact one. It carries the full `tools/list` output, and its strong `ETag` is computed over its bytes, so replicas that serve the same catalog publish the same validator whatever produced it.
 
 ```bash
 for replica in 10.0.0.11:8080 10.0.0.12:8080 10.0.0.13:8080; do
