@@ -54,7 +54,7 @@ func pdfOutline(ctx context.Context, filePath string) (OutlineResult, error) {
 	if err := ctx.Err(); err != nil {
 		return OutlineResult{}, err
 	}
-	entries := pdfBookmarkEntries(filePath)
+	entries := pdfBookmarkEntries(ctx, filePath)
 	if len(entries) > 0 {
 		return OutlineResult{Format: "pdf", Extractable: true, Entries: entries}, nil
 	}
@@ -66,14 +66,14 @@ func pdfOutline(ctx context.Context, filePath string) (OutlineResult, error) {
 // errors or panics — yields no entries rather than a diagnosis of its own: the
 // text-layer probe that follows produces one, in the same words the text path
 // would use for the same file.
-func pdfBookmarkEntries(filePath string) []OutlineEntry {
+func pdfBookmarkEntries(ctx context.Context, filePath string) []OutlineEntry {
 	f, err := os.Open(filePath)
 	if err != nil {
 		return nil
 	}
 	defer func() { _ = f.Close() }()
 
-	bms, ok := readBookmarks(f)
+	bms, ok := readBookmarks(ctx, f)
 	if !ok || len(bms) == 0 {
 		return nil
 	}
@@ -104,14 +104,15 @@ func pdfNoOutlineResult(ctx context.Context, filePath string) (OutlineResult, er
 
 // readBookmarks calls pdfcpu's bookmark reader inside a recover()-guarded
 // closure so a panic on malformed input becomes ok=false ("no outline") rather
-// than a crash. A non-nil pdfcpu error is likewise reported as ok=false.
-func readBookmarks(f *os.File) (bms []pdfcpu.Bookmark, ok bool) {
+// than a crash. A non-nil pdfcpu error is likewise reported as ok=false, and so
+// is a read the caller's context cancelled.
+func readBookmarks(ctx context.Context, f *os.File) (bms []pdfcpu.Bookmark, ok bool) {
 	defer func() {
 		if recover() != nil {
 			bms, ok = nil, false
 		}
 	}()
-	got, err := api.Bookmarks(f, model.NewDefaultConfiguration())
+	got, err := api.Bookmarks(ctx, f, model.NewDefaultConfiguration())
 	if err != nil {
 		return nil, false
 	}
