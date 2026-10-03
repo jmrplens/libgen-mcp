@@ -41,7 +41,7 @@ func doiSourceFor(t *testing.T, name string, srv *httptest.Server) DownloadSourc
 	case "unpaywall":
 		return unpaywallSource{email: "mail@jmrp.io", http: cl, baseURL: srv.URL}
 	case "europepmc":
-		return europePMCSource{http: cl, searchBase: srv.URL, renderBase: srv.URL}
+		return europePMCSource{http: cl, searchBase: srv.URL, bucketBase: srv.URL}
 	case "biorxiv":
 		return biorxivSource{http: cl, apiBase: srv.URL, contentBase: srv.URL}
 	case "dagstuhl":

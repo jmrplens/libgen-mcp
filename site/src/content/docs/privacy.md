@@ -6,9 +6,9 @@ mentions:
     wikidata: Q133436854
   - name: "OpenTelemetry"
     wikidata: Q121746046
-datePublished: "2026-09-24"
+datePublished: "2026-10-03"
 # Generated from PRIVACY.md by scripts/sync-privacy.mjs — do not edit by hand.
-privacySource: "bdfeabc52bd95a6b"
+privacySource: "76dc65f0adac77d9"
 head:
   - tag: script
     attrs:
@@ -151,7 +151,8 @@ AI assistant) make. There are no background connections. The destinations are:
 - **Keyless open-access providers (only when you request an article by DOI).**
   Before any shadow-library fallback, the article `download` chain asks the open
   repositories for a freely licensed copy: [Europe PMC](https://europepmc.org)
-  (`ebi.ac.uk`, `europepmc.org`), [bioRxiv/medRxiv](https://www.biorxiv.org)
+  (`ebi.ac.uk`, with the PDF itself fetched from NCBI's PMC Article Datasets at
+  `pmc-oa-opendata.s3.amazonaws.com`), [bioRxiv/medRxiv](https://www.biorxiv.org)
   (`api.biorxiv.org`, plus the `biorxiv.org`/`medrxiv.org` content hosts), the
   [RFC Editor](https://www.rfc-editor.org) (`www.rfc-editor.org`) for an RFC DOI,
   [NIST](https://nvlpubs.nist.gov) for a `10.6028` DOI (the request goes to
