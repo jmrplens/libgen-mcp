@@ -32,3 +32,21 @@ auditConfig:
     # it unpacks is attacker-chosen, and none of it reaches the built site.
     - GHSA-jmr9-qjv8-65gv
     - GHSA-7pqw-9j4j-h8q3
+    # basic-ftp <=6.2.0, quadratic CPU in Client.list() parsing an FTP directory
+    # listing. The fix is 6.2.1 only, and get-uri, its one consumer here, still
+    # declares ^5.3.1 in its latest release (8.0.1), so forcing 6.x would put the
+    # package outside the range its own dependant declares. Its only path is
+    # pa11y-ci > puppeteer > @puppeteer/browsers > proxy-agent > pac-proxy-agent >
+    # get-uri, which reaches FTP only to fetch a PAC file from an ftp:// URL. The
+    # Chromium download that path serves goes over HTTPS on a developer's
+    # machine, CI never runs it (PUPPETEER_SKIP_DOWNLOAD), and nothing configures
+    # an FTP PAC file. Drop this once get-uri accepts basic-ftp 6.2.1.
+    - GHSA-c475-qrg2-pj4r
+    # http-cache-semantics <=4.2.0, a shared cache honouring max-stale can serve
+    # one user's cached response to another, with no fixed release. Astro loads
+    # it in one place, the build-time cache of remote images
+    # (astro/dist/assets/build/remote.js): a cache private to the machine running
+    # the build, holding images fetched for that one build, with no second user
+    # to disclose anything to. The site configures no remote images, and the
+    # published pages are static files that carry none of it.
+    - GHSA-ch52-4w7c-c8xp
