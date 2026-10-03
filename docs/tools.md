@@ -304,13 +304,15 @@ not charge for) and the list is one filtered query, so a call costs one credit o
 allowance described under
 [`LIBGEN_MCP_OPENALEX_KEY`](configuration.md#libgen_mcp_openalex_key). References are
 ranked from the first 100 a work lists, the most one query can name, and `note` says so when
-a work lists more.
+a work lists more, or when the count OpenAlex states differs from the references it names.
 
 The DOI used is the one the [citation styles](citations.md#other-citation-styles) may send to
 doi.org: a DOI Crossref confirmed, or the DOI of a record Crossref or the registry answered.
 A record without one gets `related` with a `note` saying the list is not available, because
 a catalog DOI that failed the check belongs to another work. Every other failure (an unknown
-DOI, OpenAlex not answering, the allowance spent) is also a `note`, never an error, and
+DOI, OpenAlex not answering, a refusal for asking too fast, which says to try again shortly,
+or the daily allowance spent, which suggests the key only to a server without one) is also a
+`note`, never an error, and
 `LIBGEN_MCP_ENRICH=false` turns the lookup off with the rest of the outbound metadata.
 
 ## download

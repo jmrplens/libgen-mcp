@@ -102,48 +102,112 @@ func (c *Client) Related(ctx context.Context, doi, kind string, limit int) Relat
 	defer cancel()
 	work, err := c.openAlexWork(ctx, doi)
 	if err != nil {
-		out.Note = relatedFailureNote(err)
+		out.Note = c.relatedFailureNote(err)
 		return out
 	}
-	switch kind {
-	case RelatedReferences:
-		out.Total = work.ReferencedWorksCount
-		if len(work.ReferencedWorks) == 0 {
-			out.Note = "OpenAlex lists no references for this work."
-			return out
-		}
-		ids := work.ReferencedWorks
-		if len(ids) > relatedMaxIDs {
-			out.Note = fmt.Sprintf("Ranked from the first %d of its %d references.", relatedMaxIDs, len(ids))
-			ids = ids[:relatedMaxIDs]
-		}
-		out.Works, _, err = c.openAlexList(ctx, "openalex:"+strings.Join(shortIDs(ids), "|"), limit)
-	default:
-		out.Works, out.Total, err = c.openAlexList(ctx, "cites:"+shortID(work.ID), limit)
+	if kind == RelatedReferences {
+		return c.relatedReferences(ctx, work, limit)
 	}
-	switch {
-	case err != nil:
-		out.Note = relatedFailureNote(err)
-	case len(out.Works) > 0 || out.Note != "":
-	case kind == RelatedCitedBy:
-		out.Note = "OpenAlex knows no work that cites this one."
-	default:
-		out.Note = "OpenAlex returned none of the works this one references."
-	}
+	out.Works, out.Total, err = c.openAlexList(ctx, "cites:"+shortID(work.ID), limit)
+	out.Note = c.listNote(err, len(out.Works), "OpenAlex knows no work that cites this one.")
 	return out
 }
 
-// relatedFailureNote says why a lookup came back empty, naming nothing but
-// the service: a transport error would print the request URL.
-func relatedFailureNote(err error) string {
+// relatedReferences lists the works a work cites, ranked from the IDs OpenAlex
+// names for them. Where the count OpenAlex states and the IDs it names
+// disagree, or the IDs are more than one query can carry, the note says what
+// the list was ranked from.
+func (c *Client) relatedReferences(ctx context.Context, work openAlexEntity, limit int) RelatedWorks {
+	out := RelatedWorks{Kind: RelatedReferences, Total: work.ReferencedWorksCount}
+	ids := work.ReferencedWorks
+	if len(ids) == 0 {
+		out.Note = "OpenAlex lists no references for this work."
+		if work.ReferencedWorksCount > 0 {
+			out.Note = fmt.Sprintf("OpenAlex counts %d references for this work but names none of them.", work.ReferencedWorksCount)
+		}
+		return out
+	}
+	var notes []string
+	if work.ReferencedWorksCount != len(ids) {
+		notes = append(notes, fmt.Sprintf("OpenAlex counts %d references but names %d of them, and only the named ones can be listed.",
+			work.ReferencedWorksCount, len(ids)))
+	}
+	if len(ids) > relatedMaxIDs {
+		notes = append(notes, fmt.Sprintf("Ranked from the first %d of the %d it names, the most one query can carry.", relatedMaxIDs, len(ids)))
+		ids = ids[:relatedMaxIDs]
+	}
+	works, _, err := c.openAlexList(ctx, "openalex:"+strings.Join(shortIDs(ids), "|"), limit)
+	out.Works = works
+	if note := c.listNote(err, len(works), "OpenAlex returned none of the works this one references."); note != "" {
+		notes = append(notes, note)
+	}
+	out.Note = strings.Join(notes, " ")
+	return out
+}
+
+// listNote is the note for a list query: why it failed, what an empty answer
+// means, or nothing for a list that came back.
+func (c *Client) listNote(err error, works int, empty string) string {
 	switch {
+	case err != nil:
+		return c.relatedFailureNote(err)
+	case works == 0:
+		return empty
+	}
+	return ""
+}
+
+// relatedFailureNote says why a lookup came back empty, naming nothing but
+// the service: a transport error would print the request URL. A refusal for
+// going too fast and a spent daily allowance are told apart, since one passes
+// in seconds and the other at midnight UTC, and the key is suggested only to a
+// server that has none.
+func (c *Client) relatedFailureNote(err error) string {
+	switch {
+	case errors.Is(err, errOpenAlexBurst):
+		return "OpenAlex asked this server to slow down, so the list was not fetched. Try again shortly."
 	case errors.Is(err, errOpenAlexBudget):
-		return "The OpenAlex daily allowance shared by this server is spent, so the list was not fetched. It resets at midnight UTC, and LIBGEN_MCP_OPENALEX_KEY raises it."
+		note := "The OpenAlex daily allowance shared by this server is spent, so the list was not fetched. It resets at midnight UTC."
+		if strings.TrimSpace(c.openAlexKey) == "" {
+			note += " LIBGEN_MCP_OPENALEX_KEY raises it."
+		}
+		return note
 	case errors.Is(err, errOpenAlexNotFound):
 		return "OpenAlex has no work with this DOI."
 	default:
 		return "OpenAlex did not answer, so the list is not available now."
 	}
+}
+
+// errOpenAlexBurst is a refusal for too many requests too fast, which passes
+// in seconds, as opposed to errOpenAlexBudget, a spent daily allowance.
+var errOpenAlexBurst = errors.New("OpenAlex asked for a slower pace")
+
+// burstRetryCeiling is the longest Retry-After still read as a burst refusal
+// rather than a spent day.
+const burstRetryCeiling = time.Minute
+
+// refusalKind tells a 429 for pace apart from one for a spent allowance: it is
+// a burst when the response still reports credits left, or asks for a wait of
+// a minute or less.
+func refusalKind(h http.Header) error {
+	if n, err := strconv.Atoi(strings.TrimSpace(h.Get("X-RateLimit-Remaining"))); err == nil && n > 0 {
+		return errOpenAlexBurst
+	}
+	if s, err := strconv.Atoi(strings.TrimSpace(h.Get("Retry-After"))); err == nil && time.Duration(s)*time.Second <= burstRetryCeiling {
+		return errOpenAlexBurst
+	}
+	return errOpenAlexBudget
+}
+
+// spendRefusal says why the shared budget refused a spend: the daily
+// allowance is spent when the window it knows has no credits left for it, and
+// otherwise the budget is paused by a recent refusal.
+func (c *Client) spendRefusal(cost int) error {
+	if left, _, ok := c.openAlexBudgetOrShared().Remaining(time.Now()); ok && left < cost {
+		return errOpenAlexBudget
+	}
+	return errOpenAlexBurst
 }
 
 // errOpenAlexNotFound is a DOI OpenAlex does not know.
@@ -161,7 +225,7 @@ func (c *Client) openAlexWork(ctx context.Context, doi string) (openAlexEntity, 
 	endpoint := c.openAlexURL() + "/works/doi:" + escapeDOIPath(doi) + "?" +
 		url.Values{"select": {"id,referenced_works,referenced_works_count"}}.Encode()
 	var work openAlexEntity
-	if err := c.openAlexGet(ctx, endpoint, &work); err != nil {
+	if _, err := c.openAlexGet(ctx, endpoint, &work); err != nil {
 		return openAlexEntity{}, err
 	}
 	if work.ID == "" {
@@ -194,8 +258,9 @@ type openAlexListPage struct {
 // the shared budget, with no reserve held back: the reserve exists to keep
 // searches from starving exactly this kind of lookup.
 func (c *Client) openAlexList(ctx context.Context, filter string, limit int) ([]RelatedWork, int, error) {
-	if !c.openAlexBudgetOrShared().Spend(relatedFilterCost, 0, time.Now()) {
-		return nil, 0, errOpenAlexBudget
+	budget := c.openAlexBudgetOrShared()
+	if !budget.Spend(relatedFilterCost, 0, time.Now()) {
+		return nil, 0, c.spendRefusal(relatedFilterCost)
 	}
 	endpoint := c.openAlexURL() + "/works?" + url.Values{
 		"filter":   {filter},
@@ -204,7 +269,10 @@ func (c *Client) openAlexList(ctx context.Context, filter string, limit int) ([]
 		"select":   {relatedSelect},
 	}.Encode()
 	var page openAlexListPage
-	if err := c.openAlexGet(ctx, endpoint, &page); err != nil {
+	if answered, err := c.openAlexGet(ctx, endpoint, &page); err != nil {
+		if !answered {
+			budget.Refund(relatedFilterCost, time.Now())
+		}
 		return nil, 0, err
 	}
 	works := make([]RelatedWork, 0, len(page.Results))
@@ -223,27 +291,30 @@ func (c *Client) openAlexList(ctx context.Context, filter string, limit int) ([]
 // openAlexGet issues one OpenAlex request with the optional key, reports the
 // response's rate-limit headers to the shared budget, and decodes a 200 into
 // into. A 404 is errOpenAlexNotFound, a 429 errOpenAlexBudget.
-func (c *Client) openAlexGet(ctx context.Context, endpoint string, into any) error {
+//
+// answered reports whether OpenAlex answered at all, so a caller that paid for
+// the request can take the credit back when it never reached the service.
+func (c *Client) openAlexGet(ctx context.Context, endpoint string, into any) (answered bool, err error) {
 	req, err := openalex.NewRequest(ctx, endpoint, c.openAlexKey)
 	if err != nil {
-		return netguard.RedactTransportError(err)
+		return false, netguard.RedactTransportError(err)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return netguard.RedactTransportError(err)
+		return false, netguard.RedactTransportError(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	c.openAlexBudgetOrShared().Observe(resp.StatusCode, resp.Header, time.Now())
 	switch resp.StatusCode {
 	case http.StatusOK:
 	case http.StatusNotFound:
-		return errOpenAlexNotFound
+		return true, errOpenAlexNotFound
 	case http.StatusTooManyRequests:
-		return errOpenAlexBudget
+		return true, refusalKind(resp.Header)
 	default:
-		return fmt.Errorf("openalex: HTTP %d", resp.StatusCode)
+		return true, fmt.Errorf("openalex: HTTP %d", resp.StatusCode)
 	}
-	return json.NewDecoder(io.LimitReader(resp.Body, enrichMaxBody)).Decode(into)
+	return true, json.NewDecoder(io.LimitReader(resp.Body, enrichMaxBody)).Decode(into)
 }
 
 // shortID reduces an OpenAlex work URL to its W-number.

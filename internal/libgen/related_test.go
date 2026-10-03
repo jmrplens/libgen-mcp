@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,6 +27,9 @@ type openAlexStub struct {
 	listStatus int
 	// emptyList answers every list query with no results.
 	emptyList bool
+	// listRemaining and listRetryAfter, when set, are the rate-limit headers
+	// a list query answers with.
+	listRemaining, listRetryAfter string
 }
 
 // handler serves the recorded fixtures.
@@ -46,6 +50,12 @@ func (s *openAlexStub) handler(t *testing.T) http.HandlerFunc {
 		w.Header().Set("X-RateLimit-Remaining", "500")
 		w.Header().Set("X-RateLimit-Reset", "3600")
 		filter := r.URL.Query().Get("filter")
+		if filter != "" && s.listRemaining != "" {
+			w.Header().Set("X-RateLimit-Remaining", s.listRemaining)
+		}
+		if filter != "" && s.listRetryAfter != "" {
+			w.Header().Set("Retry-After", s.listRetryAfter)
+		}
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/works/doi:10.9999"):
 			http.NotFound(w, r)
@@ -143,34 +153,91 @@ func TestRelated_Notes(t *testing.T) {
 		ids[i] = fmt.Sprintf(`"https://openalex.org/W%d"`, i+1)
 	}
 	long := `{"id":"https://openalex.org/W1","referenced_works_count":105,"referenced_works":[` + strings.Join(ids, ",") + `]}`
+	short := `{"id":"https://openalex.org/W1","referenced_works_count":40,"referenced_works":["https://openalex.org/W2"]}`
 	tests := []struct {
-		name, doi, kind, work string
-		listStatus            int
-		spent, empty          bool
-		want                  string
+		name, doi, kind, work, key string
+		listStatus                 int
+		listRemaining, retryAfter  string
+		spent, paused, empty       bool
+		want, notWant              string
 	}{
 		{name: "unknown doi", doi: "10.9999/x", kind: RelatedReferences, want: "no work with this DOI"},
-		{name: "no references", doi: "10.1/x", kind: RelatedReferences, work: `{"id":"https://openalex.org/W1"}`, want: "no references"},
+		{name: "no references", doi: "10.1/x", kind: RelatedReferences, work: `{"id":"https://openalex.org/W1"}`, want: "lists no references"},
+		{name: "counted but not named", doi: "10.1/x", kind: RelatedReferences, work: `{"id":"https://openalex.org/W1","referenced_works_count":7}`, want: "counts 7 references for this work but names none"},
 		{name: "entity with no id", doi: "10.1/x", kind: RelatedCitedBy, work: `{}`, want: "no work with this DOI"},
-		{name: "list refused", doi: "10.1/x", kind: RelatedCitedBy, listStatus: http.StatusTooManyRequests, want: "allowance"},
+		{name: "a burst refusal with credits left", doi: "10.1/x", kind: RelatedCitedBy, listStatus: http.StatusTooManyRequests, want: "Try again shortly", notWant: "allowance"},
+		{name: "a burst refusal with a short wait", doi: "10.1/x", kind: RelatedCitedBy, listStatus: http.StatusTooManyRequests, listRemaining: "0", retryAfter: "2", want: "Try again shortly"},
+		{name: "a refusal for the day", doi: "10.1/x", kind: RelatedCitedBy, listStatus: http.StatusTooManyRequests, listRemaining: "0", retryAfter: "40000", want: "LIBGEN_MCP_OPENALEX_KEY raises it"},
+		{name: "a refusal for the day with a key set", doi: "10.1/x", kind: RelatedCitedBy, key: "k", listStatus: http.StatusTooManyRequests, listRemaining: "0", want: "midnight UTC", notWant: "LIBGEN_MCP_OPENALEX_KEY"},
 		{name: "list failing", doi: "10.1/x", kind: RelatedCitedBy, listStatus: http.StatusBadGateway, want: "did not answer"},
 		{name: "budget spent", doi: "10.1/x", kind: RelatedCitedBy, spent: true, want: "allowance"},
-		{name: "long reference list", doi: "10.1/x", kind: RelatedReferences, work: long, want: "first 100 of its 105"},
+		{name: "budget paused by a refusal", doi: "10.1/x", kind: RelatedCitedBy, paused: true, want: "Try again shortly"},
+		{name: "long reference list", doi: "10.1/x", kind: RelatedReferences, work: long, want: "first 100 of the 105 it names"},
+		{name: "count and names disagree", doi: "10.1/x", kind: RelatedReferences, work: short, want: "counts 40 references but names 1"},
 		{name: "a work nobody cites", doi: "10.1/x", kind: RelatedCitedBy, work: `{"id":"https://openalex.org/W1"}`, empty: true, want: "cites this one"},
 		{name: "references that resolve to nothing", doi: "10.1/x", kind: RelatedReferences, empty: true, want: "returned none"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			stub := &openAlexStub{work: tc.work, listStatus: tc.listStatus, emptyList: tc.empty}
-			c, budget := relatedClient(t, stub, "")
+			stub := &openAlexStub{
+				work: tc.work, listStatus: tc.listStatus, emptyList: tc.empty,
+				listRemaining: tc.listRemaining, listRetryAfter: tc.retryAfter,
+			}
+			c, budget := relatedClient(t, stub, tc.key)
 			if tc.spent {
 				budget.Observe(http.StatusOK, http.Header{"X-Ratelimit-Remaining": {"0"}, "X-Ratelimit-Reset": {"3600"}}, time.Now())
+			}
+			if tc.paused {
+				budget.Observe(http.StatusTooManyRequests, http.Header{"Retry-After": {"30"}}, time.Now())
 			}
 			got := c.Related(context.Background(), tc.doi, tc.kind, 3)
 			if got.Kind != tc.kind || !strings.Contains(got.Note, tc.want) {
 				t.Errorf("got %+v, want a note containing %q", got, tc.want)
 			}
+			if tc.notWant != "" && strings.Contains(got.Note, tc.notWant) {
+				t.Errorf("note %q should not contain %q", got.Note, tc.notWant)
+			}
 		})
+	}
+}
+
+// TestRelated_RefundsAnUnsentQuery gives the credit back when the list query
+// never reached OpenAlex, and keeps it spent when OpenAlex answered.
+func TestRelated_RefundsAnUnsentQuery(t *testing.T) {
+	var lists atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-RateLimit-Remaining", "10")
+		w.Header().Set("X-RateLimit-Reset", "3600")
+		if strings.HasPrefix(r.URL.Path, "/works/doi:") {
+			_, _ = w.Write([]byte(`{"id":"https://openalex.org/W1"}`))
+			return
+		}
+		lists.Add(1)
+		// Hijack and close: the request was sent but nothing came back,
+		// which is the same to the client as a request never answered.
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			http.Error(w, "no hijack", http.StatusInternalServerError)
+			return
+		}
+		conn, _, err := hj.Hijack()
+		if err == nil {
+			_ = conn.Close()
+		}
+	}))
+	t.Cleanup(srv.Close)
+	budget := &openalex.Budget{}
+	c := newVerifyClient(t, srv.URL)
+	WithOpenAlexBase(srv.URL, budget)(c)
+	got := c.Related(context.Background(), "10.1/x", RelatedCitedBy, 3)
+	if !strings.Contains(got.Note, "did not answer") {
+		t.Errorf("note = %q", got.Note)
+	}
+	if left, _, ok := budget.Remaining(time.Now()); !ok || left != 10 {
+		t.Errorf("budget = %d, %v, want the credit refunded to 10", left, ok)
+	}
+	if lists.Load() == 0 {
+		t.Error("the list query never reached the server")
 	}
 }
 
