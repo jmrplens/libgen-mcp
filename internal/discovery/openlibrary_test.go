@@ -218,17 +218,17 @@ func TestOpenLibrary_UserAgentEtiquette(t *testing.T) {
 // search with several back-to-back requests.
 func TestOpenLibrary_RateFromEmail(t *testing.T) {
 	identified := NewOpenLibrary("dev@example.com")
-	if got := identified.limiter.Limit(); got != rate.Limit(openLibraryEmailRPS) {
+	if got := identified.pace.limit; got != rate.Limit(openLibraryEmailRPS) {
 		t.Errorf("identified limit = %v, want %v (3 rps)", got, rate.Limit(openLibraryEmailRPS))
 	}
-	if got := identified.limiter.Burst(); got != openLibraryEmailRPS {
+	if got := identified.pace.burst; got != openLibraryEmailRPS {
 		t.Errorf("identified burst = %d, want %d (the rate itself)", got, openLibraryEmailRPS)
 	}
 	anonymous := NewOpenLibrary("")
-	if got := anonymous.limiter.Limit(); got != rate.Limit(openLibraryAnonRPS) {
+	if got := anonymous.pace.limit; got != rate.Limit(openLibraryAnonRPS) {
 		t.Errorf("anonymous limit = %v, want %v (1 rps)", got, rate.Limit(openLibraryAnonRPS))
 	}
-	if got := anonymous.limiter.Burst(); got != openLibraryAnonRPS {
+	if got := anonymous.pace.burst; got != openLibraryAnonRPS {
 		t.Errorf("anonymous burst = %d, want %d: a larger burst exceeds the rate it claims to honor", got, openLibraryAnonRPS)
 	}
 }

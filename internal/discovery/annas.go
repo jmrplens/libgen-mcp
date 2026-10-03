@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	xhtml "golang.org/x/net/html"
@@ -78,17 +77,17 @@ type AnnasProvider struct {
 	mirrors MirrorLister
 	// http is the client used for search requests; when nil, http.DefaultClient.
 	http *http.Client
-	// quietUntil is the wall-clock instant, in Unix nanoseconds, before which a
-	// search returns without asking anything, because the site was challenged
-	// and said so. Zero means nothing has been observed yet.
-	//
-	// Atomic because Federate runs every provider in its own goroutine, and a
-	// server answers several searches at once: two concurrent calls may both
-	// meet the challenge, and the only thing that costs is one extra request.
-	// now is a seam so a test can move time without sleeping.
-	quietUntil atomic.Int64
-	now        func() time.Time
+	// now is a seam so a test can move time without sleeping. The window it is
+	// read against lives in annasRefusals, not here: a provider is built per
+	// search, so a window kept on the value would be forgotten by the next one.
+	now func() time.Time
 }
+
+// annasRefusals remembers, for the life of the process, the Anna's mirrors that
+// served a browser challenge. A challenge opens a window on every mirror the
+// search was given, because they are one deployment behind one anti-bot provider,
+// and a search is quiet when any of its mirrors is inside a window.
+var annasRefusals refusalWindows
 
 // NewAnnas builds a provider searching the given Anna's Archive mirrors, equipped
 // with its own bounded http.Client (via newDiscoveryClient) so a stalled mirror can
@@ -106,38 +105,36 @@ func (p *AnnasProvider) clock() time.Time {
 	return p.now()
 }
 
-// quiet reports whether a challenge is still being waited out, so no request is
-// made at all.
-func (p *AnnasProvider) quiet() bool {
-	until := p.quietUntil.Load()
-	return until != 0 && p.clock().UnixNano() < until
-}
-
-// beQuiet starts the cooldown and reports whether this call is the one that
-// started it, so the reason is logged once per window rather than per search.
-//
-// The deadline only ever moves later. A plain Swap would let a goroutine that
-// computed its deadline, was descheduled, and woke up afterwards overwrite a
-// LATER deadline another challenge had since stored — shortening the window and
-// letting the provider ask again before fifteen minutes had passed since the
-// most recent refusal, which is the one thing the cooldown exists to prevent.
-// Concurrent challenges are ordinary here: Federate runs providers in their own
-// goroutines and a server answers several searches at once.
-func (p *AnnasProvider) beQuiet() bool {
-	next := p.clock().Add(challengeCooldown).UnixNano()
-	for {
-		previous := p.quietUntil.Load()
-		if previous >= next {
-			// Somebody else already reserved at least this much quiet, and has
-			// already logged the reason. Nothing to extend and nothing to say.
-			return false
-		}
-		if p.quietUntil.CompareAndSwap(previous, next) {
-			// First in a fresh window: either nothing was set, or the last one
-			// had already lapsed by the time this challenge arrived.
-			return previous == 0 || previous < p.clock().UnixNano()
+// quiet reports whether a challenge on any of these mirrors is still being
+// waited out, so no request is made at all.
+func (p *AnnasProvider) quiet(mirrors []string) bool {
+	now := p.clock()
+	for _, m := range mirrors {
+		if annasRefusals.quiet(annasMirrorKey(m), now) {
+			return true
 		}
 	}
+	return false
+}
+
+// beQuiet opens the cooldown on every mirror of this search and reports whether
+// any window was a fresh one, so the reason is logged once per window rather
+// than per search. The ordering rules (a deadline only ever moves later) are
+// refusalWindows'.
+func (p *AnnasProvider) beQuiet(mirrors []string) bool {
+	now := p.clock()
+	fresh := false
+	for _, m := range mirrors {
+		if annasRefusals.open(annasMirrorKey(m), now) {
+			fresh = true
+		}
+	}
+	return fresh
+}
+
+// annasMirrorKey normalizes a mirror base the way Search does before using it.
+func annasMirrorKey(mirror string) string {
+	return strings.TrimRight(strings.TrimSpace(mirror), "/")
 }
 
 // Name reports the origin label stamped on this provider's results.
@@ -148,25 +145,25 @@ func (p *AnnasProvider) Name() string { return "annas" }
 // none answers, so a federated search is never failed by this provider. Only a
 // context error propagates.
 func (p *AnnasProvider) Search(ctx context.Context, query string, limit int) ([]DiscoveryResult, error) {
-	// Nothing is asked while a challenge is being waited out, and this comes
-	// before the budget because it spends none of it. It is the half that
-	// matters for traffic: giving up within one call still left every later
-	// search asking again and being refused again.
-	if p.quiet() {
-		return nil, nil
-	}
-
 	// Bound the whole call the same way arXiv/Crossref/OpenLibrary do, so trying
 	// several mirrors in sequence can never outlive the discovery budget.
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 
+	// Nothing is asked while a challenge is being waited out. It is the half
+	// that matters for traffic: giving up within one call still left every
+	// later search asking again and being refused again.
+	mirrors := p.mirrors.Mirrors(ctx)
+	if p.quiet(mirrors) {
+		return nil, nil
+	}
+
 	httpClient := p.http
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
-	for _, mirror := range p.mirrors.Mirrors(ctx) {
-		base := strings.TrimRight(strings.TrimSpace(mirror), "/")
+	for _, mirror := range mirrors {
+		base := annasMirrorKey(mirror)
 		body, err := p.fetch(ctx, httpClient, base, query)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -179,7 +176,7 @@ func (p *AnnasProvider) Search(ctx context.Context, query string, limit int) ([]
 			// because otherwise this is indistinguishable from "nothing matched"
 			// — and the two call for completely different reactions.
 			if errors.Is(err, errChallenged) {
-				if p.beQuiet() {
+				if p.beQuiet(mirrors) {
 					slog.Warn("annas search: mirror is serving a browser challenge, asking nothing for "+challengeCooldown.String(),
 						"mirror", base, "hint", "search needs the HTML site, which no API key unlocks; a configured "+
 							"member key still serves download through the member API")

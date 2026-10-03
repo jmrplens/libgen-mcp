@@ -48,24 +48,25 @@ const pubmedYearDigits = 4
 // slice, so it surfaces records for discovery and citation even when no free full
 // text exists — which is exactly what the europepmc-style OA sources cannot do. Its
 // results are therefore bibliographic only: no PDF URL, never marked open access. Its
-// limiter and http.Client are self-contained, so it never shares state with libgen's
-// client.
+// http.Client is its own, so it never shares state with libgen's client, and its
+// pacing is process-wide (see pacers), since NCBI enforces its allowance per caller.
 type PubMedProvider struct {
-	client  *http.Client
-	limiter *rate.Limiter
-	email   string // optional contact NCBI asks for; empty omits the parameter
+	client *http.Client
+	pace   pace
+	email  string // optional contact NCBI asks for; empty omits the parameter
 }
 
-// NewPubMed constructs a PubMedProvider with its own http.Client and a rate limiter
-// pacing requests to NCBI's keyless allowance of three per second. The email is the
+// NewPubMed constructs a PubMedProvider with its own http.Client, paced to NCBI's
+// keyless allowance of three requests per second across every search this process
+// runs. The email is the
 // optional contact address NCBI asks callers to identify themselves with (the same
 // contact the Crossref polite pool uses); pass "" to omit it — the provider never
 // invents one.
 func NewPubMed(email string) *PubMedProvider {
 	return &PubMedProvider{
-		client:  newDiscoveryClient(),
-		limiter: rate.NewLimiter(rate.Limit(pubmedRPS), pubmedRPS),
-		email:   strings.TrimSpace(email),
+		client: newDiscoveryClient(),
+		pace:   pace{limit: rate.Limit(pubmedRPS), burst: pubmedRPS},
+		email:  strings.TrimSpace(email),
 	}
 }
 
@@ -106,7 +107,7 @@ func (p *PubMedProvider) Search(ctx context.Context, query string, limit int) ([
 // cancellation or deadline is returned as an error instead, since that is the caller
 // going away rather than the source misbehaving.
 func (p *PubMedProvider) get(ctx context.Context, rawURL string) ([]byte, error) {
-	if err := p.limiter.Wait(ctx); err != nil {
+	if err := p.pace.wait(ctx, p.Name(), pubmedBase); err != nil {
 		return nil, ctx.Err()
 	}
 	status, body, err := boundedGet(ctx, p.client, rawURL)

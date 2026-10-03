@@ -62,20 +62,20 @@ var gutenbergFormats = []struct {
 // to file visible to the caller, who can see the title, author and link before
 // fetching anything.
 //
-// Its limiter and http.Client are self-contained, so it never shares state with
-// libgen's client.
+// Its http.Client is its own, so it never shares state with libgen's client, and
+// its pacing is process-wide (see pacers).
 type GutenbergProvider struct {
-	client  *http.Client
-	limiter *rate.Limiter
+	client *http.Client
+	pace   pace
 }
 
-// NewGutenberg constructs a GutenbergProvider with its own http.Client and a rate
-// limiter pacing requests to one per second (burst 1, so the first request goes
-// through immediately and only back-to-back requests wait).
+// NewGutenberg constructs a GutenbergProvider with its own http.Client, paced to
+// one request per second across every search this process runs (burst 1, so the
+// first request goes through immediately and only back-to-back requests wait).
 func NewGutenberg() *GutenbergProvider {
 	return &GutenbergProvider{
-		client:  newDiscoveryClient(),
-		limiter: rate.NewLimiter(rate.Every(gutenbergRate), 1),
+		client: newDiscoveryClient(),
+		pace:   pace{limit: rate.Every(gutenbergRate), burst: 1},
 	}
 }
 
@@ -91,7 +91,7 @@ func (p *GutenbergProvider) Search(ctx context.Context, query string, limit int)
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 
-	if err := p.limiter.Wait(ctx); err != nil {
+	if err := p.pace.wait(ctx, p.Name(), gutendexBase); err != nil {
 		return nil, ctx.Err()
 	}
 

@@ -60,16 +60,17 @@ const (
 // queries into canonical identifiers (ISBN/title/year) which feed a Library Genesis
 // search. It is primarily a resolver, not a download source, so its results carry no
 // PDF URL; the one exception is a publicly readable book, which it surfaces with a
-// free-to-read archive.org link and marks open-access. Its limiter and http.Client
-// are self-contained, so it never shares state with libgen's client.
+// free-to-read archive.org link and marks open-access. Its http.Client is its own,
+// so it never shares state with libgen's client, and its pacing is process-wide
+// (see pacers), since OpenLibrary's allowance is per caller, not per search.
 type OpenLibraryProvider struct {
 	client    *http.Client
-	limiter   *rate.Limiter
+	pace      pace
 	userAgent string
 }
 
 // NewOpenLibrary constructs an OpenLibraryProvider with its own http.Client. When a
-// contact email is supplied it is advertised in the User-Agent and the limiter is
+// contact email is supplied it is advertised in the User-Agent and requests are
 // paced to OpenLibrary's identified allowance (3 rps); without one the provider
 // stays anonymous and drops to the unidentified allowance (1 rps), honoring
 // https://openlibrary.org/developers/api.
@@ -86,7 +87,7 @@ func NewOpenLibrary(email string) *OpenLibraryProvider {
 	}
 	return &OpenLibraryProvider{
 		client:    newDiscoveryClient(),
-		limiter:   rate.NewLimiter(rate.Limit(rps), rps),
+		pace:      pace{limit: rate.Limit(rps), burst: rps},
 		userAgent: ua,
 	}
 }
@@ -103,7 +104,7 @@ func (p *OpenLibraryProvider) Search(ctx context.Context, query string, limit in
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 
-	if err := p.limiter.Wait(ctx); err != nil {
+	if err := p.pace.wait(ctx, p.Name(), openLibraryBase); err != nil {
 		return nil, ctx.Err()
 	}
 
