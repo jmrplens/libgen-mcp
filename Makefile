@@ -544,13 +544,15 @@ check-stamper: ## Exercise the release stamper (server.json) against a fixture m
 check-server-json-packages: ## Download every package server.json declares and check it is what it claims (needs network)
 	bash scripts/validate-server-json-packages.sh
 
-check-verify-published: ## Exercise the published-package verifier's retry rules (offline)
+check-verify-published: ## Exercise the published-package verifier and the NuGet layout its unsigning relies on (offline)
 	python3 -m unittest discover -s scripts -p 'verify_published_packages_test.py'
+	python3 -m unittest discover -s scripts -p 'validate_nuget_test.py'
 
 check-mcpb: ## Exercise the Claude Desktop bundle: its manifest, its Linux launcher and its packer (offline)
 	python3 -m unittest discover -s scripts -p 'mcpb_manifest_test.py'
 	python3 -m unittest discover -s scripts -p 'mcpb_launch_sh_test.py'
 	python3 -m unittest discover -s scripts -p 'build_mcpb_sh_test.py'
+	python3 -m unittest discover -s scripts -p 'fetch_release_assets_sh_test.py'
 
 check-supply-chain: ## Every action pinned, no run-time-resolved code in a credentialed job, cooldowns stated
 	go run ./cmd/audit_supply_chain/

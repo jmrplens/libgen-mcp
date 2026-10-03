@@ -1452,7 +1452,7 @@ refuses to build without it. The seven packages are **generated** into
 `nuget/dist/`, which is gitignored.
 
 It is a .NET tool whose entry point is a native executable, so nothing in the
-packages is .NET code. Five things about that layout are load-bearing:
+packages is .NET code. Six things about that layout are load-bearing:
 
 - **Seven packages, pushed runtime-first.** One pointer, `libgen-mcp`, naming a
   package per runtime identifier, and six `libgen-mcp.<rid>` packages carrying
@@ -1469,6 +1469,16 @@ packages is .NET code. Five things about that layout are load-bearing:
   published, so the copy inside has to stand alone.
 - **Arguments for the server go after `--`.** Everything before it belongs to
   `dnx`.
+- **The seven `.nupkg` are attested before they are pushed, and the archive
+  layout is what makes that attestation findable.** nuget.org adds a
+  `.signature.p7s` entry to every package it serves, so a verifier removes it
+  (`zip -d`, NuGet's own definition of the unsigned package) and looks up the
+  digest of the rest. That gives back the attested bytes only for an archive
+  with no data descriptor, nothing in zip64 form, no archive comment and no
+  signature already in it, which `validate_nuget.py` refuses; `build_nuget.py`
+  writes none of those, since `zipfile` on a seekable file under 2 GiB never
+  does. After the push, `verify_published_packages.py --nuget-digests` holds
+  each served package, unsigned, to the digest the `nuget` job attested.
 
 `make validate-nuget` drives all of it in a digest-pinned .NET SDK container,
 ending in a real `dotnet tool install` **and** a `dnx` run that must each answer

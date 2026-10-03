@@ -77,7 +77,7 @@ Every release is signed, and what that buys you depends on the channel:
 | Docker                  | A keyless cosign signature on the index and both platform manifests, plus SLSA build provenance | You, with the recipe below |
 | npm                     | npm provenance, attached automatically because the publish is a trusted publisher               | `npm audit signatures`     |
 | PyPI                    | PEP 740 attestations, attached automatically for the same reason                                | Shown on the project page  |
-| NuGet                   | The author and repository signature nuget.org requires                                          | `dotnet nuget verify`      |
+| NuGet                   | nuget.org's repository signature, plus SLSA build provenance per package (after v2.0.1)         | `dotnet nuget verify`, you |
 | Homebrew                | A SHA256 per platform asset, pinned in the formula                                              | `brew` itself, on download |
 | `go install`            | The Go checksum database, over the **source**                                                   | The Go toolchain           |
 
@@ -161,8 +161,22 @@ installs on Debian and on Alpine — measured end to end, under
 
 **Verify.** The upload is an OIDC trusted publisher, so PyPI records a PEP 740
 attestation for every file. It is shown on the project page beside each file. No
-installer verifies it for you yet, so if the chain matters to your deployment,
-prefer the [release binary](#release-binary) and the cosign recipe there.
+installer verifies it for you yet. What you can verify yourself is the binary the
+wheel installs, which is the release asset byte for byte, so its build provenance
+answers for it:
+
+```bash
+# after pip or pipx
+gh attestation verify "$(command -v libgen-mcp)" -R jmrplens/libgen-mcp \
+  --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
+
+# uvx keeps the binary in uv's cache, and the package says where
+gh attestation verify "$(uvx --from libgen-mcp python -c 'import libgen_mcp as m; print(m.find_binary())')" \
+  -R jmrplens/libgen-mcp --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
+```
+
+`--signer-workflow` and `--source-ref` are explained under
+[Release binary](#release-binary).
 
 **Upgrade.** `pipx upgrade libgen-mcp`, or `pip install --upgrade libgen-mcp`.
 `uvx libgen-mcp@latest` pins the run to the newest release rather than uv's
@@ -214,6 +228,36 @@ to `dnx`. That is the one thing about this channel that surprises people.
 ```bash
 dotnet nuget verify ~/.nuget/packages/libgen-mcp/*/libgen-mcp.*.nupkg
 ```
+
+That signature is nuget.org's, so it says the package came from nuget.org, not
+which build produced it. The binary the SDK runs is the release asset byte for
+byte, so its build provenance answers that. `dnx` runs it from the NuGet cache,
+and after `dotnet tool install -g` the shim on Linux and macOS links into the
+tool store:
+
+```bash
+gh attestation verify ~/.nuget/packages/libgen-mcp.linux-x64/<version>/tools/any/linux-x64/libgen-mcp \
+  -R jmrplens/libgen-mcp --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
+gh attestation verify "$(readlink -f "$(command -v libgen-mcp)")" \
+  -R jmrplens/libgen-mcp --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
+```
+
+Releases after v2.0.1 also attest the seven packages themselves, as they were
+before nuget.org added its repository signature. Remove that entry from a
+downloaded copy and verify what is left:
+
+```bash
+curl -sSLO https://api.nuget.org/v3-flatcontainer/libgen-mcp/<version>/libgen-mcp.<version>.nupkg
+zip -q -d libgen-mcp.<version>.nupkg .signature.p7s
+gh attestation verify libgen-mcp.<version>.nupkg -R jmrplens/libgen-mcp \
+  --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml \
+  --source-ref refs/tags/v<version>
+```
+
+The same works for any `libgen-mcp.<rid>` package. Info-ZIP's `zip -d` leaves
+every other byte where it was, which is NuGet's own definition of the unsigned
+package. A tool that rewrites the archive gives other bytes, and `gh` then finds
+nothing.
 
 **Upgrade.** `dotnet tool update -g libgen-mcp`.
 
@@ -270,7 +314,8 @@ And the provenance, which answers the other question — which commit and which
 run produced it:
 
 ```bash
-gh attestation verify oci://ghcr.io/jmrplens/libgen-mcp:latest -R jmrplens/libgen-mcp
+gh attestation verify oci://ghcr.io/jmrplens/libgen-mcp:latest -R jmrplens/libgen-mcp \
+  --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
 ```
 
 **Upgrade.** `docker pull ghcr.io/jmrplens/libgen-mcp:latest`, or pin a version
@@ -322,8 +367,15 @@ Every asset also carries SLSA build provenance in GitHub's attestation store,
 which answers which commit and which workflow run produced it:
 
 ```bash
-gh attestation verify libgen-mcp-linux-amd64 -R jmrplens/libgen-mcp
+gh attestation verify libgen-mcp-linux-amd64 -R jmrplens/libgen-mcp \
+  --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml \
+  --source-ref refs/tags/v<version>
 ```
+
+`-R` alone accepts an attestation any workflow of the repository minted, so
+`--signer-workflow` holds it to the release workflow, and `--source-ref` holds it
+to the release you downloaded. Every `gh attestation verify` on this page takes
+the first, and the second wherever you know the version.
 
 **Upgrade.** Download the new asset over the old one. Run `libgen-mcp
 --shutdown` first if a client already has one running, or the old process keeps
@@ -350,7 +402,8 @@ no handler for `.mcpb` files, so opening the file does nothing.
 asset:
 
 ```bash
-gh attestation verify libgen-mcp.mcpb -R jmrplens/libgen-mcp
+gh attestation verify libgen-mcp.mcpb -R jmrplens/libgen-mcp \
+  --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
 ```
 
 **Upgrade.** Download the new bundle and open it again.
