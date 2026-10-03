@@ -29,20 +29,21 @@ const (
 const arxivRate = 3 * time.Second
 
 // ArxivProvider is a keyless open-access discovery source backed by the arXiv
-// Atom API. Its limiter and http.Client are self-contained, so it never shares
-// state with libgen's client.
+// Atom API. Its http.Client is its own, so it never shares state with libgen's
+// client, and its pacing is process-wide (see pacers), so it holds across
+// searches.
 type ArxivProvider struct {
-	client  *http.Client
-	limiter *rate.Limiter
+	client *http.Client
+	pace   pace
 }
 
-// NewArxiv constructs an ArxivProvider with its own http.Client and a rate limiter
-// pacing requests to arXiv's ~3s courtesy delay (burst 1, so the first request
-// goes through immediately and only back-to-back requests wait).
+// NewArxiv constructs an ArxivProvider with its own http.Client, paced to arXiv's
+// ~3s courtesy delay (burst 1, so the first request goes through immediately and
+// only back-to-back requests, from this search or any other, wait).
 func NewArxiv() *ArxivProvider {
 	return &ArxivProvider{
-		client:  newDiscoveryClient(),
-		limiter: rate.NewLimiter(rate.Every(arxivRate), 1),
+		client: newDiscoveryClient(),
+		pace:   pace{limit: rate.Every(arxivRate), burst: 1},
 	}
 }
 
@@ -58,7 +59,7 @@ func (p *ArxivProvider) Search(ctx context.Context, query string, limit int) ([]
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 
-	if err := p.limiter.Wait(ctx); err != nil {
+	if err := p.pace.wait(ctx, p.Name(), arxivBase); err != nil {
 		return nil, ctx.Err()
 	}
 
