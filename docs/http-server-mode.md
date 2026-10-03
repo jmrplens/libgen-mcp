@@ -425,16 +425,31 @@ surface and the answers it can give: the enabled sources, `extra_sources`, `serv
 `confirm_downloads`, the base path, statelessness, and the three limits that change what an
 identical call gets back — `max_download_bytes`, `read_max_chars` and `read_default_pages`.
 
+**"Enabled" means in the chain, not listed.** `LIBGEN_MCP_SOURCES` is half the decision:
+`core` joins the chain only when `LIBGEN_MCP_CORE_KEY` is set, and `unpaywall` only when
+`LIBGEN_MCP_UNPAYWALL_EMAIL` is. Either one changes the `source` enum `download` advertises, so
+the digest covers the resulting set of source names. Two replicas with the same list and a CORE
+key on only one of them report different digests, and naming `core` without a key reads the
+same as not naming it, because the chain is the same.
+
 **Replicas behind one balancer must agree on every one of them**, or a client gets a different
 catalog depending on which node it reaches and nothing else notices. Comparing the digest
 across replicas is the whole point of publishing it, and it is order-free wherever the setting
 is a set.
 
 **It is a fingerprint for comparison, not a secret.** The settings it covers are few and
-public, so whoever reads it can work out which combination produced it. Nothing in it is a
-credential, and treating it as one is a mistake in the other direction. What is deliberately
-out: counters, the configuration values themselves, and anything needing an upstream
-round-trip. That is also why the endpoint needs no credential.
+public, so whoever reads it can work out which combination produced it. That is exactly why no
+credential is in it. A key or an email reaches the digest only as the name of the source it
+switches on — never its value, and never a hash of it, which would let anyone reading `/health`
+test a guessed key offline. Two replicas holding different CORE keys report the same digest,
+because they serve the same surface. An Anna's Archive key changes how `annas` resolves, not
+whether it is in the chain, so it is not in the digest at all. What is deliberately out:
+counters, credential values, and anything needing an upstream round-trip. That is also why the
+endpoint needs no credential.
+
+**Changing what the digest covers changes its value.** Upgrading to a release that adds an
+input moves every deployment's digest once, whatever its configuration. Upgrade the replicas
+together, or expect a mixed fleet to read as mismatched until the last one is replaced.
 
 ## Two cards, and which one a scanner wants
 

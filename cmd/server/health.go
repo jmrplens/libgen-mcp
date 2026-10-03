@@ -17,7 +17,6 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -217,26 +216,34 @@ func shortCommit(commit string) string {
 // a different catalog depending on which node it reaches — and nothing else
 // detects that. server_fetch is in it because it decides whether the read tool
 // is registered at all; remote_downloads because it decides whether download
-// saves a file or returns a link; the sources list because it decides which
-// download chain exists; the base path and statelessness because they decide
-// what the endpoint is and what a GET answers.
+// saves a file or returns a link; the enabled sources because they decide which
+// download chain exists and which names download's source enum offers; the base
+// path and statelessness because they decide what the endpoint is and what a GET
+// answers.
 //
-// What is deliberately out: counters, configuration values themselves, and
-// anything needing an upstream round-trip. **The digest is a fingerprint for
-// comparison, not a secret.** The settings it covers are few and public, so
-// whoever reads it can work out which combination produced it; nothing here is a
-// credential, and treating it as one would be a mistake in the other direction.
+// The sources are the ones enabled, not the ones listed. LIBGEN_MCP_SOURCES is
+// only half the decision: core joins the chain only with LIBGEN_MCP_CORE_KEY set
+// and unpaywall only with LIBGEN_MCP_UNPAYWALL_EMAIL set, so two replicas with
+// the same list and different credentials serve different download schemas.
+// Hashing the list alone reported them as matched.
 //
-// Order-free wherever the setting is a set, so two replicas that list the same
-// sources in a different order agree.
+// What is deliberately out: counters, credential values, and anything needing an
+// upstream round-trip. A credential reaches the digest only as the name of the
+// source it switches on, never as its value or a hash of it, because the digest
+// is published unauthenticated and a value folded into it would let anyone test
+// a guessed key offline. **The digest is a fingerprint for comparison, not a
+// secret.** The settings it covers are few and public, so whoever reads it can
+// work out which combination produced it, and that is why none of them may be a
+// credential.
+//
+// Order-free wherever the setting is a set: the enabled sources are listed in
+// the canonical chain order whatever order the operator wrote them in.
 func configDigest(cfg *config.Config, basePath string, stateless bool) string {
 	if cfg == nil {
 		return ""
 	}
-	sources := slices.Clone(cfg.Sources)
-	slices.Sort(sources)
 	fields := []string{
-		"sources=" + strings.Join(sources, ","),
+		"enabled_sources=" + strings.Join(enabledSources(cfg), ","),
 		"extra_sources=" + string(cfg.ExtraSources),
 		"server_fetch=" + tristate(cfg.ServerFetch),
 		"remote_downloads=" + strconv.FormatBool(cfg.RemoteDownloads),
@@ -255,6 +262,21 @@ func configDigest(cfg *config.Config, basePath string, stateless bool) string {
 	}
 	sum := sha256.Sum256([]byte(strings.Join(fields, "\n")))
 	return hex.EncodeToString(sum[:])[:12]
+}
+
+// enabledSources names the download sources this configuration puts in the
+// chain, in config.KnownSources order. It asks the same question the chain is
+// built from (config.SourceEnabled), so a source a credential gates on or off is
+// counted exactly as the download tool's schema counts it, and the credential
+// itself never leaves the decision.
+func enabledSources(cfg *config.Config) []string {
+	names := make([]string, 0, len(config.KnownSources))
+	for _, name := range config.KnownSources {
+		if cfg.SourceEnabled(name) {
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 // tristate renders an optional boolean, keeping "the operator did not say"

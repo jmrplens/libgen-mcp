@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 )
 
@@ -228,6 +230,7 @@ func digestConfig() *config.Config {
 	fetch := true
 	return &config.Config{
 		Sources:          []string{"libgen", "annas", "unpaywall"},
+		UnpaywallEmail:   "ops@example.org",
 		ExtraSources:     config.ExtraSourcesAuto,
 		ServerFetch:      &fetch,
 		RemoteDownloads:  false,
@@ -270,6 +273,13 @@ func TestConfigDigestChangesWithEverySettingItCovers(t *testing.T) {
 		{name: "confirm_downloads", mutate: func(c *config.Config) { c.ConfirmDownloads = true }},
 		{name: "extra_sources", mutate: func(c *config.Config) { c.ExtraSources = config.ExtraSourcesNever }},
 		{name: "a source removed", mutate: func(c *config.Config) { c.Sources = c.Sources[:2] }},
+		// The two credentials that switch a source on. Listing a source is
+		// half the decision, so the digest has to see the other half too.
+		{name: "the unpaywall email removed", mutate: func(c *config.Config) { c.UnpaywallEmail = "" }},
+		{name: "a core key added", mutate: func(c *config.Config) {
+			c.Sources = append(c.Sources, "core")
+			c.CoreKey = "core-key"
+		}},
 		{name: "the base path", mutate: func(*config.Config) {}, basePath: "/libgen"},
 		{name: "statelessness", mutate: func(*config.Config) {}, stateless: &off},
 		// The limits that decide what an identical call gets back: one refuses
@@ -293,6 +303,128 @@ func TestConfigDigestChangesWithEverySettingItCovers(t *testing.T) {
 			}
 			if got := configDigest(cfg, basePath, stateless); got == base {
 				t.Errorf("the digest did not move when %s changed, so a fleet split on it reads as matched", tc.name)
+			}
+		})
+	}
+}
+
+// TestConfigDigestSeesWhichCredentialIsSetButNotItsValue pins both halves of
+// how a credential reaches the digest: as the source it switches on, and as
+// nothing else.
+//
+// The digest is published unauthenticated, so a key's value folded into it in
+// any form would let whoever reads /health test a guessed key offline. Two
+// replicas holding different keys serve the same surface, and the digest must
+// say so.
+func TestConfigDigestSeesWhichCredentialIsSetButNotItsValue(t *testing.T) {
+	withCore := func(key, email string) *config.Config {
+		cfg := digestConfig()
+		cfg.Sources = nil // every source, so only the credentials gate core and unpaywall
+		cfg.CoreKey = key
+		cfg.UnpaywallEmail = email
+		return cfg
+	}
+	cases := []struct {
+		name      string
+		a, b      *config.Config
+		wantEqual bool
+	}{
+		{name: "a core key against none", a: withCore("", ""), b: withCore("key-one", ""), wantEqual: false},
+		{name: "an unpaywall email against none", a: withCore("", ""), b: withCore("", "a@example.org"), wantEqual: false},
+		{name: "two different core keys", a: withCore("key-one", ""), b: withCore("key-two", ""), wantEqual: true},
+		{name: "two different unpaywall emails", a: withCore("", "a@example.org"), b: withCore("", "b@example.org"), wantEqual: true},
+		{name: "two different anna's keys", a: annasKeyed("annas-one"), b: annasKeyed("annas-two"), wantEqual: true},
+		{name: "core listed without a key against core not listed", a: listedCoreWithoutKey(true), b: listedCoreWithoutKey(false), wantEqual: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a, b := configDigest(tc.a, "/", true), configDigest(tc.b, "/", true)
+			if (a == b) != tc.wantEqual {
+				t.Errorf("digests %q and %q: equal = %t, want %t", a, b, a == b, tc.wantEqual)
+			}
+		})
+	}
+}
+
+// annasKeyed is digestConfig with an Anna's Archive member key. The key changes
+// how annas resolves, never whether it is in the chain or what the tools say.
+func annasKeyed(key string) *config.Config {
+	cfg := digestConfig()
+	cfg.AnnasKey = key
+	return cfg
+}
+
+// listedCoreWithoutKey is digestConfig with core named in LIBGEN_MCP_SOURCES
+// or not, and no CORE key either way: the source is out of the chain in both.
+func listedCoreWithoutKey(listed bool) *config.Config {
+	cfg := digestConfig()
+	if listed {
+		cfg.Sources = append(cfg.Sources, "core")
+	}
+	return cfg
+}
+
+// TestConfigDigestMovesExactlyWhenTheServedToolsDo holds the digest to what it
+// is for: two replicas whose tools/list differ must not report the same digest,
+// and two whose tools/list match must not report different ones. Each pair is
+// served for real through newRegisteredServer on an HTTP address, so the
+// comparison is made against the schemas a client would receive rather than
+// against a restatement of what decides them.
+func TestConfigDigestMovesExactlyWhenTheServedToolsDo(t *testing.T) {
+	type knobs struct {
+		sources        []string
+		coreKey, email string
+	}
+	cases := []struct {
+		name string
+		a, b knobs
+	}{
+		{name: "core key", a: knobs{}, b: knobs{coreKey: "key-one"}},
+		{name: "unpaywall email", a: knobs{}, b: knobs{email: "ops@example.org"}},
+		{name: "different core keys", a: knobs{coreKey: "key-one"}, b: knobs{coreKey: "key-two"}},
+		{name: "core listed without its key", a: knobs{sources: []string{"libgen", "core"}}, b: knobs{sources: []string{"libgen"}}},
+		{name: "source list", a: knobs{sources: []string{"libgen", "annas"}}, b: knobs{sources: []string{"libgen"}}},
+	}
+	surface := func(t *testing.T, k knobs) (digest, tools string) {
+		t.Helper()
+		cfg, err := config.Load()
+		if err != nil {
+			t.Fatalf("config.Load() error = %v", err)
+		}
+		cfg.Sources, cfg.CoreKey, cfg.UnpaywallEmail = k.sources, k.coreKey, k.email
+		server, err := newRegisteredServer(cfg, "127.0.0.1:0", nil, inflightFlag{}, identityChoice{})
+		if err != nil {
+			t.Fatalf("newRegisteredServer() error = %v", err)
+		}
+		st, ct := mcp.NewInMemoryTransports()
+		serverSession, err := server.Connect(t.Context(), st, nil)
+		if err != nil {
+			t.Fatalf("server connect: %v", err)
+		}
+		t.Cleanup(func() { _ = serverSession.Close() })
+		session, err := mcp.NewClient(&mcp.Implementation{Name: "digest-test", Version: "0"}, nil).Connect(t.Context(), ct, nil)
+		if err != nil {
+			t.Fatalf("client connect: %v", err)
+		}
+		t.Cleanup(func() { _ = session.Close() })
+		listed, err := session.ListTools(t.Context(), nil)
+		if err != nil {
+			t.Fatalf("list tools: %v", err)
+		}
+		raw, err := json.Marshal(listed.Tools)
+		if err != nil {
+			t.Fatalf("marshal tools: %v", err)
+		}
+		// Digested after registration, as main does: the server_fetch
+		// tri-state is resolved by then.
+		return configDigest(cfg, "/", true), string(raw)
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			digestA, toolsA := surface(t, tc.a)
+			digestB, toolsB := surface(t, tc.b)
+			if sameTools, sameDigest := toolsA == toolsB, digestA == digestB; sameTools != sameDigest {
+				t.Errorf("tools/list equal = %t but digests equal = %t (%q, %q)", sameTools, sameDigest, digestA, digestB)
 			}
 		})
 	}
