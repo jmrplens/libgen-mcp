@@ -1,6 +1,187 @@
 ---
 title: Glosario
 description: "Los términos que usa la documentación de libgen-mcp, desde mirror y catálogo hasta cadena de fuentes y llamada retenida, cada uno definido una vez."
+mentions:
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+  - name: "Library Genesis"
+    wikidata: Q22017206
+  - name: "Digital object identifier"
+    wikidata: Q25670
+  - name: "Open access"
+    wikidata: Q232932
+chips:
+  - text: "Cada término, una vez"
+  - text: "Enlazado a su página"
+  - text: "Herramientas"
+    href: "/libgen-mcp/es/tools/"
+datePublished: "2026-10-03"
 ---
 
-Esta página definirá, una vez cada uno, los términos en los que se apoya el resto de la documentación — desde mirror, catálogo y registro hasta cadena de fuentes, conmutación por error, fuentes extra y llamada retenida — y enlazará cada uno con la página donde más importa. Mientras tanto, [Cómo funciona la búsqueda](/libgen-mcp/es/how-search-works/) y [Arquitectura](/libgen-mcp/es/architecture/) presentan la mayoría en contexto.
+Cada término se define una vez, en una o dos frases, y enlaza la página donde más importa. Los términos en fuente de código son los nombres literales que usa un argumento de herramienta, un flag o una variable.
+
+## Identificadores
+
+### md5
+
+El resumen hexadecimal de 32 caracteres de los bytes de un fichero, y la clave con la que el catálogo de Library Genesis y Anna's Archive archivan los libros. El `md5` de un resultado de búsqueda es lo que `download`, `read` y `get_details` reciben para un libro, y una descarga por md5 informa `verified: true` cuando los bytes guardados dan ese resumen. Consulta [Herramientas](/libgen-mcp/es/tools/#download).
+
+### DOI
+
+Un Digital Object Identifier, como `10.1038/nature12373`: el nombre persistente que una agencia de registro (Crossref, para la mayoría de revistas) da a un artículo o a un capítulo de libro. `download`, `read` y `get_details` lo reciben como `doi`, y la [cadena de fuentes](#cadena-de-fuentes) prueba primero con él las fuentes de acceso abierto. Consulta [Descargar un artículo por DOI](/libgen-mcp/es/download-a-paper/).
+
+### ISBN
+
+El número de 10 o 13 caracteres con el que se publica una edición de un libro, con guiones o sin ellos. Una búsqueda puede casarlo con `search_in: ["isbn"]`, y `download` lo recibe como `isbn` para traer una copia con licencia abierta (OAPEN, o un escaneo público de Internet Archive). Consulta [Herramientas](/libgen-mcp/es/tools/#entrada-de-download).
+
+### Id de edición e id de fichero
+
+Los números propios del catálogo para la edición de una obra y para uno de sus ficheros, que un resultado de búsqueda devuelve como `edition_id` y `file_id`. `get_details` acepta cualquiera de los dos como `id`, con `object` a `edition` (el valor por defecto) o `file`. Consulta [Herramientas](/libgen-mcp/es/tools/#entrada-de-get_details).
+
+### Registro
+
+Lo que `get_details` devuelve para un identificador: los metadatos de fichero y de edición del catálogo, un bloque `citations` cuando el registro tiene título, y un enriquecimiento opcional. Cuando el catálogo no tiene el registro, pueden ocupar su lugar Anna's Archive o Crossref, marcados con `origin`. Consulta [Herramientas](/libgen-mcp/es/tools/#registros-que-el-catálogo-no-tiene).
+
+## De dónde salen los resultados
+
+### Catálogo
+
+El catálogo de Library Genesis, al que toda búsqueda pregunta primero y, por defecto, al único. Tiene libros, artículos, cómics, revistas y normas, y responde en un solo viaje de ida y vuelta. Consulta [Cómo funciona la búsqueda](/libgen-mcp/es/how-search-works/).
+
+### Mirror
+
+Un host de la familia de mirrors de Library Genesis (`libgen.li` por defecto). El servidor descubre la lista, la guarda en caché 24 horas y conmuta entre mirrors por su cuenta; `LIBGEN_MIRROR` pone uno en cabeza. Consulta [Arquitectura](/libgen-mcp/es/architecture/#descubrimiento-de-mirrors).
+
+### Colección
+
+Una de las divisiones del catálogo, que se elige con el argumento `topics` de `search`: `nonfiction`, `fiction`, `articles`, `magazines`, `comics`, `standards` y `fiction_rus`. Si se omite, se buscan todas. Consulta [Herramientas](/libgen-mcp/es/tools/#entrada-de-search).
+
+### Shadow library
+
+Una colección que distribuye libros y artículos con copyright sin permiso de quienes tienen los derechos. Library Genesis, Anna's Archive y Sci-Hub son shadow libraries; arXiv, Crossref y OpenLibrary no lo son. Consulta [Uso responsable](/libgen-mcp/es/responsible-use/).
+
+### Acceso abierto
+
+Obra que quien tiene los derechos ha dejado leer gratis, normalmente con una licencia Creative Commons. Solo un resultado de acceso abierto lleva `open_access: true`, y aun así una editorial puede rechazar una descarga automatizada. Consulta [Cómo funciona la búsqueda](/libgen-mcp/es/how-search-works/#qué-vuelve-orígenes-y-descargas).
+
+### Proveedor
+
+Un buscador más allá del catálogo que una búsqueda puede consultar: Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC. Cada uno funciona en la medida de lo posible, así que uno lento o caído deja intactos los resultados de los demás. Consulta [Cómo funciona la búsqueda](/libgen-mcp/es/how-search-works/#más-allá-del-catálogo).
+
+### Fuentes extra (`extra_sources`)
+
+El ajuste que decide cuándo consulta una búsqueda a los proveedores: `auto` (el valor por defecto) solo cuando el catálogo no encuentra nada o falla, `always` en cada búsqueda y a la vez que el catálogo, `never` nunca. `LIBGEN_MCP_EXTRA_SOURCES=never` es un candado que una llamada no puede abrir. Consulta [Configuración](/libgen-mcp/es/configuration/#libgen_mcp_extra_sources).
+
+### Origen
+
+La etiqueta de cada resultado que nombra el buscador que lo produjo (`libgen`, `annas`, `crossref`, `arxiv`, `openlibrary`, `gutenberg`, `dblp`, `pubmed`, `eric`). Dice qué identificador lleva el resultado y, por tanto, qué argumento recibe la siguiente llamada. Consulta [Cómo funciona la búsqueda](/libgen-mcp/es/how-search-works/#qué-vuelve-orígenes-y-descargas).
+
+## Descargas
+
+### Fuente
+
+Un sitio del que `download` puede traer un fichero, como `unpaywall`, `scihub` o `libgen`. Cada fuente dice qué identificadores admite; el argumento `source` de `download` limita una llamada a una de ellas. Consulta [Fuentes de descarga](/libgen-mcp/es/sources/).
+
+### Cadena de fuentes
+
+El orden fijo en que `download` ofrece un elemento a las fuentes que lo admiten: primero las de acceso abierto para un DOI, después los recursos de reserva para artículos, y `libgen`, `randombook` y `annas` para un md5. `LIBGEN_MCP_SOURCES` quita fuentes sin reordenarlas. Consulta [Arquitectura](/libgen-mcp/es/architecture/#cadena-multi-fuente).
+
+### Failover
+
+Pasar al siguiente mirror o a la siguiente fuente cuando uno falla, dentro de la misma llamada, sin que quien llama haga nada. Una descarga fallida informa de cada fuente que probó y por qué falló. Consulta [Arquitectura](/libgen-mcp/es/architecture/#failover-reintentos-y-enfriamiento).
+
+### Enfriamiento
+
+Una pausa sobre algo que acaba de resultar inalcanzable: 45 segundos para un mirror, 5 minutos para una fuente. Una fuente que respondió «no tengo este elemento» nunca se aparta, porque eso no dice nada de su salud. Consulta [Arquitectura](/libgen-mcp/es/architecture/#enfriamiento-por-fuente).
+
+### Solo resolver (`resolve_only`)
+
+El modo de `download` que devuelve el enlace directo, con las cabeceras que necesite, en lugar de guardar el fichero. Un servidor remoto responde siempre así, porque el fichero debe viajar por tu conexión, no por la del servidor. Consulta [Herramientas](/libgen-mcp/es/tools/#dónde-acaba-el-archivo-local-vs-remoto).
+
+## Lectura
+
+### Capa de texto
+
+El texto que un PDF lleva junto a las imágenes de sus páginas. `read` lo extrae sin OCR, así que un libro escaneado sin capa de texto vuelve con `extractable: false` y un motivo. Consulta [Herramientas](/libgen-mcp/es/tools/#no-extraíble).
+
+### Cursor
+
+El testigo opaco que devuelve una respuesta de `read` cuando queda más. Devolverlo trae el siguiente fragmento de texto, o la siguiente página de coincidencias de un `find`. Consulta [Herramientas](/libgen-mcp/es/tools/#paginación-y-la-caché).
+
+### Índice
+
+La tabla de contenidos de un documento, sacada de los marcadores del PDF o de la navegación del EPUB, que `read` devuelve con `outline: true`. `max_depth` la recorta a los niveles que necesitas. Consulta [Herramientas](/libgen-mcp/es/tools/#índice-de-contenidos).
+
+### Texto no fiable
+
+Todo lo que un resultado cita de un tercero: títulos, descripciones, texto extraído, coincidencias. Son datos, nunca instrucciones, y el servidor los escapa para que no puedan cambiar la forma del Markdown en el que caen. Consulta [Modelo de seguridad](/libgen-mcp/es/security/).
+
+## Claves e interacción
+
+### Sin claves
+
+Funcionar sin cuenta, clave de API ni token. La búsqueda, los detalles y las descargas tienen todos un camino sin claves. Una credencial solo añade algo: la fuente `unpaywall` (un correo de contacto), la fuente `core` (una clave de API) y las descargas de miembro de Anna's Archive (una clave de miembro). Consulta [Configuración](/libgen-mcp/es/configuration/).
+
+### Clave por llamada
+
+Una credencial que el cliente aporta para una petición, que se usa solo en esa petición y nunca se guarda: un correo de contacto para Unpaywall o una clave de miembro de Anna's Archive, pedidos durante un `download` cuando el servidor no tiene ninguno configurado. Consulta [Herramientas](/libgen-mcp/es/tools/#peticiones-interactivas-elicitation).
+
+### Elicitation
+
+El mecanismo de MCP con el que un servidor pide datos a la persona del cliente en mitad de una llamada. `download` lo usa para confirmar un fichero que va a guardar o para pedir una clave por llamada, y solo con un cliente que lo admita. Consulta [Herramientas](/libgen-mcp/es/tools/#peticiones-interactivas-elicitation).
+
+### Prompt
+
+Una plantilla de petición lista para usar que el servidor publica junto a sus herramientas: `acquire_book`, `research_topic`, `get_paper` y `download_troubleshoot`. Muchos clientes los muestran como comandos que la persona puede elegir. Consulta [Herramientas](/libgen-mcp/es/tools/#prompts).
+
+## Transportes y despliegue
+
+### stdio
+
+El transporte en el que un cliente arranca el servidor como proceso hijo y habla con él por la entrada y la salida estándar. Es el de por defecto, el servidor completo, y el fichero que guarda `download` va a tu disco. Consulta [Conectar un cliente](/libgen-mcp/es/clients/).
+
+### Streamable HTTP
+
+El transporte de MCP sobre HTTP: un cliente envía JSON-RPC por POST a un endpoint y puede recibir un stream de vuelta. `--http` lo arranca, en una dirección TCP o en un socket unix. Consulta [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/).
+
+### Sin estado y con estado
+
+Sin estado, el modo por defecto en HTTP, sirve cada POST por separado, sin sesión que guardar y sin `Mcp-Session-Id`, y es la única forma que puede servir el protocolo `2026-07-28`. Con estado (`--stateless=false`) guarda una sesión por cliente, que se cierra pasado `--session-timeout`. Consulta [Arquitectura](/libgen-mcp/es/architecture/#modo-sin-estado).
+
+### Servidor local y remoto
+
+Un servidor local corre en tu máquina por stdio y guarda los ficheros en ella. Uno remoto (`--http`, o `LIBGEN_MCP_REMOTE_DOWNLOADS=1` en un servidor stdio cuyo disco no puedes alcanzar) devuelve enlaces en su lugar, y deja `read` sin registrar salvo que el operador active `LIBGEN_MCP_SERVER_FETCH`. Consulta [Herramientas](/libgen-mcp/es/tools/#read-no-está-en-todos-los-despliegues).
+
+### Endpoint alojado
+
+El servidor remoto público en `https://mcp.jmrp.io/libgen`, que no necesita instalar nada. Consulta [Endpoint alojado](/libgen-mcp/es/hosted/).
+
+### Server card
+
+Un documento JSON que describe el servidor y se sirve sin conectarse. Un despliegue HTTP publica dos: la tarjeta de descubrimiento en `/server-card` y la tarjeta que enumera la superficie en `/.well-known/mcp/server-card.json`. Consulta [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/#dos-tarjetas-y-cuál-quiere-un-escáner).
+
+### Dirección a la que se carga
+
+La dirección contra la que cuenta una petición en los límites por llamante: el extremo de la conexión, o la que nombra la cabecera de un proxy de confianza cuando `--trusted-proxies` dice que se crea. Consulta [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/#qué-identidad-tiene-este-despliegue).
+
+### Llamada retenida
+
+Una llamada que el proceso mantiene abierta, casi siempre esperando al presupuesto saliente. Un proceso HTTP retiene como mucho un número dimensionado a partir de su límite de descriptores, y por encima rechaza con `503`. Consulta [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/#qué-puede-retener-el-proceso-entero).
+
+### Presupuesto saliente
+
+El único token bucket en el que espera cada petición a un mirror o a un proveedor, `LIBGEN_MCP_RATE_RPS` (una por segundo por defecto). Lo comparten todos los llamantes de un proceso, y por eso un límite de entrada por encima de él solo mueve la cola. Consulta [Escalado y capacidad](/libgen-mcp/es/deploy/scaling/).
+
+### Drenado
+
+El relevo al apagar: `/health` pasa a `503`, el listener sigue abierto durante `--drain-delay` y las llamadas en curso tienen un tiempo acotado para terminar. Consulta [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/#drenar-antes-de-cerrar-el-listener).
+
+## Contención
+
+### Raíces de rutas
+
+Los directorios en los que puede resolverse una ruta local que aporta quien llama: el directorio de trabajo, el directorio temporal del sistema y el directorio de descargas, más `LIBGEN_MCP_ALLOWED_READ_DIRS` para `read` y `LIBGEN_MCP_ALLOWED_DOWNLOAD_DIRS` para `download`. Los enlaces simbólicos se resuelven antes de la comprobación. Consulta [Configuración](/libgen-mcp/es/configuration/#referencia).
+
+### Niveles de direcciones
+
+Las dos reglas que la guarda de salida aplica a un destino: el nivel de direcciones privadas, que rechaza loopback, direcciones privadas y de enlace local, y el nivel de metadatos, que rechaza los endpoints de metadatos de la nube permita lo que permita lo demás. Un host que nombró el operador está exento del primero, nunca del segundo. Consulta [Arquitectura](/libgen-mcp/es/architecture/#política-de-direcciones-salientes).
