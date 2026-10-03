@@ -33,7 +33,9 @@
   },
   "files": [
     "cli.js",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES"
   ],
   "optionalDependencies": {
     "@jmrp.io/libgen-mcp-linux-x64": "2.0.1",

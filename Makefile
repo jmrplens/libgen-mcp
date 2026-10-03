@@ -21,6 +21,7 @@
         validate-http-stateless \
         install-tools release-check check-manifests check-stamper \
         check-server-json-packages check-supply-chain check-verify-published check-mcpb check-npm-launcher \
+        check-homebrew-tap \
         check-pr-description audit-site-deps check-ci-scripts \
         mcpb gen-npm sync-npm-version validate-npm validate-npm-local \
         publish-npm-dry publish-npm \
@@ -560,6 +561,9 @@ check-npm-launcher: ## Exercise the npm launcher against a stand-in and the real
 	@dir=$$(mktemp -d) && trap 'rm -rf "$$dir"' EXIT && \
 		CGO_ENABLED=0 go build -o "$$dir/libgen-mcp" $(CMD_PATH) && \
 		NPM_LAUNCHER_TEST_SERVER="$$dir/libgen-mcp" python3 -m unittest discover -s scripts -p 'npm_cli_js_test.py'
+
+check-homebrew-tap: ## Render the Homebrew formula from a fixture checksums.txt and check what it installs (offline)
+	python3 -m unittest discover -s scripts -p 'update_homebrew_tap_sh_test.py'
 
 check-supply-chain: ## Every action pinned, no run-time-resolved code in a credentialed job, cooldowns stated
 	go run ./cmd/audit_supply_chain/

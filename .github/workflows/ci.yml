@@ -209,6 +209,13 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
       - name: The npm launcher stops the server it started
         run: make check-npm-launcher
+      # The tap formula is rendered once per release, in the job that holds the
+      # tap's deploy key, and nothing else reads it before a user installs it.
+      # A dry run against a local stand-in tap holds it to pinning each binary
+      # and the third-party notices to the signed checksums.txt, and LICENSE to
+      # the repository's own file. ruby and git come from the runner image.
+      - name: The Homebrew formula installs the binary with its licence and notices
+        run: make check-homebrew-tap
       # The pr-description job and the site audit judge text that is not in the
       # tree, a pull request description and an npm advisory report, so their
       # rules are driven here against fixtures, on every event: the description gate
@@ -491,7 +498,9 @@ jobs:
       - name: Check for Docker changes
         id: filter
         run: |
-          CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.sha }} -- Dockerfile .dockerignore scripts/smoke-test-image.sh)
+          # The image's builder runs cmd/gen_third_party_notices and the smoke
+          # test reads LICENSE, so a change to either is a change to the image.
+          CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.sha }} -- Dockerfile .dockerignore scripts/smoke-test-image.sh LICENSE cmd/gen_third_party_notices)
           if [ -n "$CHANGED" ]; then
             echo "docker=true" >> "$GITHUB_OUTPUT"
           else

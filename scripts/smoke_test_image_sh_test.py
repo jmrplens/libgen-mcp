@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Tests scripts/smoke-test-image.sh against a stand-in docker.
 
-The smoke test starts the image on each platform it claims and checks two
-things: the binary starts and reports the release's version, and its build
+The smoke test starts the image on each platform it claims and checks three
+things: the binary starts and reports the release's version, its build
 information records that version through -X main.version, which -trimpath
-would leave out while --version still answered right. Each refusal is
-exercised here with a stand-in for docker first on PATH: `--version` prints
-the version FAKE_VERSION names, and `--entrypoint /bin/cat` prints the file
-FAKE_BINARY names, or fails the way cat does when the variable is empty.
+would leave out while --version still answered right, and the image carries
+this repository's LICENSE and the third-party notices generated for its own
+platform. Each refusal is exercised here with a stand-in for docker first on
+PATH: `--version` prints the version FAKE_VERSION names, and
+`--entrypoint /bin/cat` prints the file FAKE_BINARY, FAKE_LICENSE or
+FAKE_NOTICES names for the path asked for, or fails the way cat does when the
+variable is empty.
 
 Run with:
 
@@ -44,6 +47,8 @@ if [ -z "$entrypoint" ]; then
 fi
 case "$last" in
   /usr/local/bin/libgen-mcp) file="$FAKE_BINARY" ;;
+  /usr/share/licenses/libgen-mcp/LICENSE) file="$FAKE_LICENSE" ;;
+  /usr/share/licenses/libgen-mcp/THIRD_PARTY_NOTICES) file="$FAKE_NOTICES" ;;
   *) echo "unexpected path $last" >&2; exit 2 ;;
 esac
 if [ -z "$file" ]; then
@@ -66,6 +71,19 @@ def binary(settings):
         + b"mod\tgithub.com/jmrplens/libgen-mcp/v2\t(devel)\t\n"
         + block.encode() + bytes(range(255, -1, -1)) * 64
     )
+
+
+def notices(platform):
+    """Third-party notices the way cmd/gen_third_party_notices opens them for
+    a build of one platform, padded well past a pipe buffer: a check that
+    piped them into a reader stopping early would die of SIGPIPE."""
+    return (
+        "Third-party notices for libgen-mcp\n\n"
+        "Module:    github.com/jmrplens/libgen-mcp/v2 (devel)\n"
+        "Toolchain: go1.27.1\n"
+        "Builds:    " + platform + "\n\n"
+        + "Apache License\n" * 40000
+    ).encode()
 
 
 def ldflags(version):
@@ -92,6 +110,8 @@ class SmokeTestImageTest(unittest.TestCase):
         os.chmod(docker, 0o755)
         self.binary = self.write_bytes(
             "binary", binary(["-buildmode=exe", "-compiler=gc", ldflags(VERSION), "CGO_ENABLED=0"]))
+        self.licence = os.path.join(ROOT, "LICENSE")
+        self.notices = self.write_bytes("notices", notices(PLATFORM))
 
     def write_bytes(self, name, data):
         path = os.path.join(self.work, name)
@@ -99,12 +119,14 @@ class SmokeTestImageTest(unittest.TestCase):
             fh.write(data)
         return path
 
-    def smoke(self, version=VERSION, binary_file=None):
+    def smoke(self, version=VERSION, binary_file=None, licence_file=None, notices_file=None):
         env = dict(os.environ)
         env.update(
             PATH=self.bin + os.pathsep + env.get("PATH", ""),
             FAKE_VERSION=version,
             FAKE_BINARY=self.binary if binary_file is None else binary_file,
+            FAKE_LICENSE=self.licence if licence_file is None else licence_file,
+            FAKE_NOTICES=self.notices if notices_file is None else notices_file,
         )
         return subprocess.run(
             ["bash", SCRIPT, VERSION, IMAGE + "=" + PLATFORM],
@@ -116,6 +138,7 @@ class SmokeTestImageTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("build information records -X main.version=9.8.7", result.stdout)
         self.assertIn("record it in their build information", result.stdout)
+        self.assertIn("licence and third-party notices for linux/amd64 present", result.stdout)
 
     def test_refuses_each_departure(self):
         not_recorded = "has a binary whose build information does not record -X main.version=9.8.7"
@@ -131,6 +154,18 @@ class SmokeTestImageTest(unittest.TestCase):
              dict(binary_file=self.write_bytes("other", binary([ldflags("1.0.0")]))), not_recorded),
             ("a binary recording a version that only begins with it",
              dict(binary_file=self.write_bytes("longer", binary([ldflags("9.8.70")]))), not_recorded),
+            ("no licence", dict(licence_file=""), "carries no /usr/share/licenses/libgen-mcp/LICENSE"),
+            ("another licence",
+             dict(licence_file=self.write_bytes("other-licence", b"Some other licence\n")),
+             "carries a /usr/share/licenses/libgen-mcp/LICENSE that is not this repository's"),
+            ("no notices", dict(notices_file=""),
+             "carries no /usr/share/licenses/libgen-mcp/THIRD_PARTY_NOTICES"),
+            ("notices the generator did not write",
+             dict(notices_file=self.write_bytes("not-notices", b"some other text\n")),
+             "carries THIRD_PARTY_NOTICES that are not the generator's for linux/amd64"),
+            ("notices for another platform",
+             dict(notices_file=self.write_bytes("arm64-notices", notices("linux/arm64"))),
+             "carries THIRD_PARTY_NOTICES that are not the generator's for linux/amd64"),
         ]
         for name, change, want in cases:
             with self.subTest(name):

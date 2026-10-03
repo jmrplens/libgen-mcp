@@ -55,6 +55,13 @@ ARG TARGETARCH
 # dependencies and /usr/local/go for the standard library, none of which says
 # anything about the host that ran the build. scripts/smoke-test-image.sh holds
 # the image to it, since --version answers correctly either way.
+#
+# THIRD_PARTY_NOTICES is generated from this binary's own build information and
+# the module cache the build just used (cmd/gen_third_party_notices, which needs
+# nothing outside the standard library), in the same step so the cache mount it
+# reads is the one the build filled. The image's binary is built here rather
+# than taken from the release, so it gets notices of its own rather than the
+# release asset, and a generation that fails fails the build.
 RUN --mount=type=cache,target=/go/pkg/mod \
 	--mount=type=cache,target=/root/.cache/go-build \
 	set -eu; \
@@ -64,17 +71,29 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 	if grep -a -q "ld-linux\|ld-musl" /out/libgen-mcp; then \
 	echo "built binary names an ELF interpreter: it is not standalone, and on ${TARGETARCH} it may not exec at all" >&2; \
 	exit 1; \
-	fi
+	fi; \
+	go run ./cmd/gen_third_party_notices -o /out/THIRD_PARTY_NOTICES \
+	-targets "${TARGETOS}/${TARGETARCH}" /out/libgen-mcp
 
 # --- Runtime stage ---
 FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 
+# The licences' directory is made here, 0755, because a COPY --chmod that has to
+# create its destination's parent gives the directory the file's mode, and a
+# directory without its execute bit cannot be entered by appuser.
 # hadolint ignore=DL3018
 RUN apk add --no-cache ca-certificates tzdata && \
 	addgroup -S -g 10001 appgroup && \
-	adduser -S -u 10001 -G appgroup -h /home/appuser appuser
+	adduser -S -u 10001 -G appgroup -h /home/appuser appuser && \
+	install -d -m 0755 /usr/share/licenses/libgen-mcp
 
 COPY --from=builder /out/libgen-mcp /usr/local/bin/libgen-mcp
+
+# The licence, and the license, notice and patent texts of what the binary
+# links, travel with it where Alpine keeps a package's licences. Readable by
+# everyone: the generator writes its file owner-only.
+COPY --chmod=0644 LICENSE /usr/share/licenses/libgen-mcp/LICENSE
+COPY --from=builder --chmod=0644 /out/THIRD_PARTY_NOTICES /usr/share/licenses/libgen-mcp/THIRD_PARTY_NOTICES
 
 USER appuser
 

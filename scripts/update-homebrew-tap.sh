@@ -16,6 +16,14 @@
 # The hashes come from checksums.txt rather than from a download of the assets,
 # which is what makes the formula's `sha256` lines as trustworthy as the
 # cosign-signed manifest the release publishes.
+#
+# The formula installs the licence and the third-party notices beside the
+# binary, in the keg's prefix, because the binary links modules whose licences
+# ask for their texts to travel with it. THIRD_PARTY_NOTICES is a release asset
+# listed in checksums.txt, so its hash comes from there like the binaries'.
+# LICENSE is not a release asset: the formula fetches it from the tag's tree,
+# and its hash is taken from the LICENSE of the checkout this script runs from,
+# which in the release workflow is the tagged tree.
 
 set -euo pipefail
 
@@ -34,6 +42,8 @@ VERSION="${2:?Usage: $0 <checksums-file> <version> [tap-clone-dir] [--dry-run]}"
 TAP_DIR="${3:-homebrew-tap}"
 TAP_REPO="${TAP_REPO:-git@github.com:jmrplens/homebrew-tap.git}"
 BASE_URL="https://github.com/jmrplens/libgen-mcp/releases/download/v${VERSION}"
+LICENSE_URL="https://raw.githubusercontent.com/jmrplens/libgen-mcp/v${VERSION}/LICENSE"
+LICENSE_FILE="$(cd "$(dirname "$0")/.." && pwd)/LICENSE"
 
 sha_for() {
 	local name="$1" sha
@@ -49,6 +59,12 @@ SHA_DARWIN_ARM=$(sha_for libgen-mcp-darwin-arm64)
 SHA_DARWIN_INTEL=$(sha_for libgen-mcp-darwin-amd64)
 SHA_LINUX_ARM=$(sha_for libgen-mcp-linux-arm64)
 SHA_LINUX_INTEL=$(sha_for libgen-mcp-linux-amd64)
+SHA_NOTICES=$(sha_for THIRD_PARTY_NOTICES)
+if [[ ! -f "$LICENSE_FILE" ]]; then
+	echo "ERROR: no LICENSE at $LICENSE_FILE to hash" >&2
+	exit 1
+fi
+SHA_LICENSE=$(sha256sum "$LICENSE_FILE" | awk '{print $1}')
 
 if [[ ! -d "$TAP_DIR/.git" ]]; then
 	git clone --depth 1 "$TAP_REPO" "$TAP_DIR"
@@ -94,8 +110,20 @@ class LibgenMcp < Formula
     end
   end
 
+  resource "license" do
+    url "${LICENSE_URL}"
+    sha256 "${SHA_LICENSE}"
+  end
+
+  resource "third-party-notices" do
+    url "${BASE_URL}/THIRD_PARTY_NOTICES"
+    sha256 "${SHA_NOTICES}"
+  end
+
   def install
     bin.install Dir["libgen-mcp-*"].first => "libgen-mcp"
+    resource("license").stage { prefix.install "LICENSE" }
+    resource("third-party-notices").stage { prefix.install "THIRD_PARTY_NOTICES" }
   end
 
   def caveats

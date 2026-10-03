@@ -77,6 +77,54 @@ check removes that entry the way NuGet defines an unsigned package, which is the
 lookup a verifier makes, and a layout the signing rearranges fails there instead
 of leaving an attestation nobody can find.
 
+## The licence and the third-party notices travel with every binary
+
+The binaries link the Go standard library and modules under BSD-3-Clause,
+Apache-2.0 (pdfcpu) and MPL-2.0, whose terms ask for their texts to accompany a
+binary redistribution, and MIT asks the same of this project's own notice. The
+SBOMs name each licence and carry none of the texts. So two files go into every
+artifact that hands somebody a binary:
+
+- **`LICENSE`**, read from the repository and held byte for byte to it.
+- **`THIRD_PARTY_NOTICES`**, every license, notice and patent file of each module
+  the six binaries link, read from their build information and the module cache
+  by `cmd/gen_third_party_notices`: at each module's root, and in the directory
+  of each package the binaries link (listed per target with `go list -deps`),
+  which is where pdfcpu keeps the MIT licence of the pkcs7 code it vendors.
+  GoReleaser runs it as an `sboms` entry with
+  `artifacts: any`, the one hook after the builds and before `checksums.txt` is
+  computed and signed, so the file is a release asset covered by the signature
+  and the build-provenance attestation like a binary, and a generation that
+  fails stops the release.
+
+`fetch-release-assets.sh` requires the notices by name whenever it takes its
+default patterns. Where each one lands, and what refuses a package without it:
+
+- **npm**: all seven tarballs carry both at the package root.
+  `build-npm.mjs` holds the notices to `checksums.txt` and records their digest
+  in `verified-binaries.json`; `validate-npm.mjs` requires both in the exact file
+  set, LICENSE equal to the repository's and the notices equal to the recorded
+  digest.
+- **PyPI**: every wheel declares core metadata 2.4 (`License-Expression: MIT`, a
+  `License-File` per text, no legacy `License` field or licence classifier) and
+  carries both under `.dist-info/licenses/`, with `Issues` and `Security`
+  project URLs. `validate_pypi.py` checks all of it, and runs
+  `twine check --strict` where twine is installed.
+- **NuGet**: all seven packages carry both at the root, beside the nuspec's MIT
+  expression and its `licenseUrl`; `validate_nuget.py` checks them.
+- **Claude Desktop bundle**: `build-mcpb.sh` packs both and refuses a `dist/`
+  whose notices are missing or do not open with the generator's header;
+  `make check-mcpb` drives those refusals.
+- **Image**: the Dockerfile's builder generates notices from the image's own
+  binary and installs them with LICENSE in `/usr/share/licenses/libgen-mcp`;
+  `scripts/smoke-test-image.sh` requires both, the notices naming the platform
+  the image was built for.
+- **Homebrew**: the formula installs both into the keg's prefix as resources,
+  the notices pinned to `checksums.txt` and LICENSE to the tagged tree's hash;
+  `make check-homebrew-tap` renders it from a fixture.
+
+winget delivers the binary alone; the notices are the release asset beside it.
+
 ## The digest, and why `release` waits for `docker`
 
 `server.json` declares two OCI packages, and an OCI identifier carries a digest

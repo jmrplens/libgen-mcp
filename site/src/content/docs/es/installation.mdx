@@ -301,6 +301,8 @@ gh attestation verify libgen-mcp-linux-amd64 -R jmrplens/libgen-mcp \
 
 `-R` por sí solo acepta una attestation que haya emitido cualquier workflow del repositorio, así que `--signer-workflow` la ata al workflow de release, y `--source-ref` a la release que has descargado. Cada `gh attestation verify` de esta página lleva el primero, y el segundo siempre que conozcas la versión.
 
+**Licencias.** El binario enlaza módulos de terceros cuyas licencias piden que su texto viaje con él. Cada release los publica como `THIRD_PARTY_NOTICES`, listado en el `checksums.txt` firmado igual que los binarios. Los paquetes de npm, PyPI y NuGet, el bundle de Claude Desktop, la imagen (en `/usr/share/licenses/libgen-mcp`) y la fórmula de Homebrew lo llevan junto a `LICENSE`; un binario descargado suelto, o mediante winget, no, y ese asset de la release es donde están sus avisos.
+
 **Actualizar.** Descarga el asset nuevo encima del viejo. Ejecuta antes `libgen-mcp --shutdown` si un cliente ya tiene uno en marcha, o el proceso viejo se queda con sus plazas y su listener.
 
 **Desinstalar.** Borra el archivo. No se instaló nada más.

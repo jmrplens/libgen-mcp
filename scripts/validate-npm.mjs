@@ -9,13 +9,17 @@
 //      number for the platform it claims, a size floor, and the package.json
 //      os/cpu/name/version, and — for the linux packages, which declare no
 //      `libc` — that the packed binary names no ELF interpreter, which is the
-//      claim that field's absence makes. This runs anywhere; it does not
-//      execute anything.
+//      claim that field's absence makes. Every tarball carries the
+//      repository's LICENSE, byte for byte, and THIRD_PARTY_NOTICES, opening
+//      with the generator's header. This runs anywhere; it does not execute
+//      anything.
 //   1b. Provenance: every packed binary is compared against the digest
 //      build-npm.mjs recorded after checking it against the release's signed
 //      checksums.txt. The structural checks above are a size floor, four magic
 //      bytes and a file list — a wrong-but-plausible binary passes all three,
-//      and one that reaches an npm version can never be replaced.
+//      and one that reaches an npm version can never be replaced. The notices
+//      every tarball carries are compared the same way, against the digest
+//      recorded for them.
 //   2. Runtime, for the one platform the validating host can run (linux-x64
 //      inside the node:22 container `make validate-npm` uses). It installs the
 //      launcher plus that platform package from their tarballs into a throwaway
@@ -35,7 +39,11 @@
 //      also how the check knows it is the binary this project installed and
 //      not a copy npx fetched from the registry.
 //
-// Usage: node scripts/validate-npm.mjs --packages <dir> --main <dir> --version <x.y.z>
+// Usage: node scripts/validate-npm.mjs --packages <dir> --main <dir> --version <x.y.z> [--no-install]
+//
+// --no-install runs tier 1 alone: nothing is installed or executed, which is
+// what a check of the structural tier over binaries the host cannot run needs.
+// The release never passes it.
 
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -55,8 +63,24 @@ import {
 import { get as httpGet } from "node:http";
 import { connect, createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
+
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+// The licence texts every tarball carries, by name, and the repository file
+// each must equal byte for byte, so a package can never carry a licence the
+// source does not.
+const LICENSE_FILES = [{ name: "LICENSE", src: join(repoRoot, "LICENSE") }];
+
+// The third-party notices every tarball carries beside the licence. They are
+// generated with the release rather than kept in the repository, so they are
+// held to the generator's header and to the digest build-npm.mjs recorded after
+// checking them against the release's signed checksums.txt.
+const NOTICES = "THIRD_PARTY_NOTICES";
+const NOTICES_HEADER = "Third-party notices for libgen-mcp\n";
+const SHIPPED_TEXTS = [...LICENSE_FILES.map((f) => f.name), NOTICES];
 
 // Magic numbers by target OS: ELF for linux, Mach-O 64-bit LE for darwin, PE/MZ
 // for windows. A binary whose first bytes do not match is one built for the
@@ -103,6 +127,7 @@ function parseArgs(argv) {
     if (argv[i] === "--packages") out.packages = argv[++i];
     else if (argv[i] === "--main") out.main = argv[++i];
     else if (argv[i] === "--version") out.version = argv[++i];
+    else if (argv[i] === "--no-install") out.noInstall = true;
     else throw new Error(`unknown argument: ${argv[i]}`);
   }
   for (const k of ["packages", "main", "version"]) {
@@ -142,6 +167,30 @@ function entryBytes(tgz, entryName) {
   return execFileSync("tar", ["-xzOf", tgz, entryName], { maxBuffer: 1 << 30 });
 }
 
+// checkLicenses holds each licence text a tarball ships to the repository's own
+// file, and the notices to the generator's header and the recorded digest. The
+// file set check before it already requires each to be present.
+function checkLicenses(label, tgz, shipped, verified) {
+  for (const file of LICENSE_FILES) {
+    if (!shipped.includes(file.name)) continue;
+    const packed = entryBytes(tgz, `package/${file.name}`);
+    check(packed.equals(readFileSync(file.src)), `${label}: ${file.name} in the tarball is not the repository's ${file.name}`);
+  }
+  if (!shipped.includes(NOTICES)) return;
+  const notices = entryBytes(tgz, `package/${NOTICES}`);
+  check(
+    notices.subarray(0, NOTICES_HEADER.length).toString("utf8") === NOTICES_HEADER,
+    `${label}: ${NOTICES} in the tarball does not open with the generator's header`,
+  );
+  if (verified) {
+    const got = createHash("sha256").update(notices).digest("hex");
+    check(
+      verified.notices === got,
+      `${label}: ${NOTICES} in the tarball is sha256 ${got}, but the release's signed checksums.txt named ${verified.notices}`,
+    );
+  }
+}
+
 // readVerifiedBinaries loads the digests build-npm.mjs recorded after checking
 // each binary against the release's signed checksums.txt. Absent means the
 // packages were assembled by something that skipped that check.
@@ -168,11 +217,12 @@ function validatePlatform(plat, packagesDir, version, workDir, verified) {
   const binaryName = plat.exe ? "libgen-mcp.exe" : "libgen-mcp";
   const { tgz, entries } = packAndList(dir, workDir);
   const shipped = entries.map((e) => e.name.replace(/^package\//, "")).filter((n) => n && !n.endsWith("/"));
-  const want = new Set([binaryName, "package.json", "README.md"]);
+  const want = new Set([binaryName, "package.json", "README.md", ...SHIPPED_TEXTS]);
   check(
     shipped.length === want.size && shipped.every((n) => want.has(n)),
     `${plat.key}: tarball ships ${JSON.stringify(shipped)}, want ${JSON.stringify([...want])}`,
   );
+  checkLicenses(plat.key, tgz, shipped, verified);
 
   const binEntry = entries.find((e) => e.name.endsWith("/" + binaryName));
   if (check(binEntry, `${plat.key}: binary ${binaryName} not in tarball`)) {
@@ -202,7 +252,7 @@ function validatePlatform(plat, packagesDir, version, workDir, verified) {
   }
 }
 
-function validateMain(mainDir, version, workDir) {
+function validateMain(mainDir, version, workDir, verified) {
   const pkg = JSON.parse(readFileSync(join(mainDir, "package.json"), "utf8"));
   check(pkg.name === "@jmrp.io/libgen-mcp", `main: name is ${pkg.name}`);
   check(pkg.version === version, `main: version ${pkg.version}, want ${version}`);
@@ -211,13 +261,14 @@ function validateMain(mainDir, version, workDir) {
     const dep = `@jmrp.io/libgen-mcp-${plat.key}`;
     check(pkg.optionalDependencies?.[dep] === version, `main: optionalDependency ${dep} pinned to ${pkg.optionalDependencies?.[dep]}, want ${version}`);
   }
-  const { entries } = packAndList(mainDir, workDir);
+  const { tgz, entries } = packAndList(mainDir, workDir);
   const shipped = entries.map((e) => e.name.replace(/^package\//, "")).filter((n) => n && !n.endsWith("/"));
-  const want = new Set(["cli.js", "package.json", "README.md"]);
+  const want = new Set(["cli.js", "package.json", "README.md", ...SHIPPED_TEXTS]);
   check(
     shipped.length === want.size && shipped.every((n) => want.has(n)),
     `main: tarball ships ${JSON.stringify(shipped)}, want ${JSON.stringify([...want])}`,
   );
+  checkLicenses("main", tgz, shipped, verified);
 }
 
 // runtimeCheck installs the launcher plus the host-native platform package from
@@ -496,11 +547,12 @@ async function main() {
 
   try {
     for (const plat of PLATFORMS) validatePlatform(plat, args.packages, args.version, workDir, verified);
-    validateMain(args.main, args.version, workDir);
+    validateMain(args.main, args.version, workDir, verified);
     process.stdout.write(
-      `  structural: 7 packages checked (files, exec bit, magic, no ELF interpreter, sha256 vs checksums.txt, os/cpu, pins)${failures.length ? "" : " ✓"}\n`,
+      `  structural: 7 packages checked (files, licence, notices, exec bit, magic, no ELF interpreter, sha256 vs checksums.txt, os/cpu, pins)${failures.length ? "" : " ✓"}\n`,
     );
-    await runtimeCheck(args.packages, args.main, args.version, workDir);
+    if (args.noInstall) process.stdout.write("  runtime: skipped (--no-install)\n");
+    else await runtimeCheck(args.packages, args.main, args.version, workDir);
   } finally {
     rmSync(workDir, { recursive: true, force: true });
   }

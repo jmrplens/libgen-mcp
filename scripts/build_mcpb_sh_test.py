@@ -3,7 +3,10 @@
 
 After packing, the script reads the archive back and removes a bundle that
 fails any of its checks, so that no later step and no developer picks it up.
-Two things are tested here. The rules on the packed manifest refuse each shape
+Three things are tested here. The bundle carries the repository's LICENSE and
+the third-party notices generated beside the binaries, and a dist/ without the
+notices, or with a file the generator did not write, is refused. The rules on
+the packed manifest refuse each shape
 that would ship a bundle Claude Desktop cannot start on one of its platforms:
 a platform listed with no override (it would be handed the macOS binary, the
 base command), a platform left out of the list (Desktop marks the bundle
@@ -44,6 +47,7 @@ VERSION = "9.8.7"
 
 # The four per-target builds the bundle carries, and nothing else.
 MINIMAL_DIST = [
+    "THIRD_PARTY_NOTICES",
     "libgen-mcp-universal_darwin_all/libgen-mcp",
     "libgen-mcp_windows_amd64_v1/libgen-mcp.exe",
     "libgen-mcp_linux_amd64_v1/libgen-mcp",
@@ -57,6 +61,7 @@ MINIMAL_DIST = [
 # bundle does not carry and the per-arch darwin builds beside the universal
 # one, the staged copies with their SBOMs, and GoReleaser's own metadata.
 RELEASE_DIST = [
+    "THIRD_PARTY_NOTICES",
     "artifacts.json",
     "checksums.txt",
     "config.yaml",
@@ -88,25 +93,34 @@ SOURCES = {
     "server/libgen-mcp.exe": "libgen-mcp_windows_amd64_v1/libgen-mcp.exe",
     "server/linux/libgen-mcp-linux-amd64": "libgen-mcp_linux_amd64_v1/libgen-mcp",
     "server/linux/libgen-mcp-linux-arm64": "libgen-mcp_linux_arm64_v8.0/libgen-mcp",
+    "THIRD_PARTY_NOTICES": "THIRD_PARTY_NOTICES",
 }
+
+NOTICES = "THIRD_PARTY_NOTICES"
 
 
 def stand_in(rel):
     """The bytes the scratch dist/ holds at rel: different for every file, so
-    a bundle packed from the wrong one is told apart. Nothing executes them."""
-    return b"stand-in for dist/" + rel.encode() + b"\n" * 64
+    a bundle packed from the wrong one is told apart. Nothing executes them.
+    The notices open with the generator's header, which the script checks."""
+    body = b"stand-in for dist/" + rel.encode() + b"\n" * 64
+    if rel == NOTICES:
+        return b"Third-party notices for libgen-mcp\n" + body
+    return body
 
 
 ENTRIES = [
     "manifest.json",
     "icon.png",
+    "LICENSE",
+    NOTICES,
     "server/libgen-mcp",
     "server/libgen-mcp.exe",
     "server/linux/launch.sh",
     "server/linux/libgen-mcp-linux-amd64",
     "server/linux/libgen-mcp-linux-arm64",
 ]
-NOT_EXECUTABLE = {"manifest.json", "icon.png"}
+NOT_EXECUTABLE = {"manifest.json", "icon.png", "LICENSE", NOTICES}
 
 # Stands in for zip and leaves out the entry DROP_ENTRY names, which is what
 # zip itself does, with exit status 0, when one of its inputs is missing.
@@ -160,6 +174,8 @@ class BuildMcpbTest(unittest.TestCase):
         shutil.copyfile(os.path.join(ROOT, "mcpb", "icon.png"), os.path.join(self.work, "mcpb", "icon.png"))
         self.launcher = os.path.join(ROOT, "mcpb", "linux", "launch.sh")
         shutil.copyfile(self.launcher, os.path.join(self.work, "mcpb", "linux", "launch.sh"))
+        self.licence = os.path.join(ROOT, "LICENSE")
+        shutil.copyfile(self.licence, os.path.join(self.work, "LICENSE"))
         with open(os.path.join(ROOT, "mcpb", "manifest.json"), encoding="utf-8") as fh:
             self.manifest = json.load(fh)
         self.dist = os.path.join(self.work, "dist")
@@ -230,6 +246,8 @@ class BuildMcpbTest(unittest.TestCase):
             packed = json.loads(bundle.read("manifest.json"))
             with open(self.launcher, "rb") as fh:
                 self.assertEqual(bundle.read("server/linux/launch.sh"), fh.read())
+            with open(self.licence, "rb") as fh:
+                self.assertEqual(bundle.read("LICENSE"), fh.read())
         self.assertEqual(packed["version"], VERSION)
         expected_manifest = copy.deepcopy(self.manifest)
         expected_manifest["version"] = VERSION
@@ -259,14 +277,29 @@ class BuildMcpbTest(unittest.TestCase):
         def without_the_icon():
             os.remove(os.path.join(self.work, "mcpb", "icon.png"))
 
+        def without_the_licence():
+            os.remove(os.path.join(self.work, "LICENSE"))
+
+        def without_the_notices():
+            os.remove(os.path.join(self.dist, NOTICES))
+
+        def with_notices_nothing_generated():
+            with open(os.path.join(self.dist, NOTICES), "wb") as fh:
+                fh.write(b"some other text\n")
+
         cases = [
             ("a binary found twice", with_a_second_linux_amd64_build, "remove the stale ones"),
             ("a missing input", without_the_icon, "mcpb/icon.png not found"),
+            ("a missing licence", without_the_licence, "LICENSE not found"),
+            ("missing notices", without_the_notices, "dist/THIRD_PARTY_NOTICES not found"),
+            ("notices the generator did not write", with_notices_nothing_generated,
+             "dist/THIRD_PARTY_NOTICES does not open with 'Third-party notices for libgen-mcp'"),
         ]
         for name, break_the_tree, message in cases:
             with self.subTest(case=name):
                 self.lay_out_dist(MINIMAL_DIST)
                 shutil.copyfile(os.path.join(ROOT, "mcpb", "icon.png"), os.path.join(self.work, "mcpb", "icon.png"))
+                shutil.copyfile(self.licence, os.path.join(self.work, "LICENSE"))
                 first = self.build()
                 self.assertEqual(first.returncode, 0, first.stderr.decode())
                 self.assertTrue(os.path.exists(self.output))

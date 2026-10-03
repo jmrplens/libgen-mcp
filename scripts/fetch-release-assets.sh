@@ -9,7 +9,9 @@
 #   <version>          release version without the leading v (e.g. 1.7.3)
 #   <dest-dir>         directory the assets are downloaded into (created)
 #   [asset-pattern]    gh release download --pattern globs; default: every
-#                      libgen-mcp-* binary
+#                      libgen-mcp-* binary and THIRD_PARTY_NOTICES, which every
+#                      package carries beside the binaries and which the
+#                      default therefore requires
 #
 # Requires GH_TOKEN with read access to the repository's releases, and cosign
 # on PATH. REPO defaults to $GITHUB_REPOSITORY.
@@ -48,8 +50,16 @@ VERSION="${1:?Usage: $0 [--checksums-only] <version> <dest-dir> [asset-pattern .
 DEST="${2:?Usage: $0 [--checksums-only] <version> <dest-dir> [asset-pattern ...]}"
 shift 2
 PATTERNS=("$@")
+# The license, notice and patent texts of what the binaries link, generated at
+# release time (cmd/gen_third_party_notices) and listed in checksums.txt like
+# every binary.
+NOTICES="THIRD_PARTY_NOTICES"
+REQUIRE_NOTICES=0
 if [ ${#PATTERNS[@]} -eq 0 ] && [ "$CHECKSUMS_ONLY" -eq 0 ]; then
-	PATTERNS=("libgen-mcp-*")
+	# The jobs that take the default package the binaries with the notices, so a
+	# release short of them stops here rather than in each packager.
+	PATTERNS=("libgen-mcp-*" "$NOTICES")
+	REQUIRE_NOTICES=1
 fi
 
 REPO="${REPO:-${GITHUB_REPOSITORY:-jmrplens/libgen-mcp}}"
@@ -118,6 +128,13 @@ echo "Verifying assets against checksums.txt"
 )
 if grep -q ": FAILED" "$DEST/sha256-check.log"; then
 	echo "ERROR: an asset does not match checksums.txt" >&2
+	rm -f "$DEST/sha256-check.log"
+	exit 1
+fi
+# gh downloads whatever matches and says nothing about a pattern that matched
+# nothing, so the notices are required by name: present, and verified.
+if [ "$REQUIRE_NOTICES" -eq 1 ] && ! grep -qxF "${NOTICES}: OK" "$DEST/sha256-check.log"; then
+	echo "ERROR: ${TAG} has no ${NOTICES} listed in checksums.txt, and every package carries it beside the binaries" >&2
 	rm -f "$DEST/sha256-check.log"
 	exit 1
 fi
