@@ -99,9 +99,20 @@ func (p *ERICProvider) Name() string { return "eric" }
 // A query with no usable terms never leaves the process: an empty search parameter
 // would either be rejected or match the whole index.
 func (p *ERICProvider) Search(ctx context.Context, query string, limit int) ([]DiscoveryResult, error) {
+	return p.SearchYears(ctx, query, limit, YearRange{})
+}
+
+// SearchYears is Search bounded to the publication years in years, which ERIC's
+// Solr index takes as a range clause on publicationdateyear, ANDed to the escaped
+// terms. Its contract is Search's.
+func (p *ERICProvider) SearchYears(ctx context.Context, query string, limit int, years YearRange) ([]DiscoveryResult, error) {
 	solrQuery := ericSolrQuery(query)
 	if solrQuery == "" {
 		return nil, nil
+	}
+	if !years.IsZero() {
+		from, to := years.Bounds()
+		solrQuery = "(" + solrQuery + ") AND publicationdateyear:[" + strconv.Itoa(from) + " TO " + strconv.Itoa(to) + "]"
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)

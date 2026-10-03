@@ -16,6 +16,14 @@ import (
 // normalized title+year key, keeping the first occurrence in provider order (and
 // original order within a provider).
 func Federate(ctx context.Context, query string, limit int, providers ...Provider) []DiscoveryResult {
+	return FederateYears(ctx, query, limit, YearRange{}, providers...)
+}
+
+// FederateYears is Federate bounded to the publication years in years. A provider
+// that implements RangeSearcher is asked with the range in its own query, and every
+// provider's results are filtered to the range after they arrive, so no result
+// outside it survives whichever kind answered. The zero range is Federate.
+func FederateYears(ctx context.Context, query string, limit int, years YearRange, providers ...Provider) []DiscoveryResult {
 	perProvider := make([][]DiscoveryResult, len(providers))
 	var wg sync.WaitGroup
 	for i, p := range providers {
@@ -27,7 +35,7 @@ func Federate(ctx context.Context, query string, limit int, providers ...Provide
 			// runs in a different goroutine and cannot catch it). Recover here so a
 			// misbehaving provider simply contributes nothing.
 			defer func() { _ = recover() }()
-			res, err := prov.Search(ctx, query, limit)
+			res, err := searchProvider(ctx, prov, query, limit, years)
 			if err != nil {
 				return // best-effort: a failing provider contributes nothing.
 			}

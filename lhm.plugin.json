@@ -121,6 +121,18 @@
               "null",
               "array"
             ]
+          },
+          "year_from": {
+            "description": "earliest publication year to keep, inclusive. Omit for no lower bound",
+            "maximum": 2100,
+            "minimum": 1000,
+            "type": "integer"
+          },
+          "year_to": {
+            "description": "latest publication year to keep, inclusive. Omit for no upper bound. The catalog has no year filter, so its page is filtered after it is fetched and year_filtered counts what was left out",
+            "maximum": 2100,
+            "minimum": 1000,
+            "type": "integer"
           }
         },
         "required": [

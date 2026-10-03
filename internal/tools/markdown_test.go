@@ -299,8 +299,17 @@ func TestSearchTitleCarriesTheEdition(t *testing.T) {
 // resumed-download rendering branches.
 func TestRenderMarkdownEdgeCases(t *testing.T) {
 	empty := renderSearchMarkdown(SearchOutput{Mirror: "m", NextSteps: []string{"broaden it"}})
-	if !strings.Contains(empty, "No results") || !strings.Contains(empty, "broaden it") {
+	if !strings.Contains(empty, "No catalog results") || !strings.Contains(empty, "broaden it") {
 		t.Errorf("empty search markdown should note no results and next steps; got:\n%s", empty)
+	}
+	rescued := renderSearchMarkdown(SearchOutput{Mirror: "m", YearFiltered: 2, OpenAccess: []discovery.DiscoveryResult{
+		{Origin: "openalex", Title: "Rescued paper", DOI: "10.1/x", OpenAccess: true},
+	}})
+	if !strings.Contains(rescued, "Rescued paper") || !strings.Contains(rescued, "left out 2 catalog records") {
+		t.Errorf("an empty catalog page must still render the open-access hits and the year note; got:\n%s", rescued)
+	}
+	if found := renderSearchMarkdown(SearchOutput{Mirror: "m", YearFiltered: 1, Results: []libgen.Result{{Title: "Kept"}}}); !strings.Contains(found, "left out 1 catalog records") {
+		t.Errorf("a non-empty page must carry the year note; got:\n%s", found)
 	}
 
 	details := renderDetailsMarkdown(DetailsOutput{

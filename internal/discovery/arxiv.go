@@ -55,6 +55,12 @@ func (p *ArxivProvider) Name() string { return "arxiv" }
 // sinks a federated search. Only a context cancellation or deadline propagates as
 // an error.
 func (p *ArxivProvider) Search(ctx context.Context, query string, limit int) ([]DiscoveryResult, error) {
+	return p.SearchYears(ctx, query, limit, YearRange{})
+}
+
+// SearchYears is Search bounded to the submission years in years, which arXiv
+// takes as a submittedDate range in the query itself. Its contract is Search's.
+func (p *ArxivProvider) SearchYears(ctx context.Context, query string, limit int, years YearRange) ([]DiscoveryResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 
@@ -62,10 +68,7 @@ func (p *ArxivProvider) Search(ctx context.Context, query string, limit int) ([]
 		return nil, ctx.Err()
 	}
 
-	rawURL := fmt.Sprintf("%s/api/query?search_query=all:%s&max_results=%d",
-		arxivBase, url.QueryEscape(query), clampArxivLimit(limit))
-
-	status, body, err := boundedGet(ctx, p.client, rawURL)
+	status, body, err := boundedGet(ctx, p.client, arxivSearchURL(query, limit, years))
 	if err != nil {
 		// Context errors propagate so the federation layer can tell "caller went
 		// away" from "source degraded"; everything else degrades to empty.
@@ -78,6 +81,21 @@ func (p *ArxivProvider) Search(ctx context.Context, query string, limit int) ([]
 		return nil, nil
 	}
 	return parseArxivFeed(body), nil
+}
+
+// arxivSearchURL assembles the query request. With a year range the free-text
+// clause is parenthesized before the submittedDate clause is ANDed to it: arXiv
+// splits "all:a b" into "all:a OR all:b", and without the parentheses the date
+// binds to the last term alone, which on 2026-10-03 returned results from every
+// year.
+func arxivSearchURL(query string, limit int, years YearRange) string {
+	searchQuery := "all:" + url.QueryEscape(query)
+	if !years.IsZero() {
+		from, to := years.Bounds()
+		searchQuery = fmt.Sprintf("%%28%s%%29+AND+submittedDate:%%5B%04d01010000+TO+%04d12312359%%5D",
+			searchQuery, from, to)
+	}
+	return fmt.Sprintf("%s/api/query?search_query=%s&max_results=%d", arxivBase, searchQuery, clampArxivLimit(limit))
 }
 
 // clampArxivLimit maps a caller-supplied limit onto arXiv's accepted range,

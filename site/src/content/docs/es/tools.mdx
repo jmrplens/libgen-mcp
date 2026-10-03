@@ -159,6 +159,14 @@ Cada resultado se devuelve por dos canales: la salida JSON estructurada que se d
 		Ordenar por: `id`, `time_added`, `title`, `author`, `year`, `size`.
 	</Fragment>
 	<Fragment slot="order_mode">Dirección de orden: `asc` o `desc`.</Fragment>
+	<Fragment slot="year_from">
+		Primer año de publicación que se conserva, incluido (de 1000 a 2100). Omitir
+		para no acotar por abajo. Ver [Acotar por año](#acotar-por-año).
+	</Fragment>
+	<Fragment slot="year_to">
+		Último año de publicación que se conserva, incluido (de 1000 a 2100). Omitir
+		para no acotar por arriba. Un `year_from` posterior a `year_to` se rechaza.
+	</Fragment>
 	<Fragment slot="extra_sources">
 		Cuándo buscar más allá del catálogo de Library Genesis (Anna's Archive,
 		arXiv, OpenAlex, Europe PMC, Crossref, OpenLibrary, Project Gutenberg, dblp,
@@ -181,6 +189,7 @@ Cada resultado se devuelve por dos canales: la salida JSON estructurada que se d
 	<Fragment slot="hint">Presente solo cuando `truncated` — aconseja refinar la consulta (añadir autor/año, usar columnas de solo título o acotar temas).</Fragment>
 	<Fragment slot="has_more">`true` cuando esta página está llena (`len(results) >= results_per_page`), lo que sugiere que puede existir una página siguiente.</Fragment>
 	<Fragment slot="mirror">La URL base del mirror que sirvió esta búsqueda.</Fragment>
+	<Fragment slot="year_filtered">Presente solo cuando `year_from`/`year_to` dejaron fuera registros del catálogo en esta página: cuántos, contando los que caen fuera del rango y los que no tienen año. Cuenta solo esta página. Ver [Acotar por año](#acotar-por-año).</Fragment>
 	<Fragment slot="open_access">Presente solo cuando el descubrimiento de acceso abierto se ejecutó y encontró algo. Ver [Descubrimiento de acceso abierto](#descubrimiento-de-acceso-abierto).</Fragment>
 </SchemaTable>
 
@@ -192,9 +201,18 @@ Los mirrors de Library Genesis anuncian un recuento total de coincidencias (`tot
 
 Prefiere refinar una consulta truncada antes que paginar en profundidad: las páginas más allá de `reachable` no devuelven nada.
 
+### Acotar por año
+
+`year_from` y `year_to` conservan los registros publicados en ese rango, ambos extremos incluidos, y cualquiera de los dos se puede omitir para dejar ese lado abierto. Se aplican de forma distinta a cada lado de la búsqueda:
+
+- **El catálogo de Library Genesis no tiene filtro de año.** La página se obtiene como siempre y luego se filtra, así que `total_files`, `reachable` y `has_more` siguen describiendo la búsqueda sin filtrar, y `year_filtered` dice cuántos registros de esta página se dejaron fuera, contando los que no tienen año, de los que nada muestra que estén en el rango. Por eso un rango puede vaciar una página que la siguiente llenaría en parte.
+- **Los buscadores de fuera del catálogo reciben el rango en su propia consulta** cuando su API lo admite: arXiv (`submittedDate`), OpenAlex (`publication_year`), Europe PMC (`PUB_YEAR`), Crossref (`from-pub-date`/`until-pub-date`), PubMed (`mindate`/`maxdate`), ERIC (`publicationdateyear`) y OpenLibrary (`first_publish_year`). Su página se dedica a registros dentro del rango. dblp, Project Gutenberg y Anna's Archive no lo admiten, así que sus resultados se filtran al llegar. Los registros de Gutenberg no llevan año, así que un rango no deja ninguno.
+
+Cualquier resultado fuera del rango se descarta, lo encuentre el lado que lo encuentre.
+
 ### Errores
 
-La entrada inválida se rechaza antes de cualquier llamada de red: un `query` vacío, un `topic`, `search_in` u `order` desconocido, un `results_per_page` distinto de 25/50/100, o un `order_mode` distinto de `asc`/`desc`. Los problemas de conectividad y de mirror aparecen como se describe en [Solución de problemas](/libgen-mcp/es/troubleshooting/).
+La entrada inválida se rechaza antes de cualquier llamada de red: un `query` vacío, un `topic`, `search_in` u `order` desconocido, un `results_per_page` distinto de 25/50/100, un `order_mode` distinto de `asc`/`desc`, o un año fuera de 1000 a 2100 o un `year_from` posterior a `year_to`. Los problemas de conectividad y de mirror aparecen como se describe en [Solución de problemas](/libgen-mcp/es/troubleshooting/).
 
 ### Descubrimiento de acceso abierto
 
