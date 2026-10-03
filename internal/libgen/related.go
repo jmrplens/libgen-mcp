@@ -189,21 +189,15 @@ var errOpenAlexKeyRejected = errors.New("OpenAlex rejected the configured key")
 // in seconds, as opposed to errOpenAlexBudget, a spent daily allowance.
 var errOpenAlexBurst = errors.New("OpenAlex asked for a slower pace")
 
-// burstRetryCeiling is the longest Retry-After still read as a burst refusal
-// rather than a spent day.
-const burstRetryCeiling = time.Minute
-
-// refusalKind tells a 429 for pace apart from one for a spent allowance: it is
-// a burst when the response still reports credits left, or asks for a wait of
-// a minute or less.
-func refusalKind(h http.Header) error {
-	if n, err := strconv.Atoi(strings.TrimSpace(h.Get("X-RateLimit-Remaining"))); err == nil && n > 0 {
-		return errOpenAlexBurst
+// refusalKind tells a 429 for pace apart from one for a spent allowance, by
+// the same rule the shared budget closes itself by ([openalex.ClassifyRefusal]),
+// so the note a caller reads and the pause the budget takes always agree: only
+// a refusal that asks for more than a minute is a spent allowance.
+func refusalKind(status int, h http.Header) error {
+	if kind, _ := openalex.ClassifyRefusal(status, h); kind == openalex.RefusalSpent {
+		return errOpenAlexBudget
 	}
-	if s, err := strconv.Atoi(strings.TrimSpace(h.Get("Retry-After"))); err == nil && time.Duration(s)*time.Second <= burstRetryCeiling {
-		return errOpenAlexBurst
-	}
-	return errOpenAlexBudget
+	return errOpenAlexBurst
 }
 
 // spendRefusal says why the shared budget refused a spend: the daily
@@ -322,7 +316,7 @@ func (c *Client) openAlexGet(ctx context.Context, endpoint string, into any) (an
 	case http.StatusNotFound:
 		return true, errOpenAlexNotFound
 	case http.StatusTooManyRequests:
-		return true, refusalKind(resp.Header)
+		return true, refusalKind(resp.StatusCode, resp.Header)
 	default:
 		return true, fmt.Errorf("openalex: HTTP %d", resp.StatusCode)
 	}
