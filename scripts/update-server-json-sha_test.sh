@@ -60,6 +60,9 @@ make_bundle() {
   local stage
   stage="$(mktemp -d)"
   printf '{"name":"libgen-mcp","compatibility":{"platforms":%s}}\n' "$3" >"$stage/manifest.json"
+  # A fixed timestamp, so two cases build byte-identical bundles and can be
+  # compared by the file they stamp.
+  touch -t 198001010000 "$stage/manifest.json"
   (cd "$stage" && zip -q -X "$1/$2" manifest.json)
   rm -rf "$stage"
 }
@@ -155,6 +158,17 @@ cp "$dir/server.json" "$dir/first.json"
 (cd "$dir" && bash "$STAMPER" checksums.txt 9.9.9 "$PER_OS" "$DIGEST" >stamp.log 2>&1) ||
   fail "a second stamp exited non-zero: $(cat "$dir/stamp.log")"
 cmp -s "$dir/first.json" "$dir/server.json" || fail "a second stamp with the same bundles changed server.json"
+
+# 1c. The bundles given in another order write the identical file: the entries
+#     follow a fixed platform order, so the registry job and the commit back to
+#     main cannot disagree over how each lists them.
+other="$(new_case)"
+(cd "$other" && bash "$STAMPER" checksums.txt 9.9.9 \
+  "libgen-mcp-linux.mcpb,libgen-mcp-darwin.mcpb,libgen-mcp-windows.mcpb" "$DIGEST" >stamp.log 2>&1) ||
+  fail "a stamp with the bundles reordered exited non-zero: $(cat "$other/stamp.log")"
+cmp -s "$dir/first.json" "$other/server.json" ||
+  fail "the bundles given in another order wrote a different server.json: $(diff "$dir/first.json" "$other/server.json")"
+rm -rf "$other"
 want "ghcr identifier" \
   "ghcr.io/jmrplens/libgen-mcp:9.9.9@$DIGEST" \
   "$(jq -r '.packages[] | select(.identifier | startswith("ghcr.io")) | .identifier' "$dir/server.json")"
@@ -246,4 +260,4 @@ if [ "$failures" -gt 0 ]; then
   echo "$failures assertion(s) failed" >&2
   exit 1
 fi
-echo "update-server-json-sha.sh: 11 cases passed"
+echo "update-server-json-sha.sh: 12 cases passed"

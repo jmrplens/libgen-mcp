@@ -204,7 +204,10 @@ if [[ -n "$MCPB_FILES_ARG" ]]; then
     (.packages | map(.registryType == "mcpb") | index(true)) as $first
     | .packages[$first] as $template
     | ($template.identifier | sub("/[^/]*$"; "")) as $release
-    | [$bundles[] | $template + {identifier: ($release + "/" + .name), fileSha256: .sha}] as $declared
+    # A fixed platform order, never the order the bundles were given in, so
+    # two call sites that list them differently write the same file.
+    | ($bundles | sort_by(.platforms[0] as $p | ["darwin", "win32", "linux"] | index($p))) as $ordered
+    | [$ordered[] | $template + {identifier: ($release + "/" + .name), fileSha256: .sha}] as $declared
     | .packages = .packages[:$first] + $declared + (.packages[$first:] | map(select(.registryType != "mcpb")))
   ' "$SERVER_JSON" >tmp.$$.json && mv tmp.$$.json "$SERVER_JSON"
   while IFS=$'\t' read -r mcpb_name mcpb_hash; do
