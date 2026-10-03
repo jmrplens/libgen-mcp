@@ -72,7 +72,7 @@ head:
 
 import { Aside } from "@astrojs/starlight/components";
 
-**To get a citation from libgen-mcp, call `get_details` with the record's md5, its edition id or its DOI.** The `citations` field of the result carries a ready-to-paste BibTeX entry and a RIS record built from the record's metadata. The record's DOI appears in them only when Crossref confirms that the DOI names the same work.
+**To get a citation from libgen-mcp, call `get_details` with the record's md5, its edition id or its DOI.** The `citations` field of the result carries a ready-to-paste BibTeX entry and a RIS record built from the record's metadata. The record's DOI appears in them only when Crossref confirms that the DOI names the same work. A reference you only have as text goes in `citation` instead, and is resolved to its DOI first when one work clearly matches.
 
 This page shows the call, what the two entries look like, which identifier gives which kind of entry, and why the DOI is sometimes left out on purpose.
 
@@ -182,7 +182,7 @@ The catalog rule: an entry is `@article` and `JOUR` when the catalog classifies 
 
 Both fallbacks are described under [Records the catalog does not carry](/libgen-mcp/tools/#records-the-catalog-does-not-carry). The Crossref one runs only when enrichment is allowed (`LIBGEN_MCP_ENRICH`, on by default); otherwise a DOI the catalog lacks returns the catalog's "no record" error.
 
-A `citation` is a reference pasted as text, in any style. The server sends it to Crossref's bibliographic search and takes the best candidate only when its score leads the next one by at least 20 percent and at least 90 percent of its title's words appear in the text. Anything less comes back as up to five candidates (title, authors, year, venue and DOI) with no record, to call again with the right `doi`. A book, a preprint or a report with no Crossref DOI ends there. The lookup is a Crossref call, so `LIBGEN_MCP_ENRICH=false` refuses it.
+A `citation` is a reference pasted as text, in any style. The server sends it to Crossref's bibliographic search and takes the best candidate only when its score leads the next one by at least 20 percent and at least 90 percent of its title's content words appear in the text. Content words are compared without case, punctuation, markup or words such as "the" and "of", and a word of five letters or more also counts when it is one typo away. Anything less comes back as up to five candidates (title, authors, year, venue and DOI) with no record, to call again with the right `doi`. A book, a preprint or a report with no Crossref DOI ends there. A citation over 1000 characters is refused. The lookup is a Crossref call, so `LIBGEN_MCP_ENRICH=false` refuses it.
 
 ## Why a DOI can be missing from the citation
 

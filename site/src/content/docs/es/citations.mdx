@@ -72,7 +72,7 @@ head:
 
 import { Aside } from "@astrojs/starlight/components";
 
-**Para obtener una cita con libgen-mcp, llama a `get_details` con el md5 del registro, su id de edición o su DOI.** El campo `citations` del resultado trae una entrada BibTeX y un registro RIS listos para pegar, construidos con los metadatos del registro. El DOI del registro solo aparece en ellos si Crossref confirma que corresponde a la misma obra.
+**Para obtener una cita con libgen-mcp, llama a `get_details` con el md5 del registro, su id de edición o su DOI.** El campo `citations` del resultado trae una entrada BibTeX y un registro RIS listos para pegar, construidos con los metadatos del registro. El DOI del registro solo aparece en ellos si Crossref confirma que corresponde a la misma obra. Una referencia que solo tienes como texto va en `citation`, y antes se resuelve a su DOI cuando una obra coincide con claridad.
 
 Esta página muestra la llamada, el aspecto de las dos entradas, qué tipo de entrada da cada identificador y por qué el DOI se omite a veces a propósito.
 
@@ -182,7 +182,7 @@ La regla del catálogo: una entrada es `@article` y `JOUR` cuando el catálogo c
 
 Los dos recursos de respaldo se describen en [Registros que el catálogo no tiene](/libgen-mcp/es/tools/#registros-que-el-catálogo-no-tiene). El de Crossref solo se ejecuta cuando el enriquecimiento está permitido (`LIBGEN_MCP_ENRICH`, activado por defecto); si no, un DOI que el catálogo no tiene devuelve el error «no record» del catálogo.
 
-Una `citation` es una referencia pegada como texto, en cualquier estilo. El servidor la envía a la búsqueda bibliográfica de Crossref y acepta el mejor candidato solo cuando su puntuación supera a la del siguiente en al menos un 20 por ciento y al menos el 90 por ciento de las palabras de su título aparecen en el texto. Con menos, vuelven hasta cinco candidatos (título, autores, año, publicación y DOI) sin ningún registro, para volver a llamar con el `doi` correcto. Un libro, un preprint o un informe sin DOI en Crossref se queda ahí. La consulta es una llamada a Crossref, así que `LIBGEN_MCP_ENRICH=false` la rechaza.
+Una `citation` es una referencia pegada como texto, en cualquier estilo. El servidor la envía a la búsqueda bibliográfica de Crossref y acepta el mejor candidato solo cuando su puntuación supera a la del siguiente en al menos un 20 por ciento y al menos el 90 por ciento de las palabras de contenido de su título aparecen en el texto. Las palabras se comparan sin mayúsculas, puntuación, marcado ni palabras como "the" u "of", y una palabra de cinco letras o más también cuenta si está a una errata de distancia. Con menos, vuelven hasta cinco candidatos (título, autores, año, publicación y DOI) sin ningún registro, para volver a llamar con el `doi` correcto. Un libro, un preprint o un informe sin DOI en Crossref se queda ahí. Una cita de más de 1000 caracteres se rechaza. La consulta es una llamada a Crossref, así que `LIBGEN_MCP_ENRICH=false` la rechaza.
 
 ## Por qué puede faltar el DOI en la cita
 

@@ -123,6 +123,7 @@ func TestJudgeCitation_Edges(t *testing.T) {
 		{"no candidates", nil, "", "no candidate"},
 		{"lone candidate with its title", []CitationCandidate{{DOI: "10.1/a", Title: "A power primer", Score: 10}}, "10.1/a", ""},
 		{"runner-up at zero", []CitationCandidate{{DOI: "10.1/a", Title: "A power primer", Score: 10}, {DOI: "10.1/b", Score: 0}}, "10.1/a", ""},
+		{"both at zero is a tie", []CitationCandidate{{DOI: "10.1/a", Title: "A power primer"}, {DOI: "10.1/b", Title: "A power primer"}}, "", "No candidate stands out"},
 		{"lone candidate without a title", []CitationCandidate{{DOI: "10.1/a", Score: 10}}, "", "0% of its title"},
 		{"too close to call", []CitationCandidate{{DOI: "10.1/a", Title: "A power primer", Score: 10}, {DOI: "10.1/b", Title: "A power primer", Score: 9}}, "", "No candidate stands out"},
 	}

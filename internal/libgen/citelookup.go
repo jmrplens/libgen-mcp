@@ -249,13 +249,20 @@ func JudgeCitation(citation string, candidates []CitationCandidate) CitationMatc
 }
 
 // scoreRatio is the best candidate's score over the runner-up's. A lone
-// candidate, or a runner-up Crossref scored at zero, has no rival to be
-// compared with, so the margin is unbounded and the title check decides alone.
+// candidate, or a scored best against a runner-up Crossref scored at zero, has
+// no rival to be compared with, so the margin is unbounded and the title check
+// decides alone. Two candidates both at zero are a tie, not a lead.
 func scoreRatio(candidates []CitationCandidate) float64 {
-	if len(candidates) < 2 || candidates[1].Score <= 0 {
+	switch {
+	case len(candidates) < 2:
 		return math.Inf(1)
+	case candidates[1].Score > 0:
+		return candidates[0].Score / candidates[1].Score
+	case candidates[0].Score > 0:
+		return math.Inf(1)
+	default:
+		return 1
 	}
-	return candidates[0].Score / candidates[1].Score
 }
 
 // CitationTitleCoverage is the share of a candidate title's content words that
