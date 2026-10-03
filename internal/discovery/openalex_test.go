@@ -184,33 +184,31 @@ func TestOpenAlexSearch_KeylessBudgetGuard(t *testing.T) {
 	}
 }
 
-// TestOpenAlexSearch_ReportsTheBudget checks the rate-limit headers of a response
-// reach the budget, on a refusal as much as on a success.
+// TestOpenAlexSearch_ReportsTheBudget checks the rate-limit headers of an
+// answered response reach the budget, and that a refusal's count does not: a 429
+// closes the budget for its wait instead.
 func TestOpenAlexSearch_ReportsTheBudget(t *testing.T) {
-	cases := []struct {
-		name          string
-		stub          *openAlexStub
-		wantRemaining int
-		wantResults   int
-	}{
-		{name: "success", stub: &openAlexStub{body: readFixture(t, "openalex_works.json"), remaining: "740", reset: "15000"}, wantRemaining: 740, wantResults: 5},
-		{name: "exhausted", stub: &openAlexStub{status: http.StatusTooManyRequests, body: []byte(`{"error":"Rate limit exceeded"}`), remaining: "0", reset: "15000"}, wantRemaining: 0},
+	p := startOpenAlex(t, &openAlexStub{body: readFixture(t, "openalex_works.json"), remaining: "740", reset: "15000"}, "")
+	got, err := p.Search(context.Background(), "crispr", 5)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			p := startOpenAlex(t, tc.stub, "")
-			got, err := p.Search(context.Background(), "crispr", 5)
-			if err != nil {
-				t.Fatalf("Search() error = %v", err)
-			}
-			if len(got) != tc.wantResults {
-				t.Errorf("Search() returned %d results, want %d", len(got), tc.wantResults)
-			}
-			credits, _, ok := p.budget.Remaining(openAlexClock)
-			if !ok || credits != tc.wantRemaining {
-				t.Errorf("budget = %d (known %v), want %d", credits, ok, tc.wantRemaining)
-			}
-		})
+	if len(got) != 5 {
+		t.Errorf("Search() returned %d results, want 5", len(got))
+	}
+	if credits, _, ok := p.budget.Remaining(openAlexClock); !ok || credits != 740 {
+		t.Errorf("budget = %d (known %v), want 740", credits, ok)
+	}
+
+	refused := startOpenAlex(t, &openAlexStub{status: http.StatusTooManyRequests, body: []byte(`{"error":"Rate limit exceeded"}`), remaining: "0", reset: "15000"}, "")
+	if _, refusedErr := refused.Search(context.Background(), "crispr", 5); refusedErr != nil {
+		t.Fatalf("Search() error = %v", refusedErr)
+	}
+	if _, _, ok := refused.budget.Remaining(openAlexClock); ok {
+		t.Error("a 429's remaining count was recorded as the day's")
+	}
+	if refused.budget.Spend(1, 0, openAlexClock) {
+		t.Error("the budget is open right after a 429")
 	}
 }
 
