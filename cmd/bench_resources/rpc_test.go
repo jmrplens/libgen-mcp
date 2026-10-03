@@ -114,6 +114,10 @@ func TestTruncate_ShortensWithoutHidingWhatItIs(t *testing.T) {
 	}
 }
 
+// roundTripFloor is how long the stand-in server takes to answer, chosen above
+// the coarsest clock tick a supported platform has.
+const roundTripFloor = 20 * time.Millisecond
+
 // TestHTTPCaller_PresentsItsAddressAndTimesTheRoundTrip verifies the header that
 // makes a concurrency series mean anything.
 //
@@ -127,6 +131,11 @@ func TestHTTPCaller_PresentsItsAddressAndTimesTheRoundTrip(t *testing.T) {
 		mu.Lock()
 		seen = append(seen, r.Header.Get("X-Real-IP")+" "+r.Header.Get("MCP-Protocol-Version"))
 		mu.Unlock()
+		// A loopback round trip can finish inside one tick of Windows' clock
+		// (about 15.6 ms) and time as zero, which is a fact about the clock and
+		// not about the caller. Answering after a longer pause makes the
+		// duration the caller reports something every platform can see.
+		time.Sleep(roundTripFloor)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}`)
 	}))
