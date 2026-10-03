@@ -1,9 +1,11 @@
 package discovery
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"html"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -28,6 +30,17 @@ const (
 // rate limit for its search API, so the figure is ours: one request per second,
 // matching what the other keyless providers extend to services that ask for nothing.
 const dblpRate = time.Second
+
+// dblpRefusals remembers a dblp host that answered with a bot check or a rate
+// limit, so the searches after it ask nothing until challengeCooldown has passed.
+//
+// Since 2026-10 dblp fronts its search API with Anubis, which answers an
+// automated client with a 200 "Making sure you're not a bot!" HTML page in place
+// of the JSON, and sometimes with a 429. Measured on 2026-10-03 on dblp.org,
+// dblp.uni-trier.de and dblp.dagstuhl.de alike, from a consumer ISP address. The
+// page wants a browser to solve a proof of work, which this server does not do,
+// so the only useful response is to stop asking for a while and say so once.
+var dblpRefusals refusalWindows
 
 // DBLPProvider is a keyless discovery source backed by the dblp computer science
 // bibliography search API. It contributes precise CS bibliographic data — the venue,
@@ -58,7 +71,15 @@ func (p *DBLPProvider) Name() string { return "dblp" }
 // any non-context failure degrades to an empty result with no error, so a failing
 // provider never sinks a federated search. Only a context cancellation or deadline
 // propagates as an error.
+//
+// A bot check or a rate limit is also an empty result, and additionally opens a
+// refusal window (see dblpRefusals) during which no request is made at all.
 func (p *DBLPProvider) Search(ctx context.Context, query string, limit int) ([]DiscoveryResult, error) {
+	base := dblpBase
+	if dblpRefusals.quiet(base, time.Now()) {
+		return nil, nil
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 
@@ -75,10 +96,30 @@ func (p *DBLPProvider) Search(ctx context.Context, query string, limit int) ([]D
 		}
 		return nil, nil
 	}
+	if dblpRefused(status, body) {
+		if dblpRefusals.open(base, time.Now()) {
+			slog.Info("dblp search: the search API answered with a bot check or a rate limit instead of JSON, asking nothing for "+
+				challengeCooldown.String(), "status", status)
+		}
+		return nil, nil
+	}
 	if status != http.StatusOK {
 		return nil, nil
 	}
 	return parseDblpHits(body), nil
+}
+
+// dblpRefused reports whether a response is dblp declining to answer rather than
+// answering: a 429, or a 200 whose body is not a JSON object. The search API is
+// asked for format=json, so a 200 opening with anything but "{" is a page put in
+// front of it (the Anubis bot check observed since 2026-10), and parsing it would
+// only report "no results" for a search nobody ran.
+func dblpRefused(status int, body []byte) bool {
+	if status == http.StatusTooManyRequests {
+		return true
+	}
+	trimmed := bytes.TrimSpace(body)
+	return status == http.StatusOK && (len(trimmed) == 0 || trimmed[0] != '{')
 }
 
 // dblpSearchURL assembles the publication-search request URL: the free-text query on

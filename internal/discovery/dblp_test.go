@@ -1,11 +1,15 @@
 package discovery
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -351,6 +355,107 @@ func TestParseDblpHits_UnusableFieldShapes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := parseDblpHits([]byte(tc.body)); got != nil {
 				t.Errorf("parseDblpHits(%s) = %v, want nil", tc.name, got)
+			}
+		})
+	}
+}
+
+// captureDefaultLog routes the default slog logger into a buffer for the rest of
+// the test and restores the previous one afterwards.
+func captureDefaultLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+// TestDblp_ARefusalSilencesTheHostForAWindow drives the two refusals dblp gives an
+// automated client: the Anubis bot-check page recorded from dblp.uni-trier.de on
+// 2026-10-03, served with 200 and text/html in place of the JSON, and a bare 429.
+// Each must degrade to an empty result, be logged once, and stop the next search
+// from asking at all, because the next search builds a fresh provider and a
+// cooldown kept on the provider would be forgotten.
+func TestDblp_ARefusalSilencesTheHostForAWindow(t *testing.T) {
+	challenge := readFixture(t, "dblp_anubis_challenge.html")
+	cases := []struct {
+		name   string
+		status int
+		body   []byte
+	}{
+		{name: "anubis bot check", status: http.StatusOK, body: challenge},
+		{name: "rate limited", status: http.StatusTooManyRequests, body: []byte("<html><body><h1>429 Too Many Requests</h1></body></html>")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var asked atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				asked.Add(1)
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.WriteHeader(tc.status)
+				_, _ = w.Write(tc.body)
+			}))
+			t.Cleanup(srv.Close)
+			setDblpBase(t, srv.URL)
+			logs := captureDefaultLog(t)
+
+			for i := range 2 {
+				got, err := NewDBLP().Search(context.Background(), "attention", 5)
+				if err != nil || got != nil {
+					t.Fatalf("search %d = %v, %v, want nil, nil", i+1, got, err)
+				}
+			}
+			if n := asked.Load(); n != 1 {
+				t.Errorf("dblp was asked %d times, want 1: the second search must wait out the window", n)
+			}
+			if n := strings.Count(logs.String(), "dblp search"); n != 1 {
+				t.Errorf("logged %d times, want once per window:\n%s", n, logs.String())
+			}
+		})
+	}
+}
+
+// TestDblp_AnOrdinaryFailureOpensNoWindow pins the other side: a 500 is a broken
+// service, not a refusal, and must not stop the next search from asking.
+func TestDblp_AnOrdinaryFailureOpensNoWindow(t *testing.T) {
+	var asked atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		asked.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+	setDblpBase(t, srv.URL)
+
+	for range 2 {
+		if _, err := NewDBLP().Search(context.Background(), "attention", 5); err != nil {
+			t.Fatalf("Search() error = %v", err)
+		}
+	}
+	if n := asked.Load(); n != 2 {
+		t.Errorf("dblp was asked %d times, want 2", n)
+	}
+}
+
+// TestDblpRefused pins what counts as dblp declining to answer.
+func TestDblpRefused(t *testing.T) {
+	cases := []struct {
+		name   string
+		status int
+		body   string
+		want   bool
+	}{
+		{name: "json", status: http.StatusOK, body: ` {"result":{}}`, want: false},
+		{name: "malformed json is an answer", status: http.StatusOK, body: `{not json`, want: false},
+		{name: "html page", status: http.StatusOK, body: "<!doctype html><title>Making sure you're not a bot!</title>", want: true},
+		{name: "empty 200", status: http.StatusOK, body: "  ", want: true},
+		{name: "429", status: http.StatusTooManyRequests, body: "", want: true},
+		{name: "500 html", status: http.StatusInternalServerError, body: "<html></html>", want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := dblpRefused(tc.status, []byte(tc.body)); got != tc.want {
+				t.Errorf("dblpRefused(%d, %q) = %t, want %t", tc.status, tc.body, got, tc.want)
 			}
 		})
 	}
