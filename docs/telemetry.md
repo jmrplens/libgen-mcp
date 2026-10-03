@@ -268,6 +268,13 @@ caller, across restarts — which is what a multi-replica deployment wants, and 
 the key never rotates when you supplied it (`LIBGEN_MCP_TELEMETRY_IDENTITY_ROTATION`
 is ignored, with a warning, in that case).
 
+Under `GODEBUG=fips140=only` a configured key must be at least 14 bytes (112
+bits), the shortest secret FIPS 140 lets HKDF derive from. A shorter one is a
+startup error naming `LIBGEN_MCP_TELEMETRY_IDENTITY_KEY`; through 2.1.0 the same
+key made the server panic at startup instead. A generated key is 32 bytes and is
+unaffected, and the derivation is otherwise the same as it was: a key that worked
+before produces the same pseudonyms.
+
 ### A constant `user.hash` is a configuration symptom
 
 The digest is computed over the address the request was **charged** to, which is

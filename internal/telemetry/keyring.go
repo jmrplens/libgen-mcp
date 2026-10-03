@@ -1,13 +1,13 @@
 package telemetry
 
 import (
+	"crypto/hkdf"
 	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
+	"hash"
 	"sync"
 	"time"
-
-	"golang.org/x/crypto/hkdf"
 )
 
 // Keyring owns the secrets that turn an identifier into a pseudonym, and
@@ -87,6 +87,22 @@ type Keyring struct {
 const (
 	identityKeyInfo = "libgen-mcp telemetry identity pseudonym v1"
 	itemKeyInfo     = "libgen-mcp telemetry item pseudonym v1"
+)
+
+// readRandom and deriveKey are the two calls this file makes into the standard
+// library's cryptography, held in variables so a test can make each one fail.
+//
+// Neither fails in production, and the error paths behind them are kept
+// anyway. crypto/rand.Read is documented never to return an error: the runtime
+// ends the process instead. HKDF refuses an input only under
+// GODEBUG=fips140=only, and only a secret shorter than 112 bits, which a
+// generated key never is and a configured one can be. A keyring that carried
+// on past a key it could not derive would pseudonymize with whatever it held
+// before, so each failure is still returned, and these seams are what lets a
+// test walk every one of those paths.
+var (
+	readRandom = rand.Read
+	deriveKey  = hkdf.Key[hash.Hash]
 )
 
 // The secret and the rotation interval arrive as arguments rather than being
@@ -177,7 +193,7 @@ func (k *Keyring) due() bool {
 // during construction before the keyring is shared.
 func (k *Keyring) generate() error {
 	root := make([]byte, identitySaltBytes)
-	if _, err := rand.Read(root); err != nil {
+	if _, err := readRandom(root); err != nil {
 		return fmt.Errorf("generating the pseudonymisation key: %w", err)
 	}
 	if err := k.derive(root); err != nil {
@@ -209,9 +225,21 @@ func (k *Keyring) derive(secret []byte) error {
 // input is either 32 bytes of crypto/rand or an operator's secret. The info
 // string is what separates the two outputs, and that is the property being
 // bought.
+//
+// The standard library's crypto/hkdf computes it, and golang.org/x/crypto/hkdf
+// did through 2.1.0. The bytes are the same, which is what keeps every
+// pseudonym a configured secret has already produced, and the tests hold the
+// two to each other. The import was dropped because this was the server's own
+// one use of golang.org/x/crypto, for an algorithm the standard library has
+// carried since Go 1.24: what the binaries link from that module is now only
+// the ocsp package pdfcpu's signature code brings, which is the module that
+// cmd/audit_binary_vulns declares. The failure mode changed with it, for the
+// better: under GODEBUG=fips140=only a secret shorter than 112 bits made
+// x/crypto's Extract panic, and the standard library returns the error this
+// function hands back.
 func expand(secret []byte, info string) ([]byte, error) {
-	key := make([]byte, identitySaltBytes)
-	if _, err := hkdf.New(sha256.New, secret, nil, []byte(info)).Read(key); err != nil {
+	key, err := deriveKey(sha256.New, secret, nil, info, identitySaltBytes)
+	if err != nil {
 		return nil, fmt.Errorf("deriving the %q key: %w", info, err)
 	}
 	return key, nil

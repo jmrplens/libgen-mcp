@@ -20,6 +20,7 @@
 /audit_test_goroutines
 /audit_test_names
 /audit_test_subtests
+/audit_binary_vulns
 /gen_icon_webp
 /bench_resources
 /gen_third_party_notices

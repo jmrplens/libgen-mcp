@@ -48,6 +48,7 @@ env:
   # attached, and a 2.x client reports "no signatures found" on an image a 3.x
   # client verifies. Bump it deliberately, and with the verification recipe in
   # the docs.
+  # ci.yml pins the same GoReleaser for its snapshot build; move them together.
   GORELEASER_VERSION: "v2.18.2"
   COSIGN_VERSION: "v3.1.3"
   # syft and oras are fetched by hand in the jobs that hold a signing identity,
@@ -143,6 +144,32 @@ jobs:
     permissions:
       contents: read
 
+  # The release binaries, held to the question every scanner that reads a
+  # shipped binary or its SBOM asks: does any module named in its build
+  # information carry an advisory? `make check-binary-vulns` builds the six
+  # targets .goreleaser.yml declares from the tagged tree and fails on a finding
+  # cmd/audit_binary_vulns/declarations.go does not accept, or on a declaration
+  # nothing needs any more. CI runs it on every pull request; it runs again here
+  # because an advisory published since the commit's CI passed is exactly what a
+  # tag cut days later would otherwise ship, and here is the last point before
+  # anything is pushed: `docker` waits on it, and `release` through `docker`.
+  #
+  # It reads the database at vuln.go.dev, and like the two gates above it
+  # declares contents: read and takes no secrets.
+  binary-vulns:
+    name: Release binaries at module grain
+    needs: [preflight]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - run: make check-binary-vulns
+
   release:
     name: GoReleaser
     # `docker` is a dependency and not a sibling: server.json declares the two
@@ -155,7 +182,7 @@ jobs:
     # That used to come for free while signing lived inside the docker job;
     # once it moved out, nothing held it and an image nobody signed could have
     # shipped beside npm, PyPI and NuGet versions that cannot be withdrawn.
-    needs: [preflight, transport-e2e, race, docker, sign-attest]
+    needs: [preflight, transport-e2e, race, binary-vulns, docker, sign-attest]
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
@@ -237,6 +264,27 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
+
+      # The binaries every channel below ships are the ones GoReleaser just
+      # wrote, so they are held here, once, before any of them leaves: the
+      # release is still a draft, and every publisher, the bundle and the
+      # un-drafting step come after these two.
+      #
+      # Standalone: every linux ELF under dist/ is ELF64 with no PT_INTERP, read
+      # from its program headers, and there are exactly as many as the linux
+      # targets (ELF_EXPECT in the Makefile), so a dropped target fails too. The Dockerfile, validate-npm.mjs and
+      # validate_pypi.py each grep their own channel's bytes for a loader name;
+      # nothing held the loose assets, the .mcpb, the NuGet packages or the
+      # Homebrew formula to it, and all of them carry these files.
+      - name: Every linux binary is standalone (ELF64, no PT_INTERP)
+        run: make elf-standalone
+
+      # The same module-grain gate the binary-vulns job ran on its own build,
+      # now on these exact bytes: one binary per declared target, named by the
+      # platform its build information records, so a glob that missed one or
+      # caught the universal darwin binary fails instead of passing short.
+      - name: The release binaries carry no undeclared advisory
+        run: make check-binary-vulns BINARIES='dist/libgen-mcp_*/libgen-mcp*'
 
       # GoReleaser leaves every binary in a per-target subdirectory — the first
       # rehearsal proved it: dist/artifacts.json names
@@ -946,7 +994,7 @@ jobs:
 
   docker:
     name: Docker
-    needs: [preflight, transport-e2e, race]
+    needs: [preflight, transport-e2e, race, binary-vulns]
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
