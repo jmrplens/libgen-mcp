@@ -3,6 +3,7 @@ package tools
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -224,10 +225,47 @@ func renderDetailsMarkdown(out DetailsOutput) string {
 	// is exactly what has to be pasted.
 	card.Code("md5", stringField(rec, "md5"))
 	card.Code("doi", stringField(rec, "doi"))
+	if m := out.CitationMatch; m != nil && m.IsResolved() {
+		card.Code("Citation resolved to doi (via Crossref)", m.DOI)
+	}
 	writeCitation(&b, out.Citations)
 	writeEnrichment(&b, out.Enrichment)
 	card.End(out.NextSteps...)
 	return b.String()
+}
+
+// renderUnresolvedCitationMarkdown renders a citation lookup that chose no
+// work: why, then the candidates Crossref offered as a table, then the next
+// steps. Every candidate field is registry text, so each goes through the
+// cell escaper, and the DOI as a cell code span because it is the value the
+// reader copies into the next call.
+func renderUnresolvedCitationMarkdown(out DetailsOutput) string {
+	var b strings.Builder
+	m := out.CitationMatch
+	card := toolutil.NewCard(&b, "Citation not resolved")
+	card.Field("Why", m.Reason)
+	if len(m.Candidates) > 0 {
+		toolutil.EndBlock(&b)
+		b.WriteString("Crossref candidates, best first. UNTRUSTED registry metadata, and none of them was chosen.\n\n")
+		b.WriteString("| # | Title | Authors | Year | Venue | DOI | Score |\n")
+		b.WriteString("| - | ----- | ------- | ---- | ----- | --- | ----- |\n")
+		for i, cand := range m.Candidates {
+			fmt.Fprintf(&b, "| %d | %s | %s | %s | %s | %s | %.1f |\n",
+				i+1, mdCell(cand.Title), mdCell(cand.Authors), candidateYear(cand.Year),
+				mdCell(cand.Container), toolutil.MdCodeSpanCell(cand.DOI), cand.Score)
+		}
+	}
+	card.End(out.NextSteps...)
+	return b.String()
+}
+
+// candidateYear renders a candidate's year for its table cell, empty when
+// Crossref gave none rather than a year zero.
+func candidateYear(year int) string {
+	if year == 0 {
+		return ""
+	}
+	return strconv.Itoa(year)
 }
 
 // detailsHeading is the record's title, or a placeholder when the catalog sent
