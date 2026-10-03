@@ -12,8 +12,8 @@ Six wheels per release, one per platform, tagged `py3-none-<platform>`:
 | ------------------- | -------------------------------------------------------------------------- |
 | Linux x86_64        | `manylinux_2_17_x86_64`, `manylinux2014_x86_64`, `musllinux_1_1_x86_64`    |
 | Linux aarch64       | `manylinux_2_17_aarch64`, `manylinux2014_aarch64`, `musllinux_1_1_aarch64` |
-| macOS Intel         | `macosx_11_0_x86_64`                                                       |
-| macOS Apple Silicon | `macosx_11_0_arm64`                                                        |
+| macOS Intel         | `macosx_13_0_x86_64`                                                       |
+| macOS Apple Silicon | `macosx_13_0_arm64`                                                        |
 | Windows x64         | `win_amd64`                                                                |
 | Windows arm64       | `win_arm64`                                                                |
 
@@ -127,6 +127,10 @@ Under `uvx` nothing was installed: remove the client entry, and `uv cache clean 
 ## Platform notes
 
 - **Alpine** installs the same Linux wheel as Debian, through its `musllinux` tag.
+- **macOS** needs 13 (Ventura) or later, the minimum the Go toolchain writes into
+  the binary. The wheels are tagged `macosx_13_0`, so pip on an older system finds
+  no wheel instead of installing one. Up to 2.1.0 they were tagged `macosx_11_0`,
+  and pip on macOS 11 or 12 installed a command that could not start.
 - **Windows** puts `libgen-mcp.exe` in the environment's `Scripts\` directory. A client started outside that environment needs the full path.
 - **An unsupported platform** (32-bit, FreeBSD, Linux on another architecture) gets "no matching distribution". Build from source with [`go install`](binary.md#build-from-source).
 

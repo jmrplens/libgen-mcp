@@ -43,6 +43,7 @@ import json
 import os
 import re
 import shutil
+import struct
 import sys
 import zipfile
 
@@ -65,11 +66,25 @@ COMMAND = "libgen-mcp"
 # the archived bytes). The same file therefore installs on Debian and on Alpine.
 # A PIE build could not make this claim, which is why the sibling project's
 # wheels are manylinux-only.
+#
+# The macOS tags name the oldest macOS the binary starts on, and that is the Go
+# toolchain's decision, not ours: the linker writes it into the binary's
+# LC_BUILD_VERSION load command as `minos`, and dyld refuses to start a binary
+# on a system older than that. Go 1.27 writes 13.0 for both darwin/amd64 and
+# darwin/arm64. A tag below it is worse than a missing wheel, because pip on the
+# older system installs the wheel and the command then cannot start, so
+# main() reads minos from each darwin binary and refuses one that disagrees
+# with MACOS_MINIMUM. A toolchain bump that raises the floor therefore stops
+# the build here instead of publishing a wheel tagged for systems it does not
+# run on. Wheel tags carry major and minor only, which is all pip compares.
+MACOS_MINIMUM = (13, 0)
+MACOS_TAG = "macosx_{}_{}".format(*MACOS_MINIMUM)
+
 PLATFORMS = {
     "linux-amd64": "manylinux_2_17_x86_64.manylinux2014_x86_64.musllinux_1_1_x86_64",
     "linux-arm64": "manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64",
-    "darwin-amd64": "macosx_11_0_x86_64",
-    "darwin-arm64": "macosx_11_0_arm64",
+    "darwin-amd64": MACOS_TAG + "_x86_64",
+    "darwin-arm64": MACOS_TAG + "_arm64",
     "windows-amd64": "win_amd64",
     "windows-arm64": "win_arm64",
 }
@@ -223,6 +238,58 @@ def verify_asset(path, checksums):
     return got
 
 
+# Mach-O load commands that carry the minimum macOS version.
+MACHO_MAGIC_64 = 0xFEEDFACF
+LC_VERSION_MIN_MACOSX = 0x24
+LC_BUILD_VERSION = 0x32
+PLATFORM_MACOS = 1
+
+
+def macho_minimum_macos(data):
+    """Return the minimum macOS a thin 64-bit Mach-O binary declares, as
+    (major, minor, patch), or None when the bytes declare none.
+
+    LC_BUILD_VERSION is what current linkers write; LC_VERSION_MIN_MACOSX is
+    its predecessor, read too so an older binary is not reported as having no
+    floor. The version is packed as xxxx.yy.zz in one 32-bit word.
+    """
+    if len(data) < 32 or struct.unpack_from("<I", data, 0)[0] != MACHO_MAGIC_64:
+        return None
+    ncmds = struct.unpack_from("<I", data, 16)[0]
+    off = 32
+    for _ in range(ncmds):
+        if off + 16 > len(data):
+            return None
+        cmd, size = struct.unpack_from("<II", data, off)
+        if cmd == LC_BUILD_VERSION:
+            platform, version = struct.unpack_from("<II", data, off + 8)
+            if platform == PLATFORM_MACOS:
+                return (version >> 16, (version >> 8) & 0xFF, version & 0xFF)
+        elif cmd == LC_VERSION_MIN_MACOSX:
+            version = struct.unpack_from("<I", data, off + 8)[0]
+            return (version >> 16, (version >> 8) & 0xFF, version & 0xFF)
+        if size < 8:
+            return None
+        off += size
+    return None
+
+
+def check_macos_minimum(binary_path):
+    """Abort unless the darwin binary at binary_path starts on exactly the
+    macOS its wheel tag names (MACOS_MINIMUM)."""
+    with open(binary_path, "rb") as fh:
+        minos = macho_minimum_macos(fh.read())
+    if minos is None:
+        sys.exit("build_pypi: {} declares no minimum macOS version, so its wheel "
+                 "tag cannot be derived".format(binary_path))
+    if minos != MACOS_MINIMUM + (0,):
+        sys.exit(
+            "build_pypi: {} needs macOS {}, but its wheel would be tagged {}: "
+            "set MACOS_MINIMUM to what the binary declares".format(
+                binary_path, ".".join(str(n) for n in minos), MACOS_TAG)
+        )
+
+
 def record_hash(data):
     digest = hashlib.sha256(data).digest()
     return "sha256=" + base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
@@ -359,6 +426,8 @@ def main():
             sys.exit("build_pypi: missing release binary {}".format(binary_path))
         if checksums is not None:
             digests[plat_key] = verify_asset(binary_path, checksums)
+        if plat_key.startswith("darwin"):
+            check_macos_minimum(binary_path)
         built.append(build_wheel(args.out, args.version, plat_key, tag, binary_path, readme, licenses))
 
     # Record what was verified so validate_pypi.py can confirm the wheels still

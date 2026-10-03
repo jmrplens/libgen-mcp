@@ -29,6 +29,9 @@ publish action ever sees the wheels:
   passes all of them for the five platforms this host cannot execute;
 - the linux binaries name no ELF interpreter and demand no glibc symbol, which
   is what lets one wheel carry both manylinux and musllinux tags;
+- each macOS wheel's macosx_<major>_<minor> tag is the minimum macOS its
+  binary declares in LC_BUILD_VERSION, so pip on an older system finds no
+  wheel instead of installing one that cannot start;
 - the wheel matching the host is installed into a throwaway venv and the
   command must answer an MCP initialize handshake over stdio with pure
   JSON-RPC and the right server version (skipped with --no-install);
@@ -88,8 +91,8 @@ REQUIRED_PROJECT_URLS = {
 EXPECTED_TAGS = [
     "manylinux_2_17_x86_64.manylinux2014_x86_64.musllinux_1_1_x86_64",
     "manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64",
-    "macosx_11_0_x86_64",
-    "macosx_11_0_arm64",
+    "macosx_13_0_x86_64",
+    "macosx_13_0_arm64",
     "win_amd64",
     "win_arm64",
 ]
@@ -140,6 +143,51 @@ def check_magic(tag, data):
         if machine != want:
             return "PE machine 0x{:x}, want 0x{:x}".format(machine, want)
     return None
+
+
+def macos_minimum(data):
+    """Return the minimum macOS the Mach-O bytes declare as (major, minor,
+    patch), read from LC_BUILD_VERSION (or the older LC_VERSION_MIN_MACOSX),
+    or None when there is none.
+
+    build_pypi.py has a reader of its own, and this one is kept separate on
+    purpose: a validator that borrowed the builder's parser would agree with
+    the builder's mistakes.
+    """
+    if len(data) < 32 or data[:4] != b"\xcf\xfa\xed\xfe":
+        return None
+    off = 32
+    for _ in range(struct.unpack_from("<I", data, 16)[0]):
+        if off + 16 > len(data):
+            return None
+        cmd, size = struct.unpack_from("<II", data, off)
+        if cmd == 0x32 and struct.unpack_from("<I", data, off + 8)[0] == 1:
+            version = struct.unpack_from("<I", data, off + 12)[0]
+        elif cmd == 0x24:
+            version = struct.unpack_from("<I", data, off + 8)[0]
+        else:
+            if size < 8:
+                return None
+            off += size
+            continue
+        return (version >> 16, (version >> 8) & 0xFF, version & 0xFF)
+    return None
+
+
+def check_macos_tag(name, tag, data):
+    """A macosx_<major>_<minor> tag must name the macOS the binary declares
+    as its minimum. pip installs a wheel on any macOS at or above the tag, and
+    dyld refuses to start a binary below its minos, so a tag lower than the
+    binary's floor is a wheel that installs and then cannot run."""
+    match = re.match(r"macosx_(\d+)_(\d+)_", tag)
+    minos = macos_minimum(data)
+    if match is None or minos is None:
+        fail("{}: cannot compare the tag {} with the binary's minimum macOS ({})".format(name, tag, minos))
+        return
+    tagged = (int(match.group(1)), int(match.group(2)), 0)
+    if minos != tagged:
+        fail("{}: tagged for macOS {}.{}, but the embedded binary needs macOS {}".format(
+            name, tagged[0], tagged[1], ".".join(str(n) for n in minos)))
 
 
 def check_linux_is_static(name, data):
@@ -325,6 +373,8 @@ def validate_wheel(path, version, tag, verified=None, notices_digest=None):
             fail("{}: {}".format(name, problem))
         if tag.startswith("manylinux"):
             check_linux_is_static(name, data)
+        if tag.startswith("macosx"):
+            check_macos_tag(name, tag, data)
         if verified:
             plat_key = TAG_PLAT_KEYS.get(tag)
             want = verified.get(plat_key)

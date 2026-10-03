@@ -25,7 +25,7 @@
         check-pr-description audit-site-deps check-ci-scripts \
         mcpb gen-npm sync-npm-version validate-npm validate-npm-local \
         publish-npm-dry publish-npm \
-        gen-pypi validate-pypi validate-pypi-local publish-pypi-dry publish-pypi \
+        gen-pypi validate-pypi validate-pypi-local publish-pypi-dry publish-pypi check-pypi \
         publish-lobehub sonar clean help \
         build-linux-amd64 build-linux-arm64 build-darwin-amd64 \
         build-darwin-arm64 build-windows-amd64 build-windows-arm64
@@ -734,6 +734,12 @@ validate-pypi-local: ## Same validation without Docker, for CI (PYPI_BINARIES=<d
 	@test -n "$(PYPI_BINARIES)" || { echo "ERROR: set PYPI_BINARIES=<dir of release binaries>"; exit 1; }
 	python3 scripts/build_pypi.py --binaries "$(PYPI_BINARIES)" --version "$(VERSION)"
 	python3 scripts/validate_pypi.py --wheels pypi/dist --version "$(VERSION)"
+
+# The macOS wheel tag must be the minimum macOS the binary declares, which the
+# Go toolchain decides: one case cross-builds darwin/amd64 and darwin/arm64 and
+# reads the floor back, so a toolchain bump that moves it fails here first.
+check-pypi: ## Exercise the macOS wheel tag against the toolchain's floor, the builder and the validator (needs go)
+	python3 -m unittest discover -s scripts -p 'build_pypi_test.py'
 
 publish-pypi-dry: ## Assemble and validate the wheelhouse without uploading (PYPI_BINARIES=<dir>)
 	@test -n "$(PYPI_BINARIES)" || { echo "ERROR: set PYPI_BINARIES=<dir of release binaries>"; exit 1; }

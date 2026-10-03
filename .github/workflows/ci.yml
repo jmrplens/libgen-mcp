@@ -216,6 +216,13 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
       - name: The npm launcher stops the server it started
         run: make check-npm-launcher
+      # pip installs a macosx_<major>_<minor> wheel on any macOS at or above
+      # the tag, and dyld refuses a binary below the minimum it declares. The
+      # floor is the Go toolchain's, so it is read back from a darwin build here
+      # rather than discovered by a user whose pip installed a wheel that
+      # cannot start. The builder and the validator each refuse a disagreement.
+      - name: The macOS wheels are tagged for the macOS the binary needs
+        run: make check-pypi
       # The tap formula is rendered once per release, in the job that holds the
       # tap's deploy key, and nothing else reads it before a user installs it.
       # A dry run against a local stand-in tap holds it to pinning each binary

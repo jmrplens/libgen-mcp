@@ -37,7 +37,7 @@ Typical MCP client configuration (stdio):
 
 ## Platforms
 
-Linux, macOS and Windows, on x86-64 and arm64. The Linux wheels carry both `manylinux` and `musllinux` tags because the binary is fully static — it needs no C library, so the same file runs on Debian, on Alpine and in a distroless container.
+Linux, macOS and Windows, on x86-64 and arm64. The macOS wheels need macOS 13 (Ventura) or later, the minimum the Go toolchain writes into the binary, and they are tagged `macosx_13_0` so pip on an older system finds no wheel rather than installing one that cannot start. The Linux wheels carry both `manylinux` and `musllinux` tags because the binary is fully static — it needs no C library, so the same file runs on Debian, on Alpine and in a distroless container.
 
 ## Verify what you run
 
