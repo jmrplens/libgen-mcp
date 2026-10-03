@@ -38,7 +38,49 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    # GO-2026-6443: grpc v1.84.0 carries the advisory and no v1.84 release is
+    # fixed (the fixes are v1.82.2, v1.83.2 and an untagged master commit), so
+    # grpc is held at v1.83.2 and grpc-gateway at v2.30.0, the last release
+    # that does not require v1.84.0. Proposing either back would fail
+    # `make check-binary-vulns` with an undeclared finding, and inside the
+    # go-minor-patch group it would hold every other minor and patch bump
+    # hostage with it.
+    #
+    # Remove both entries when a fixed grpc release past v1.83.2 exists (a
+    # v1.84.x or v1.85.0 the vulnerability database lists as fixed), and take
+    # it with whatever grpc-gateway requires it.
+    ignore:
+      - dependency-name: "google.golang.org/grpc"
+        versions: [">= 1.84.0, < 1.85.0"]
+      - dependency-name: "github.com/grpc-ecosystem/grpc-gateway/v2"
+        versions: [">= 2.31.0, < 2.32.0"]
     open-pull-requests-limit: 10
+
+  # Go modules (cmd/audit_binary_vulns, a module of its own so that
+  # golang.org/x/vuln and its x/tools, x/mod and x/telemetry stay out of the
+  # server's go.mod). Same schedule and cooldown as the root; its updates move
+  # the gate's scanner, never anything a release binary links.
+  - package-ecosystem: "gomod"
+    directory: "/cmd/audit_binary_vulns"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      timezone: "Europe/Madrid"
+    cooldown:
+      default-days: 3
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "go"
+    groups:
+      vulngate-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+    open-pull-requests-limit: 5
 
   # GitHub Actions workflows
   - package-ecosystem: "github-actions"

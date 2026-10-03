@@ -37,6 +37,9 @@ type scanResult struct {
 	// summaries holds the one-line summary of every advisory the run printed,
 	// by id, which is how a finding is described without a second lookup.
 	summaries map[string]string
+	// sawConfig and sawSBOM record that the stream said what it scanned with
+	// and what it scanned, without which it is not a scan at all.
+	sawConfig, sawSBOM bool
 }
 
 // scanMessage is one object of govulncheck's JSON stream, reduced to the
@@ -90,7 +93,6 @@ func scanBinary(ctx context.Context, db, path string) (scanResult, error) {
 // binary somebody checked.
 func parseScan(r io.Reader) (scanResult, error) {
 	result := scanResult{summaries: map[string]string{}}
-	sawConfig, sawSBOM := false, false
 	decoder := json.NewDecoder(r)
 	for {
 		var msg scanMessage
@@ -101,29 +103,41 @@ func parseScan(r io.Reader) (scanResult, error) {
 		if err != nil {
 			return scanResult{}, fmt.Errorf("reading govulncheck's output: %w", err)
 		}
-		if msg.Config != nil {
-			sawConfig = true
-			result.db = msg.Config.DB
-			result.dbModified = msg.Config.DBLastModified
-		}
-		if msg.SBOM != nil {
-			sawSBOM = true
-			result.goVersion = msg.SBOM.GoVersion
-			result.modules = len(msg.SBOM.Modules)
-		}
-		if msg.OSV != nil {
-			result.summaries[msg.OSV.ID] = msg.OSV.Summary
-		}
-		if msg.Finding != nil {
-			f := finding{osv: msg.Finding.OSV, fixed: msg.Finding.FixedVersion}
-			if len(msg.Finding.Trace) > 0 {
-				f.module, f.version = msg.Finding.Trace[0].Module, msg.Finding.Trace[0].Version
-			}
-			result.findings = append(result.findings, f)
-		}
+		result.read(&msg)
 	}
-	if !sawConfig || !sawSBOM {
+	if !result.sawConfig || !result.sawSBOM {
 		return scanResult{}, errors.New("govulncheck's output carries no configuration or no module list, so it is not a scan of a binary")
 	}
 	return result, nil
+}
+
+// read folds one message of the stream into the result. A message carries one
+// kind of object, but each kind is read independently, so one that carried
+// two would lose neither.
+func (r *scanResult) read(msg *scanMessage) {
+	if msg.Config != nil {
+		r.sawConfig = true
+		r.db, r.dbModified = msg.Config.DB, msg.Config.DBLastModified
+	}
+	if msg.SBOM != nil {
+		r.sawSBOM = true
+		r.goVersion, r.modules = msg.SBOM.GoVersion, len(msg.SBOM.Modules)
+	}
+	if msg.OSV != nil {
+		r.summaries[msg.OSV.ID] = msg.OSV.Summary
+	}
+	if msg.Finding != nil {
+		r.findings = append(r.findings, findingOf(msg))
+	}
+}
+
+// findingOf reads a finding message. The module and version are the first
+// frame of the trace, which at module grain is the module itself; a finding
+// without a trace keeps both empty rather than being dropped.
+func findingOf(msg *scanMessage) finding {
+	f := finding{osv: msg.Finding.OSV, fixed: msg.Finding.FixedVersion}
+	if len(msg.Finding.Trace) > 0 {
+		f.module, f.version = msg.Finding.Trace[0].Module, msg.Finding.Trace[0].Version
+	}
+	return f
 }

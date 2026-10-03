@@ -43,6 +43,9 @@ permissions:
 env:
   GO_VERSION: "1.27.1"
   COVERAGE_MIN: "90"
+  # The same exact version release.yml pins, for the Release binaries job's
+  # snapshot build. Move the two together.
+  GORELEASER_VERSION: "v2.18.2"
 
   # Whether this run checks that the committed generated artifacts — llms.txt,
   # llms-full.txt, lhm.plugin.json, tool-schema.json, the evaluator pages and the
@@ -347,6 +350,10 @@ jobs:
       - run: go mod download
       - name: Audit godoc coverage (exported symbols, packages and tests)
         run: go run ./cmd/godoc_tool/ audit --include-tests --fail-on-findings
+      # The root's `./...` stops at a nested module, so the one there is
+      # audited from inside it.
+      - name: Audit godoc coverage (cmd/audit_binary_vulns, its own module)
+        run: make godoc-check-binary-vulns
       - name: Audit MCP tool surface quality
         run: make audit-surface-quality
 
@@ -390,14 +397,21 @@ jobs:
       - run: go mod download
       - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
         with:
-          version: "~> v2"
+          # The release's exact version, so what is checked here is what the
+          # release job's GoReleaser would build.
+          version: ${{ env.GORELEASER_VERSION }}
           args: build --snapshot --clean
-      - name: Every linux binary is ELF64 with no PT_INTERP
+      - name: Every linux binary is ELF64 with no PT_INTERP, and both are there
         run: make elf-standalone
       - name: No binary carries an advisory the declarations do not accept
         run: make check-binary-vulns BINARIES='dist/libgen-mcp_*/libgen-mcp*'
       - name: The standalone check refuses a PIE build and accepts the release's
         run: make check-elf-standalone
+      # cmd/audit_binary_vulns is a module of its own, which the root's
+      # `go test ./...` and coverage profile do not reach, so its tests and its
+      # coverage floor run here, beside the gate they hold.
+      - name: The vulnerability gate's own tests, at the coverage floor
+        run: make test-binary-vulns
 
   # The release workflow only invokes GoReleaser when a tag is pushed, so a
   # malformed .goreleaser.yml used to surface at the worst possible moment —

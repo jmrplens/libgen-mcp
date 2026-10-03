@@ -6,7 +6,7 @@
 .PHONY: all build build-probe build-all run version \
         coverage-conditions coverage-mutants check-coverage-recipes \
         test test-short test-race test-e2e test-e2e-http test-e2e-stdio test-e2e-collector eval coverage cover-check \
-        lint golangci-lint govulncheck check-binary-vulns analyze analyze-fix fmt tidy vet \
+        lint golangci-lint govulncheck check-binary-vulns test-binary-vulns godoc-check-binary-vulns analyze analyze-fix fmt tidy vet \
         format-md-tables check-md-tables check-doc-links \
         godoc-audit godoc-check \
         gen-llms check-llms gen-lhm-manifest check-lhm-manifest \
@@ -65,6 +65,17 @@ COVERAGE_MIN     := 90
 COVERAGE_PKGS    := ./internal/... ./cmd/...
 # The same list as one comma-separated argument, for -coverpkg.
 COVERAGE_COVERPKG := ./internal/...,./cmd/...
+
+# The one nested Go module, cmd/audit_binary_vulns, which keeps golang.org/x/vuln
+# and its x/tools, x/mod and x/telemetry out of the server's go.mod. `./...` at
+# the root does not descend into it, so every Go gate names it on purpose:
+# vet, golangci-lint, govulncheck and godoc-check run there too, and its tests
+# run under test-binary-vulns against their own COVERAGE_MIN floor. It is
+# outside COVERAGE_PKGS, the CI profile and Sonar's coverage for the same
+# reason cmd/eval is: no profile the root module produces can carry a line of
+# another module, so counting it there would report it as 0% rather than
+# measure it.
+VULNGATE_DIR := cmd/audit_binary_vulns
 
 # Version from the VERSION file (single source of truth); commit from git.
 # Use shell `cat` (portable to GNU Make 3.81 on macOS; `$(file ...)` needs Make 4+).
@@ -326,10 +337,13 @@ golangci-lint: ## Verify config, check formatting, and run golangci-lint
 	golangci-lint fmt --diff
 	@echo "=== golangci-lint run ==="
 	golangci-lint run --build-tags $(GO_ANALYSIS_TAGS) $(GO_ANALYSIS_PKGS)
+	@echo "=== golangci-lint run ($(VULNGATE_DIR)) ==="
+	cd $(VULNGATE_DIR) && golangci-lint run --config $(CURDIR)/.golangci.yml ./...
 
 govulncheck: ## Scan for known vulnerabilities (govulncheck)
 	@echo "=== govulncheck ==="
 	govulncheck -tags $(GO_ANALYSIS_TAGS) $(GO_ANALYSIS_PKGS)
+	govulncheck -C $(VULNGATE_DIR) ./...
 
 # The scanners' question rather than ours: govulncheck above asks whether this
 # module's code reaches a vulnerable symbol, while Trivy, Grype, osv-scanner and
@@ -338,15 +352,25 @@ govulncheck: ## Scan for known vulnerabilities (govulncheck)
 # holds each one to that question, failing on a finding the table in
 # cmd/audit_binary_vulns/declarations.go does not accept and on a declaration no
 # finding needs. BINARIES=<glob> scans binaries already built instead (one per
-# target), which is how the release holds GoReleaser's own output to it.
+# target), which is how the release holds GoReleaser's own output to it. It runs
+# from its own module (VULNGATE_DIR), so every path it is handed is absolute.
 check-binary-vulns: ## Fail when a release binary carries an undeclared advisory at module grain (needs network)
-	go run ./cmd/audit_binary_vulns/ $(if $(BINARIES),-binaries '$(BINARIES)')
+	go -C $(VULNGATE_DIR) run . -dir $(CURDIR) -config $(CURDIR)/.goreleaser.yml $(if $(BINARIES),-binaries '$(CURDIR)/$(BINARIES)')
+
+# The nested module's tests, with the same floor the root module is held to.
+test-binary-vulns: ## Run cmd/audit_binary_vulns's tests (its own module) and hold it to COVERAGE_MIN
+	@dir=$$(mktemp -d) && trap 'rm -rf "$$dir"' EXIT && \
+		go -C $(VULNGATE_DIR) test -count=1 -coverprofile="$$dir/cover.out" ./... && \
+		total=$$(go -C $(VULNGATE_DIR) tool cover -func="$$dir/cover.out" | grep '^total:' | awk '{print $$3}' | tr -d '%') && \
+		echo "$(VULNGATE_DIR) coverage: $$total%" && \
+		awk "BEGIN {exit !($$total + 0 >= $(COVERAGE_MIN) + 0)}" || { echo "FAIL: $(VULNGATE_DIR) is below $(COVERAGE_MIN)%"; exit 1; }
 
 fmt: ## Apply formatters (goimports, gofumpt, gci)
 	golangci-lint fmt
 
 vet: ## Run go vet
 	go vet $(GO_ANALYSIS_PKGS)
+	go -C $(VULNGATE_DIR) vet ./...
 
 tidy: ## Tidy go.mod / go.sum
 	go mod tidy
@@ -366,6 +390,14 @@ godoc-audit: ## Report missing/malformed Go doc comments (Markdown)
 
 godoc-check: ## Fail if any Go doc comments are missing/malformed (CI mode)
 	go run ./cmd/godoc_tool/ audit --fail-on-findings
+	@$(MAKE) --no-print-directory godoc-check-binary-vulns
+
+# godoc_tool lists `./...` of the module it runs in, which at the root stops at
+# the nested module, so it is built once and run from inside that module.
+godoc-check-binary-vulns: ## Fail if cmd/audit_binary_vulns (its own module) has a missing or malformed doc comment
+	@dir=$$(mktemp -d) && trap 'rm -rf "$$dir"' EXIT && \
+		go build -o "$$dir/godoc_tool" ./cmd/godoc_tool/ && \
+		cd $(VULNGATE_DIR) && "$$dir/godoc_tool" audit --include-tests --fail-on-findings
 
 gen-llms: ## Generate llms.txt and llms-full.txt from the registered tools
 	go run ./cmd/gen_llms/
@@ -582,9 +614,14 @@ check-homebrew-tap: ## Render the Homebrew formula from a fixture checksums.txt 
 # headers rather than grepped for. The release runs it over GoReleaser's dist/
 # before anything ships; check-elf-standalone drives the script itself against
 # a -buildmode=pie build (refused) and the release's build (accepted).
+#
+# ELF_EXPECT is how many there must be: .goreleaser.yml builds linux for amd64
+# and arm64, so a dist/ holding one fewer is a release that dropped a target,
+# not a release that passed. The universal darwin binary is Mach-O, not ELF.
 DIST ?= dist
-elf-standalone: ## Fail unless every linux ELF under DIST (default dist/) is standalone: ELF64, no PT_INTERP
-	python3 scripts/check_elf_standalone.py $(DIST)
+ELF_EXPECT ?= 2
+elf-standalone: ## Fail unless DIST (default dist/) holds ELF_EXPECT linux ELF files, each standalone: ELF64, no PT_INTERP
+	python3 scripts/check_elf_standalone.py --expect $(ELF_EXPECT) $(DIST)
 
 check-elf-standalone: ## Exercise the standalone-ELF check against PIE and static fixture builds (needs go)
 	python3 -m unittest discover -s scripts -p 'check_elf_standalone_test.py'

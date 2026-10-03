@@ -73,10 +73,10 @@ def elf64(order="<", phdrs=(), machine=0x3E, xnum=None, interp=b"/lib/ld-musl-x8
     return header + body + interp
 
 
-def run_tree(*roots):
+def run_tree(*roots, expect=None):
     """run_tree runs the check over roots and returns its status and output."""
     out, err = io.StringIO(), io.StringIO()
-    status = check.check_tree(list(roots), out, err)
+    status = check.check_tree(list(roots), out, err, expect)
     return status, out.getvalue(), err.getvalue()
 
 
@@ -201,9 +201,31 @@ class WrittenFiles(unittest.TestCase):
 
     def test_the_command_line(self):
         self.write("static", elf64(phdrs=(1,)))
-        for argv, want in ((["-h"], 0), (["--nope"], 2), ([self.directory], 0)):
+        for argv, want in (
+            (["-h"], 0),
+            (["--nope"], 2),
+            ([self.directory], 0),
+            (["--expect"], 2),
+            (["--expect", "0", self.directory], 2),
+            (["--expect", "two", self.directory], 2),
+            (["--expect", "1", "--nope"], 2),
+            (["--expect", "1", self.directory], 0),
+        ):
             with self.subTest(argv=argv):
                 self.assertEqual(check.main(argv, io.StringIO(), io.StringIO()), want)
+
+    def test_the_expected_count_is_held(self):
+        """A dist/ that lost a linux target fails even though every binary it
+        still has is standalone, and so does one that grew an extra ELF."""
+        self.write("amd64", elf64(phdrs=(1,)))
+        self.write("arm64", elf64(phdrs=(1,), machine=0xB7))
+        status, _, err = run_tree(self.directory, expect=2)
+        self.assertEqual(status, 0, err)
+        for expect in (3, 1):
+            with self.subTest(expect=expect):
+                status, _, err = run_tree(self.directory, expect=expect)
+                self.assertEqual(status, 1)
+                self.assertIn("found 2 ELF files under {}, expected {}".format(self.directory, expect), err)
 
 
 if __name__ == "__main__":

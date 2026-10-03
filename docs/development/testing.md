@@ -21,9 +21,11 @@ package's `testdata/`. This is where most tests belong, and a test that can
 live here should.
 
 It is also where the coverage floor is measured — everything this module builds,
-`./internal/...` and `./cmd/...`, at or above 90%. The one exclusion is
-`cmd/eval`, whose files are behind the `eval` build tag that CI never sets, so
-no profile CI produces can carry a line of it.
+`./internal/...` and `./cmd/...`, at or above 90%. There are two exclusions.
+`cmd/eval`'s files are behind the `eval` build tag that CI never sets, so no
+profile CI produces can carry a line of it. `cmd/audit_binary_vulns` is a Go
+module of its own, which `./cmd/...` does not descend into; `make
+test-binary-vulns` runs its tests and holds it to the same 90% separately.
 
 ## Live end-to-end
 

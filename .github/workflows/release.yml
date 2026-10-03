@@ -48,6 +48,7 @@ env:
   # attached, and a 2.x client reports "no signatures found" on an image a 3.x
   # client verifies. Bump it deliberately, and with the verification recipe in
   # the docs.
+  # ci.yml pins the same GoReleaser for its snapshot build; move them together.
   GORELEASER_VERSION: "v2.18.2"
   COSIGN_VERSION: "v3.1.3"
   # syft and oras are fetched by hand in the jobs that hold a signing identity,
@@ -270,12 +271,13 @@ jobs:
       # un-drafting step come after these two.
       #
       # Standalone: every linux ELF under dist/ is ELF64 with no PT_INTERP, read
-      # from its program headers. The Dockerfile, validate-npm.mjs and
+      # from its program headers, and there are exactly as many as the linux
+      # targets (ELF_EXPECT in the Makefile), so a dropped target fails too. The Dockerfile, validate-npm.mjs and
       # validate_pypi.py each grep their own channel's bytes for a loader name;
       # nothing held the loose assets, the .mcpb, the NuGet packages or the
       # Homebrew formula to it, and all of them carry these files.
       - name: Every linux binary is standalone (ELF64, no PT_INTERP)
-        run: python3 scripts/check_elf_standalone.py dist
+        run: make elf-standalone
 
       # The same module-grain gate the binary-vulns job ran on its own build,
       # now on these exact bytes: one binary per declared target, named by the

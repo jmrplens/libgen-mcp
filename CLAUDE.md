@@ -83,10 +83,17 @@ package from the metric hides more than a number** — `cmd/gen_tool_schema`
 shipped with no test file at all and nothing reported it, because the rule was
 prose and the exclusion was configuration.
 
-**`cmd/eval` is the one exclusion left, and it is measurement rather than
-policy**: its files are behind the `eval` build tag, CI does not set it, so no
-profile CI produces can carry a line of it. Counting it would report a package
-as 0% for being untestable here rather than untested.
+**`cmd/eval` and `cmd/audit_binary_vulns` are the two exclusions left, and both
+are measurement rather than policy**. `cmd/eval`'s files are behind the `eval`
+build tag, CI does not set it, so no profile CI produces can carry a line of it.
+Counting it would report a package as 0% for being untestable here rather than
+untested. `cmd/audit_binary_vulns` is a Go module of its own (it keeps
+`golang.org/x/vuln` and its x/tools, x/mod and x/telemetry out of the server's
+`go.mod`), `./cmd/...` does not descend into it, and no profile of the root
+module can carry it; it is held to the same floor separately, by `make
+test-binary-vulns` in CI's `Release binaries` job. **Every Go gate names that
+module on purpose** (`make vet`, `golangci-lint`, `govulncheck`, `godoc-check`
+run there too), because nothing reaches it by `./...`.
 
 **The number is measured on one platform.** The unit suite runs on three, but
 the profile CI keeps is Linux's; a per-platform floor would measure the same
@@ -1609,7 +1616,8 @@ loudly at build time instead of quietly on somebody's Alpine host.
 Those guards each cover one channel, so one check covers them all:
 `scripts/check_elf_standalone.py` (`make elf-standalone`) parses the program
 headers of every ELF under `dist/` and refuses one that is not ELF64 or carries a
-`PT_INTERP`. It runs in the GoReleaser job right after GoReleaser, before the
+`PT_INTERP`, and fails unless it finds exactly `ELF_EXPECT` of them (2, the linux
+targets): a release that dropped one must not pass on the other alone. It runs in the GoReleaser job right after GoReleaser, before the
 `.mcpb`, NuGet, Homebrew and the loose assets are built from those bytes, and on
 every pull request over a snapshot build (CI's `Release binaries` job). **It
 parses, it does not grep**: `PT_INTERP` is what the kernel reads, and a string
@@ -1625,23 +1633,32 @@ Every scanner a user runs on a binary or its SBOM asks a coarser question: does
 any module the binary's build information names carry an advisory? `make
 check-binary-vulns` (`cmd/audit_binary_vulns`) asks that one, over the six
 targets `.goreleaser.yml` declares, through `golang.org/x/vuln/scan` at the
-version `go.mod` pins. It runs in CI's `Release binaries` job on every pull
-request, in the release's `binary-vulns` gate before `docker`, and on
-GoReleaser's own output before anything leaves the draft.
+version **its own** `go.mod` pins: the command is a nested module, so x/vuln and
+the x/tools, x/mod and x/telemetry it brings never enter the server's `go.mod`
+(which is also what keeps "this module does not depend on golang.org/x/tools",
+in *Escaping untrusted content* above, true). Dependabot has a `gomod` entry for that directory. It runs in CI's
+`Release binaries` job on every pull request, in the release's `binary-vulns`
+gate before `docker`, and on GoReleaser's own output before anything leaves the
+draft.
 
 A finding fails unless `cmd/audit_binary_vulns/declarations.go` accepts it,
-keyed `"<advisory> <module>"`, with a category (`not-linked`,
-`fix-not-yet-adoptable`, `not-reachable`) and a reason a reviewer can check. **A
+keyed `"<advisory> <module>"`, with a category (`not-linked` or
+`fix-not-yet-adoptable`) and a reason a reviewer can check. **A
 declaration no finding needs fails the run too**, so the table cannot outlive
 what it excused: the day a dependency bump fixes an advisory, the entry has to go
 in the same change. Two things about it are easy to get wrong:
 
 - **Do not add a declaration to make a red pull request green without measuring
   it.** `not-linked` means a symbol-level scan of an unstripped build shows none
-  of the advisory's packages; `not-reachable` means the symbols are linked, the
-  source scan reaches none, and no release on the module's current minor line is
-  fixed. A fix on the line the module is on is an upgrade to make, not an entry
-  to write.
+  of the advisory's packages. There is no category for "linked but not reached":
+  a fixed release, even on an older minor line, is an upgrade (or a downgrade) to
+  make, not an entry to write. GO-2026-6443 was handled that way, by holding
+  `google.golang.org/grpc` at v1.83.2 (and grpc-gateway at v2.30.0, the last
+  that accepts it) until a fixed release past v1.84.0 exists. A bump back to
+  v1.84.0 fails this gate, by design, and `.github/dependabot.yml` ignores
+  grpc `>= 1.84.0, < 1.85.0` and grpc-gateway `>= 2.31.0, < 2.32.0` so the
+  grouped weekly update is not held hostage by it. Remove those two entries
+  when a fixed grpc release exists.
 - **The configuration is read strictly.** Any build key the command does not
   read (`tags`, `buildmode`, `ignore`, a global `env`, a `gomod` section, a
   before hook other than `go mod download`) is refused rather than guessed at,

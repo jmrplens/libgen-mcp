@@ -12,13 +12,14 @@
 // report every advisory against any version of any of them, called or not.
 // `govulncheck -mode binary -scan module` asks the same question the same way.
 //
-// The two answers already disagree here. The source scan passes, correctly,
-// while every binary carries golang.org/x/crypto (for the ocsp package pdfcpu's
+// The two answers disagreed here. The source scan passed, correctly, while
+// every binary carried golang.org/x/crypto (for the ocsp package pdfcpu's
 // signature code imports), against which GO-2026-5932 is filed for the openpgp
-// packages nothing here links, and google.golang.org/grpc v1.84.0, whose
-// server-side transport is linked and never reached. Nothing asked the
-// scanners' question before a release, so nothing would have said so either,
-// and the next advisory of that kind would have shipped the same way.
+// packages nothing here links, and google.golang.org/grpc v1.84.0, against
+// which GO-2026-6443 is filed for a server-side transport the binaries linked
+// and never reached. Nothing asked the scanners' question before a release, so
+// nothing said so. The first is declared; the second was fixed by taking
+// v1.83.2, and a bump back to v1.84.0 now fails here.
 //
 // # What it scans
 //
@@ -70,6 +71,18 @@
 // every run scans every target the release builds: an entry that outlives what
 // it excused is how an allowlist comes to excuse the next advisory against the
 // same module unread.
+//
+// # Why it is a module of its own
+//
+// golang.org/x/vuln brings golang.org/x/tools, x/mod and x/telemetry with it,
+// and none of them has any business in the server's go.mod: a requirement
+// there is one every scanner of the repository reads, one Dependabot proposes
+// bumps for in the server's group, and one that would make the claim that this
+// module does not depend on x/tools (which cmd/audit_md_escaping's design rests
+// on) false. So this directory carries its own go.mod, which `./...` at the
+// root does not descend into. The Makefile runs it with `go -C`, lints, vets,
+// documents and tests it there, and holds it to its own coverage floor, since
+// the root profile cannot carry a package of another module.
 //
 // # Exit codes
 //

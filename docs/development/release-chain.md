@@ -75,7 +75,8 @@ publisher:
 - **Every linux binary is standalone.** `scripts/check_elf_standalone.py` reads
   the program headers of every ELF file under `dist/` and refuses any that is not
   ELF64 or carries a `PT_INTERP`, which is what `-buildmode=pie` adds (see
-  `CLAUDE.md`, *The binaries are standalone*). The Dockerfile, `validate-npm.mjs`
+  `CLAUDE.md`, *The binaries are standalone*), and fails unless it finds exactly
+  the two linux targets (`make elf-standalone`, `ELF_EXPECT`). The Dockerfile, `validate-npm.mjs`
   and `validate_pypi.py` each grep their own channel's bytes for a loader name;
   this is the one check every channel inherits, the loose assets, the `.mcpb`,
   NuGet and Homebrew included.

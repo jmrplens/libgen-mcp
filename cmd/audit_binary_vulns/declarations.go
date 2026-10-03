@@ -11,7 +11,13 @@ import (
 )
 
 // The reasons a declaration may give. Each is a claim about the finding that a
-// reviewer can check, and none says the vulnerability does not matter.
+// reviewer can check, and neither says the vulnerability does not matter.
+//
+// There is deliberately no category for "linked but not reached": a symbol in
+// the binary is what every scanner reports, and a fixed release, even on an
+// older minor line, is an upgrade to make rather than an entry to write.
+// GO-2026-6443 against google.golang.org/grpc was handled that way, by taking
+// v1.83.2 instead of keeping v1.84.0, which no fixed release covers.
 const (
 	// categoryNotLinked accepts an advisory against a module the binaries
 	// link when none of the packages or symbols it names is linked: what a
@@ -25,14 +31,6 @@ const (
 	// cooldown. The entry turns stale, and fails the run, the day the upgrade
 	// lands, which is what removes it.
 	categoryFixNotYetAdoptable = "fix-not-yet-adoptable"
-
-	// categoryNotReachable accepts an advisory whose vulnerable symbols the
-	// binaries do link, when the source scan (`make govulncheck`, symbol
-	// grain) finds no call path from this module's code to them and no
-	// release on the module's current minor line carries a fix. It is the
-	// weakest of the three, which is why it asks for both halves: a fix on
-	// the line the module is on is an upgrade to make, not an entry to write.
-	categoryNotReachable = "not-reachable"
 )
 
 // categories are the reasons a declaration may give, each with what it means.
@@ -41,7 +39,6 @@ const (
 var categories = map[string]string{
 	categoryNotLinked:          "the binaries link the module and none of the packages or symbols the advisory names, which a symbol-level scan of an unstripped build shows; the reason names the packages",
 	categoryFixNotYetAdoptable: "a fixed version exists and cannot be taken yet; the reason names the version and where its adoption is tracked",
-	categoryNotReachable:       "the binaries link the vulnerable symbols, the symbol-level source scan reaches none of them, and no release on the module's current minor line is fixed; the reason names the symbols, why nothing reaches them, and every fixed version that exists",
 }
 
 // declaration is one accepted finding: why it may ship, in a category and in
@@ -67,14 +64,6 @@ var acceptedAdvisories = map[string]declaration{
 			"golang.org/x/crypto/ocsp, which github.com/pdfcpu/pdfcpu/pkg/pdfcpu/sign imports and internal/extract " +
 			"reaches through pdfcpu (go list -deps ./cmd/server, on every release target); the advisory has no " +
 			"fixed version, so this goes stale only when pdfcpu stops importing ocsp",
-	},
-	"GO-2026-6443 google.golang.org/grpc": {
-		category: categoryNotReachable,
-		reason: "the binaries link transport.http2Server.HandleStreams, the server half of gRPC's HTTP/2 transport, but " +
-			"the server uses gRPC only as the OTLP exporters' client and starts no gRPC server, and make govulncheck " +
-			"reports the advisory at package grain only; the fixes are v1.82.2 and v1.83.2, older lines than the " +
-			"v1.84.0 that github.com/grpc-ecosystem/grpc-gateway/v2 v2.31.0 requires, and an untagged master commit " +
-			"(v1.85.0-dev), so no v1.84 release is fixed and this goes stale with the first grpc release that is",
 	},
 }
 

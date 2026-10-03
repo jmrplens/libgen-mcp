@@ -89,7 +89,9 @@ func audit(ctx context.Context, cfg auditConfig) (report, error) {
 	}
 
 	var binaries []binary
-	cleanup := func() {}
+	cleanup := func() {
+		// Prebuilt binaries belong to whoever built them, and are left in place.
+	}
 	if cfg.binaries != "" {
 		binaries, err = findPrebuilt(cfg.binaries, builds)
 	} else {

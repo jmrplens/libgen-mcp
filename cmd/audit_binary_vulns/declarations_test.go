@@ -42,7 +42,7 @@ func TestAcceptedAdvisories_ReasonsAreOneLineOfPlainText(t *testing.T) {
 func TestCategories_EachSaysWhatItMeans(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{categoryNotLinked, categoryFixNotYetAdoptable, categoryNotReachable} {
+	for _, name := range []string{categoryNotLinked, categoryFixNotYetAdoptable} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
@@ -51,8 +51,8 @@ func TestCategories_EachSaysWhatItMeans(t *testing.T) {
 			}
 		})
 	}
-	if len(categories) != 3 {
-		t.Errorf("categories = %v, want the three this file names", categories)
+	if len(categories) != 2 {
+		t.Errorf("categories = %v, want the two this file names", categories)
 	}
 }
 

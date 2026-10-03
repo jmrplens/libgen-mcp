@@ -27,11 +27,16 @@ target nobody declared) with no PT_INTERP among its program headers. A
 directory holding no ELF file at all fails too, because a check that found
 nothing to look at reads exactly like one that passed.
 
-Standard library only. Usage:
-    python3 scripts/check_elf_standalone.py [DIR ...]    (default: dist)
+--expect N makes the count part of the check: the release passes 2, for the
+linux/amd64 and linux/arm64 targets .goreleaser.yml builds, so a dropped linux
+target fails instead of leaving one binary to pass alone.
 
-Exit status: 0 when every ELF file is standalone, 1 when one is not or none was
-found, 2 when a directory does not exist.
+Standard library only. Usage:
+    python3 scripts/check_elf_standalone.py [--expect N] [DIR ...]    (default: dist)
+
+Exit status: 0 when every ELF file is standalone (and there are N of them), 1
+when one is not, none was found or the count is wrong, 2 for a command line it
+cannot read or a directory that does not exist.
 """
 
 import os
@@ -115,9 +120,11 @@ def elf_files(root):
                     yield path
 
 
-def check_tree(roots, out=sys.stdout, err=sys.stderr):
+def check_tree(roots, out=sys.stdout, err=sys.stderr, expect=None):
     """check_tree checks every ELF file under each root and returns the exit
-    status."""
+    status. With expect, the number of ELF files found must be exactly that,
+    so a release that dropped a linux target fails rather than passing on the
+    binaries it still has."""
     for root in roots:
         if not os.path.isdir(root):
             print("check_elf_standalone: {} is not a directory".format(root), file=err)
@@ -140,21 +147,41 @@ def check_tree(roots, out=sys.stdout, err=sys.stderr):
     if failed:
         print("check_elf_standalone: {} of {} ELF files are not standalone".format(failed, checked), file=err)
         return 1
+    if expect is not None and checked != expect:
+        print("check_elf_standalone: found {} ELF files under {}, expected {}".format(
+            checked, ", ".join(roots), expect), file=err)
+        return 1
     print("check_elf_standalone: all {} ELF files are standalone".format(checked), file=out)
     return 0
 
 
-USAGE = "usage: check_elf_standalone.py [DIR ...]    (default: dist)"
+USAGE = "usage: check_elf_standalone.py [--expect N] [DIR ...]    (default: dist)"
+
+
+def parse_expect(argv):
+    """parse_expect takes a leading --expect N off argv and returns (N, the
+    rest), N being None when it is absent. A value that is not a positive
+    integer raises ValueError."""
+    if argv[:1] != ["--expect"]:
+        return None, argv
+    if len(argv) < 2 or not argv[1].isdigit() or int(argv[1]) < 1:
+        raise ValueError("--expect takes a positive integer")
+    return int(argv[1]), argv[2:]
 
 
 def main(argv, out=sys.stdout, err=sys.stderr):
     if argv and argv[0] in ("-h", "--help"):
         print(USAGE, file=out)
         return 0
-    if any(arg.startswith("-") for arg in argv):
+    try:
+        expect, roots = parse_expect(argv)
+    except ValueError as reason:
+        print("check_elf_standalone: {}\n{}".format(reason, USAGE), file=err)
+        return 2
+    if any(arg.startswith("-") for arg in roots):
         print(USAGE, file=err)
         return 2
-    return check_tree(argv or ["dist"], out, err)
+    return check_tree(roots or ["dist"], out, err, expect)
 
 
 if __name__ == "__main__":
