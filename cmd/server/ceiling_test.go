@@ -50,13 +50,36 @@ func startCall(t *testing.T, records *clientRecords, ceiling heavyCeiling, addre
 	case <-entered:
 	case res := <-done:
 		done <- res
-	case <-time.After(5 * time.Second):
+	case <-time.After(callWait):
 		t.Fatal("the call neither ran nor was refused")
 	}
 	// Idempotent, because a test that releases a call early also defers the
 	// release, and closing a channel twice panics.
 	var once sync.Once
 	return done, func() { once.Do(func() { close(release) }) }
+}
+
+// callWait bounds how long a test waits for a call to answer. Every call here
+// either is refused at once or ends when its test releases it, so a wait this
+// long means the call was admitted where a refusal was expected.
+const callWait = 5 * time.Second
+
+// awaitResult receives a call's result, or fails the test once callWait passes.
+//
+// A bare receive would hold the test until go test's own deadline whenever the
+// ceiling admits a call it should refuse: the admitted call blocks in its
+// handler until a deferred release that only runs after the receive returns.
+// That is a failure either way, but one that costs ten minutes, and costs it
+// again for every mutant that breaks the ceiling.
+func awaitResult(t *testing.T, done <-chan mcp.Result) mcp.Result {
+	t.Helper()
+	select {
+	case res := <-done:
+		return res
+	case <-time.After(callWait):
+		t.Fatal("the call did not answer: it was admitted where a refusal was expected, or never released")
+		return nil
+	}
 }
 
 // refusalText returns the message of a refused call, or "" when the call was
@@ -95,7 +118,7 @@ func TestTheCeilingIsPerCallerAndNotPerProcess(t *testing.T) {
 	// The third from the same caller, with two still running.
 	thirdDone, finishThird := startCall(t, records, ceiling, "203.0.113.7", heavyCall("download"))
 	defer finishThird()
-	text := refusalText(t, <-thirdDone)
+	text := refusalText(t, awaitResult(t, thirdDone))
 	if text == "" {
 		t.Fatal("a third concurrent call from one caller was served; the ceiling is 2")
 	}
@@ -115,8 +138,8 @@ func TestTheCeilingIsPerCallerAndNotPerProcess(t *testing.T) {
 	// And once the first caller's calls end, their next one is admitted again.
 	finishFirst()
 	finishSecond()
-	<-firstDone
-	<-secondDone
+	awaitResult(t, firstDone)
+	awaitResult(t, secondDone)
 
 	freedDone, finishFreed := startCall(t, records, ceiling, "203.0.113.7", heavyCall("download"))
 	defer finishFreed()
@@ -151,7 +174,7 @@ func TestTheProcessCeilingRefusesEverybody(t *testing.T) {
 	// A fourth caller, well inside their own ceiling.
 	done, finish := startCall(t, records, ceiling, "d", heavyCall("download"))
 	defer finish()
-	text := refusalText(t, <-done)
+	text := refusalText(t, awaitResult(t, done))
 	if text == "" {
 		t.Fatal("a fourth call was served although the process ceiling is 3")
 	}
@@ -341,7 +364,7 @@ func TestTheRefusalIsAShapeAModelCanAct(t *testing.T) {
 	done, finishSecond := startCall(t, records, ceiling, "203.0.113.7", heavyCall("download"))
 	defer finishSecond()
 
-	result := <-done
+	result := awaitResult(t, done)
 	call, ok := result.(*mcp.CallToolResult)
 	if !ok {
 		t.Fatalf("result is %T, want *mcp.CallToolResult", result)
@@ -372,7 +395,7 @@ func TestTheCeilingRefusalCarriesResultTypeAtTheModernRevision(t *testing.T) {
 	done, finishSecond := startCall(t, records, ceiling, "203.0.113.7", modern)
 	defer finishSecond()
 
-	wire, err := json.Marshal(<-done)
+	wire, err := json.Marshal(awaitResult(t, done))
 	if err != nil {
 		t.Fatalf("the refusal does not marshal: %v", err)
 	}
