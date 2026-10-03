@@ -31,7 +31,7 @@ The wheel also carries a small `libgen_mcp` package, so `python -m libgen_mcp` r
 | ------------ | --------------------------------------------------------------------------------------------------- |
 | Python       | 3.9 or newer (`Requires-Python: >=3.9`). The tag is `py3-none`, so any CPython or PyPy of that line |
 | An installer | `uv` (for `uvx` and `uv tool`), `pipx`, or `pip` in a virtual environment                           |
-| A platform   | One of the six above. macOS 11 or newer                                                             |
+| A platform   | One of the six above. macOS 13 or newer                                                             |
 
 ## Install
 

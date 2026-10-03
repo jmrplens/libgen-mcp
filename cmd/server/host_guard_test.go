@@ -57,7 +57,7 @@ const (
 // TestHostGuardPermits is the whole policy in one table.
 //
 // The first case is the live defect this exists for: a reverse proxy forwarding
-// the client's Host over loopback, which is every recipe in the getting-started
+// the client's Host over loopback, which is every recipe in the reverse-proxy
 // guide and the shape the hosted deployment runs in. It was refused, and the two
 // rows after it are the two ways an operator says otherwise.
 func TestHostGuardPermits(t *testing.T) {

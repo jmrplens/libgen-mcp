@@ -166,7 +166,7 @@ Son los logs de diagnóstico del propio servidor, escritos directamente en stder
 
 <Facts>
 	<Fact kind="symptom">
-		Un servidor alojado muestra `search`, `get_details` y `download`, y ningún `read`. Un `tools/call` a `read` lo rechaza el protocolo como herramienta desconocida.
+		Un servidor remoto muestra `search`, `get_details` y `download`, y ningún `read`. Un `tools/call` a `read` lo rechaza el protocolo como herramienta desconocida. (El [endpoint alojado](/libgen-mcp/es/hosted/) público es la excepción: su operador activó `read`.)
 	</Fact>
 	<Fact kind="meaning">
 		Es deliberado, y es el valor por defecto de un despliegue remoto. `read` no puede devolver una sola página sin traerse antes el archivo entero por la conexión del **servidor**, y la IP de salida de un servidor alojado la comparten todos los usuarios a los que sirve: las transferencias de uno solo pueden hacer que esa dirección quede limitada o bloqueada para todos. Por eso `LIBGEN_MCP_SERVER_FETCH` está desactivada por defecto con `--http`, en un socket unix y con `LIBGEN_MCP_REMOTE_DOWNLOADS=1`, y con ella desactivada la herramienta no se registra en absoluto en lugar de aparecer y fallar en cada llamada.
@@ -465,7 +465,7 @@ Valen para un servidor arrancado con `--http`. Todo rechazo en el propio endpoin
 	</Fact>
 	<Fact kind="fixes">
 
-    - Mete los procesos **worker** del proxy en el grupo del socket. En un host, añade el usuario del proxy al grupo y reinicia el proxy. En un contenedor, ejecuta en cambio el servidor con el grupo del proxy (`user: "10001:101"` para las imágenes oficiales de nginx): nginx llama a `initgroups()` al soltar privilegios, así que un `group_add` de Docker se descarta antes de la primera conexión, y el argumento de grupo de su directiva `user` es un nombre, así que `user nginx 10001;` falla con `getgrnam("10001") failed` donde no existe un grupo con ese nombre. Las dos configuraciones están en [Ejecutarlo como servicio](/libgen-mcp/es/deploy/service/#un-socket-unix-con-un-usuario-propio) y [Contenedores](/libgen-mcp/es/deploy/containers/#nginx-delante-con-un-socket-unix-compartido).
+    - Mete los procesos **worker** del proxy en el grupo del socket. En un host, añade el usuario del proxy al grupo y reinicia el proxy. En un contenedor, ejecuta en cambio el servidor con el grupo del proxy (`user: "10001:101"` para las imágenes oficiales de nginx): nginx llama a `initgroups()` al soltar privilegios, así que un `group_add` de Docker se descarta antes de la primera conexión. Las dos configuraciones están en [Ejecutarlo como servicio](/libgen-mcp/es/deploy/service/#un-socket-unix-con-un-usuario-propio) y [Contenedores](/libgen-mcp/es/deploy/containers/#nginx-delante-con-un-socket-unix-compartido), y [Detrás de un proxy inverso](/libgen-mcp/es/deploy/reverse-proxy/#upstream-por-socket-unix) explica por qué la directiva `user` no es el sitio para nombrar el grupo.
     - Comprueba también el directorio del socket. Un directorio `0750` que el proxy no puede atravesar da el mismo `permission denied` sea cual sea el modo del socket.
     - Amplía el modo solo si es imprescindible: `--http-socket-mode 0666` lo hace accesible a todas las cuentas de ese espacio de nombres, lo que solo es razonable cuando el directorio de encima ya está restringido.
     - En Docker, ambos contenedores deben ver el **mismo** directorio — un único bind mount, o un único volumen con nombre montado en los dos. Dos contenedores que escriben cada uno en su propia copia de `/run/mcp` dan un servidor que hace bind sin problemas y un proxy que recibe `No such file or directory`, no `permission denied`.
@@ -967,7 +967,7 @@ Consulta [npm](/libgen-mcp/es/install/npm/).
 ### uvx y pip
 
 - **`uvx: command not found` en un cliente de escritorio.** uv se instala en `~/.local/bin`, que el `PATH` de un cliente de escritorio no incluye. Da la ruta absoluta que imprime `which uvx`.
-- **`No matching distribution found` (pip) o ninguna wheel para la plataforma (uv).** Hay wheels para Linux, macOS 11 o posterior y Windows, en x86-64 y arm64. Un sistema de 32 bits, otro sistema operativo, o un pip demasiado antiguo para leer las etiquetas de plataforma de la wheel no encuentra ninguna: actualiza pip primero.
+- **`No matching distribution found` (pip) o ninguna wheel para la plataforma (uv).** Hay wheels para Linux, macOS 13 o posterior y Windows, en x86-64 y arm64. Un sistema de 32 bits, otro sistema operativo, o un pip demasiado antiguo para leer las etiquetas de plataforma de la wheel no encuentra ninguna: actualiza pip primero.
 - **Alpine y otros sistemas musl.** Las wheels de Linux llevan etiquetas `musllinux` junto a `manylinux`, y el binario no necesita biblioteca de C, así que la misma wheel se instala ahí.
 - **`libgen-mcp binary not found next to …`.** Se ejecutó `python -m libgen_mcp` con un intérprete distinto del que instaló el paquete. Ejecuta `libgen-mcp` directamente, o usa el intérprete correspondiente.
 

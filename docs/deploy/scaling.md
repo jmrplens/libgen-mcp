@@ -245,11 +245,10 @@ failure, not on a timeout after the request was sent.
 
 Replicas behind one balancer must serve the same catalog, or a client sees different tools
 depending on which one it reaches and nothing else reports it. `GET /health` carries
-`config_digest`, twelve hex characters over the settings that decide the served surface: the
-enabled sources, `extra_sources`, `server_fetch`, `remote_downloads`, `enrich`,
-`confirm_downloads`, the base path, statelessness, and the three limits that change what an
-identical call returns. It is order-free where a setting is a set, and it is a fingerprint, not
-a secret. Compare it, and `build`, across the fleet:
+`config_digest`, twelve hex characters over the settings that decide the served surface; which
+settings it covers is in
+[HTTP server mode → The configuration digest](../http-server-mode.md#the-configuration-digest).
+It is a fingerprint, not a secret. Compare it, and `build`, across the fleet:
 
 ```bash
 for replica in 10.0.0.11:8080 10.0.0.12:8080 10.0.0.13:8080; do

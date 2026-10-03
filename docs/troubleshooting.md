@@ -127,8 +127,9 @@ cannot find the file specified`).
 
 ### The client lists three tools, not four (`read` is missing)
 
-**Symptom.** A hosted server shows `search`, `get_details` and `download`, and no `read`. A
-`tools/call` for `read` is refused by the protocol as an unknown tool.
+**Symptom.** A remote server shows `search`, `get_details` and `download`, and no `read`. A
+`tools/call` for `read` is refused by the protocol as an unknown tool. (The public
+[hosted endpoint](hosted.md) is the exception: its operator turned `read` on.)
 
 **Meaning.** This is deliberate, and it is the default for a remote deployment. `read` cannot
 return a single page without first pulling the whole file over the **server's** connection,
@@ -480,11 +481,11 @@ account can talk to the MCP endpoint.
 - Put the proxy's **worker** processes in the socket's group. On a host, add the proxy's user
   to the group and restart the proxy. In a container, run the server with the proxy's group
   instead (`user: "10001:101"` for the official nginx images): nginx calls `initgroups()` when
-  it drops privileges, so a Docker `group_add` is discarded before the first connect, and the
-  group argument of its `user` directive is a name, so `user nginx 10001;` fails with
-  `getgrnam("10001") failed` where no group of that name exists. Both setups are in
-  [Run as a service](deploy/service.md#a-unix-socket-with-a-dedicated-user) and
-  [Containers](deploy/containers.md#nginx-in-front-over-a-shared-unix-socket).
+  it drops privileges, so a Docker `group_add` is discarded before the first connect. Both
+  setups are in [Run as a service](deploy/service.md#a-unix-socket-with-a-dedicated-user) and
+  [Containers](deploy/containers.md#nginx-in-front-over-a-shared-unix-socket), and
+  [Behind a reverse proxy](deploy/reverse-proxy.md#unix-socket-upstream) says why the `user`
+  directive is not the place to name the group.
 - Check the socket's own directory as well. A `0750` directory the proxy cannot traverse
   produces the same `permission denied` no matter what the socket's mode is.
 - Widen the mode only if you must: `--http-socket-mode 0666` makes it reachable by every
@@ -1044,7 +1045,7 @@ See [npm](install/npm.md).
 - **`uvx: command not found` in a desktop client.** uv installs to `~/.local/bin`, which a
   desktop client's `PATH` does not include. Give the absolute path from `which uvx`.
 - **`No matching distribution found` (pip) or no wheel for the platform (uv).** Wheels exist
-  for Linux, macOS 11 or newer and Windows, on x86-64 and arm64. A 32-bit system, another
+  for Linux, macOS 13 or newer and Windows, on x86-64 and arm64. A 32-bit system, another
   operating system, or a pip too old to read the wheel's platform tags finds none: upgrade
   pip first.
 - **Alpine and other musl systems.** The Linux wheels carry `musllinux` tags beside

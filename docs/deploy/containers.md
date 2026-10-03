@@ -207,9 +207,9 @@ The group is the part that is easy to get wrong:
 
 - **Run the server with the proxy's group** (`user: "10001:101"`) rather than putting the proxy
   in the server's. nginx resets its workers' groups from its own `/etc/group` when it drops
-  privileges, so a Compose `group_add` on the proxy is discarded, and the group argument of
-  nginx's `user` directive is a name: `user nginx 10001;` fails with
-  `getgrnam("10001") failed` in an image with no group of that name. With the server in group
+  privileges, so a Compose `group_add` on the proxy is discarded, and its `user` directive
+  takes a group name, not a number
+  ([Behind a reverse proxy](reverse-proxy.md#unix-socket-upstream)). With the server in group
   `101`, nginx needs no change at all. UID `10001` keeps its home, `/home/appuser`, whatever the
   group.
 - **The directory has to be traversable by that group too.** The `socket` volume is a tmpfs

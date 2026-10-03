@@ -118,7 +118,7 @@ Prompts (guided workflows a client can offer by name):
 
 ## Documentation
 
-- [Getting started](https://jmrp.io/docs/libgen-mcp/getting-started/): Installation and first-run guide
+- [Getting started](https://jmrp.io/docs/libgen-mcp/getting-started/): A short tutorial: install the server one way, connect a client, run a first search and read a result
 - [Connect a client](https://jmrp.io/docs/libgen-mcp/clients/): How to register the server in each MCP client, over stdio or over HTTP, with a complete configuration per client
 - [Hosted endpoint](https://jmrp.io/docs/libgen-mcp/hosted/): The public endpoint: how to connect a client to it, what it serves, and what it leaves out compared with a server you run
 - [Installation](https://jmrp.io/docs/libgen-mcp/install/overview/): Every channel the server is published to: what you get, how to install and verify it, how to upgrade it and how to remove it
@@ -162,7 +162,7 @@ Prompts (guided workflows a client can offer by name):
 
 ## Documentación (Español)
 
-- [Primeros pasos](https://jmrp.io/docs/libgen-mcp/es/getting-started/): Guía de instalación y primera ejecución
+- [Primeros pasos](https://jmrp.io/docs/libgen-mcp/es/getting-started/): Un tutorial breve: instalar el servidor de una forma, conectar un cliente, hacer una primera búsqueda y leer un resultado
 - [Conectar un cliente](https://jmrp.io/docs/libgen-mcp/es/clients/): Cómo registrar el servidor en cada cliente MCP, por stdio o por HTTP, con una configuración completa para cada cliente
 - [Endpoint alojado](https://jmrp.io/docs/libgen-mcp/es/hosted/): El endpoint público: cómo conectarle un cliente, qué sirve y qué deja fuera frente a un servidor que ejecutas tú
 - [Instalación](https://jmrp.io/docs/libgen-mcp/es/install/overview/): Todos los canales en los que se publica el servidor: qué obtienes, cómo instalarlo y verificarlo, cómo actualizarlo y cómo quitarlo

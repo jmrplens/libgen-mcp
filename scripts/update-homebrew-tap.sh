@@ -133,8 +133,8 @@ class LibgenMcp < Formula
       It needs no account, API key or token. Configure your MCP client with:
         command: #{HOMEBREW_PREFIX}/bin/libgen-mcp
 
-      Per-client JSON and every setting:
-        https://jmrp.io/docs/libgen-mcp/getting-started/
+      Per-client JSON and where settings go:
+        https://jmrp.io/docs/libgen-mcp/clients/
     EOS
   end
 

@@ -194,7 +194,7 @@ server {
 
 El grupo es la parte en la que es fácil equivocarse:
 
-- **Ejecuta el servidor con el grupo del proxy** (`user: "10001:101"`) en lugar de meter el proxy en el grupo del servidor. nginx reinicia los grupos de sus workers a partir de su propio `/etc/group` al soltar privilegios, así que un `group_add` de Compose en el proxy se descarta, y el argumento de grupo de la directiva `user` de nginx es un nombre: `user nginx 10001;` falla con `getgrnam("10001") failed` en una imagen sin un grupo con ese nombre. Con el servidor en el grupo `101`, nginx no necesita ningún cambio. El UID `10001` conserva su directorio personal, `/home/appuser`, sea cual sea el grupo.
+- **Ejecuta el servidor con el grupo del proxy** (`user: "10001:101"`) en lugar de meter el proxy en el grupo del servidor. nginx reinicia los grupos de sus workers a partir de su propio `/etc/group` al soltar privilegios, así que un `group_add` de Compose en el proxy se descarta, y su directiva `user` recibe un nombre de grupo, no un número ([Detrás de un proxy inverso](/libgen-mcp/es/deploy/reverse-proxy/#upstream-por-socket-unix)). Con el servidor en el grupo `101`, nginx no necesita ningún cambio. El UID `10001` conserva su directorio personal, `/home/appuser`, sea cual sea el grupo.
 - **El directorio también tiene que poder atravesarlo ese grupo.** El volumen `socket` es un tmpfs creado con `0750` y propietario `10001:101`. Un `./run` montado desde el host funciona igual una vez hecho `chown 10001:101` y `chmod 0750`; si se queda con root como propietario, el servidor no puede crear el socket.
 - **`depends_on: service_healthy`** arranca nginx solo cuando el servidor responde a su comprobación de salud, que en un socket significa que el socket existe.
 
