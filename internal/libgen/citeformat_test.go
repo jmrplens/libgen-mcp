@@ -40,14 +40,22 @@ func TestCleanNegotiatedCitation(t *testing.T) {
 			"G. Kucsko et al., “Nanometre-scale thermometry in a living cell,” Nature, vol. 500, no. 7460, pp. 54–58, Jul. 2013, doi: 10.1038/nature12373.",
 		},
 		{"dotted number", "1.Kucsko G. Title. 2013", "Kucsko G. Title. 2013"},
+		{"a leading year in an author-date title stays", "1984. (1949). Secker & Warburg.", "1984. (1949). Secker & Warburg."},
 		{"a real editor stays", "Book, edited by Ann Smith, 2001.", "Book, edited by Ann Smith, 2001."},
 		{"newlines and a bidi override", "A" + string(rune(0x202e)) + " title\n\twith  breaks", "A title with breaks"},
+		{"angle brackets that are not markup", "Effect at p < 0.05 for n > 1. Journal.", "Effect at p < 0.05 for n > 1. Journal."},
+		{"a joiner inside a name stays", "Mohammad" + string(rune(0x200c)) + "zadeh, A. (2020).", "Mohammad" + string(rune(0x200c)) + "zadeh, A. (2020)."},
 		{"an error document", `{"code":"style-not-found"}`, ""},
 		{"empty", "  \n", ""},
 	}
+	numeric := map[string]bool{"bracketed number": true, "dotted number": true}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := cleanNegotiatedCitation(tc.in); got != tc.want {
+			style := "apa"
+			if numeric[tc.name] {
+				style = "ieee"
+			}
+			if got := cleanNegotiatedCitation(style, tc.in); got != tc.want {
 				t.Errorf("got  %q\nwant %q", got, tc.want)
 			}
 		})

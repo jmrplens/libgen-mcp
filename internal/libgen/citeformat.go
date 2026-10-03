@@ -133,18 +133,38 @@ func (c *Client) negotiateStyle(ctx context.Context, doi, style string) string {
 	if err != nil {
 		return ""
 	}
-	return cleanNegotiatedCitation(string(body))
+	return cleanNegotiatedCitation(style, string(body))
 }
 
-// negotiatedMarkup is an HTML tag in a formatted reference. DataCite answers
-// text/x-bibliography with <i> around titles and &amp; for the ampersand,
-// where Crossref answers plain text, so both are reduced to plain text.
-var negotiatedMarkup = regexp.MustCompile(`<[^>]*>`)
+// negotiatedMarkup is the inline formatting markup a registry puts in a
+// formatted reference. DataCite answers text/x-bibliography with <i> around
+// titles and &amp; for the ampersand, where Crossref answers plain text. Only
+// those formatting tags are removed, by name: a bare angle bracket is text,
+// and "p < 0.05 for n > 1" in a title must survive.
+var negotiatedMarkup = regexp.MustCompile(`(?i)</?(i|b|em|strong|sub|sup|sc|span|u)(\s[^<>]*)?>`)
 
 // negotiatedNumberLabel is the citation number a numeric style puts in front
 // of an entry ("[1]", "1."). It counts a position in a reference list this
-// entry is not in, so it is dropped.
+// entry is not in, so it is dropped, and only for the numeric styles: in an
+// author-date style a leading "1984." is the title of a work.
 var negotiatedNumberLabel = regexp.MustCompile(`^(\[\d+\]|\d+\.)\s*`)
+
+// numericStyles are the cite_as styles whose entries open with a number.
+var numericStyles = map[string]bool{"ieee": true, "vancouver": true}
+
+// isBidiControl reports whether r is a bidirectional control: the embeddings,
+// overrides and isolates, and the directional marks. They are what reorder
+// how the text around them is shown. The zero-width joiner and non-joiner are
+// not among them: Persian and Indic names are spelled with those.
+func isBidiControl(r rune) bool {
+	switch {
+	case r >= 0x202A && r <= 0x202E, r >= 0x2066 && r <= 0x2069:
+		return true
+	case r == 0x200E, r == 0x200F, r == 0x061C:
+		return true
+	}
+	return false
+}
 
 // negotiatedEmptyEditor is the editor phrase Crossref's formatter writes for
 // an editor recorded with no name: "Nature, edited by , vol. 500". It is never
@@ -152,23 +172,25 @@ var negotiatedNumberLabel = regexp.MustCompile(`^(\[\d+\]|\d+\.)\s*`)
 var negotiatedEmptyEditor = regexp.MustCompile(`(?i),\s*edited by\s*,`)
 
 // cleanNegotiatedCitation reduces a negotiated reference to one plain line:
-// markup and entities out, whitespace collapsed, control and format characters
-// (a bidirectional override among them) dropped, the
-// citation number and an empty editor phrase removed. An answer that is not a
-// reference (a JSON error document, an HTML page) comes back empty.
-func cleanNegotiatedCitation(s string) string {
+// formatting markup and entities out, whitespace collapsed, control characters
+// and bidirectional controls dropped, a numeric style's citation number and an
+// empty editor phrase removed. An answer that is not a reference (a JSON error
+// document) comes back empty.
+func cleanNegotiatedCitation(style, s string) string {
 	s = negotiatedMarkup.ReplaceAllString(s, "")
 	s = html.UnescapeString(s)
 	s = strings.Join(strings.Fields(s), " ")
 	s = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
+		if unicode.IsControl(r) || isBidiControl(r) {
 			return -1
 		}
 		return r
 	}, s)
-	s = negotiatedNumberLabel.ReplaceAllString(s, "")
+	if numericStyles[style] {
+		s = negotiatedNumberLabel.ReplaceAllString(s, "")
+	}
 	s = negotiatedEmptyEditor.ReplaceAllString(s, ",")
-	if strings.HasPrefix(s, "{") || strings.HasPrefix(s, "[") {
+	if strings.HasPrefix(s, "{") {
 		return ""
 	}
 	return s

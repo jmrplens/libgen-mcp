@@ -697,3 +697,60 @@ func TestBuildCitations_RegistryRecord(t *testing.T) {
 		t.Errorf("provenance = %q", c.Provenance)
 	}
 }
+
+// TestBuildCitations_Container takes an article's journal only from a source
+// that states it for this work: the record's own field, or Crossref once the
+// DOI is confirmed. A mismatched DOI's journal belongs to the other work, and
+// the BibTeX entry is unchanged either way.
+func TestBuildCitations_Container(t *testing.T) {
+	verifier := stubVerifier{byDOI: map[string]libgen.DOICheck{
+		"10.1/ok":  {Verdict: libgen.DOIConfirmed, CrossrefContainer: "Cell"},
+		"10.1/bad": {Verdict: libgen.DOIMismatch, CrossrefTitle: "Other", CrossrefContainer: "Other Journal"},
+	}}
+	tests := []struct {
+		name    string
+		edition map[string]any
+		want    string
+	}{
+		{"confirmed by Crossref", map[string]any{"title": "T", "type": "a", "doi": "10.1/ok"}, "Cell"},
+		{"stated by the record", map[string]any{"title": "T", "type": "a", "doi": "10.1/ok", "container_title": "Cell Reports"}, "Cell Reports"},
+		{"a mismatched DOI", map[string]any{"title": "T", "type": "a", "doi": "10.1/bad"}, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := buildCitations(context.Background(), verifier, "", nil, tc.edition)
+			if c.fields.container != tc.want {
+				t.Errorf("container = %q, want %q", c.fields.container, tc.want)
+			}
+			if strings.Contains(c.BibTeX, "journal") {
+				t.Errorf("the BibTeX entry grew a journal: %s", c.BibTeX)
+			}
+		})
+	}
+}
+
+// TestAttachCitations_EnrichContainer takes the journal from the Crossref
+// work enrichment already fetched, for a DOI that work confirmed.
+func TestAttachCitations_EnrichContainer(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"message":{"title":["Hallmarks of Cancer"],"container-title":["Cell"]}}`))
+	}))
+	t.Cleanup(srv.Close)
+	client, cfg := clientWithCrossref(t, srv.URL)
+	out := DetailsOutput{Edition: map[string]any{"title": "Hallmarks of Cancer", "type": "a", "doi": "10.1016/j.cell.2011.02.013"}}
+	attachCitations(context.Background(), client, cfg, true, &out)
+	if out.Citations.fields.container != "Cell" {
+		t.Errorf("container = %q", out.Citations.fields.container)
+	}
+}
+
+// TestWriteFormattedCitations_Unavailable writes the reason for a style
+// nothing could produce, and no empty block.
+func TestWriteFormattedCitations_Unavailable(t *testing.T) {
+	var b strings.Builder
+	writeFormattedCitations(&b, []FormattedCitation{{Style: "apa", Source: formatSourceUnavailable, Note: "No title."}})
+	md := b.String()
+	if strings.Contains(md, "```") || !strings.Contains(md, "> No title.") || !strings.Contains(md, "apa, unavailable") {
+		t.Errorf("rendered as:\n%s", md)
+	}
+}

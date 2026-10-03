@@ -305,6 +305,11 @@ func writeCitation(b *strings.Builder, c *Citations) {
 func writeFormattedCitations(b *strings.Builder, formatted []FormattedCitation) {
 	for _, fc := range formatted {
 		section := toolutil.NewCard(b, "").Section("Citation (" + formattedHeading(fc) + ")")
+		if fc.Source == formatSourceUnavailable || fc.Text == "" {
+			// No text, so no block to hold it: the reason is what is shown.
+			section.Quote(fc.Note)
+			continue
+		}
 		lang := "text"
 		if fc.Style == libgen.CiteStyleCSLJSON {
 			lang = "json"

@@ -16,39 +16,159 @@ import (
 // does: every part comes from a field the record holds, an absent field drops
 // its part rather than being guessed at, and the DOI is the corroborated one or
 // none. What they add is arrangement — order, punctuation and initials — and
-// nothing a reader could mistake for a fact the record did not state.
+// nothing a reader could mistake for a fact the record did not state. A name
+// they cannot split with confidence is written as the record has it (see
+// citePerson), and an article whose journal is unknown loses its volume and
+// pages rather than printing them with nothing to locate.
 //
 // They are plain text. A style that sets the title in italics is written with
 // the title unmarked, since the text lands in a code block and a JSON string,
 // where markup would be literal characters.
 
-// citePerson is one author split into the parts the styles arrange.
+// citePerson is one author split into the parts the styles arrange, or, when
+// the name could not be split with confidence, kept whole as literal.
+//
+// Splitting a name is a claim about which part is the family name, and every
+// style that inverts or abbreviates a name repeats that claim in print. So a
+// name is split only in the shapes that say which part is which, and anything
+// else is written exactly as the record has it: "World Health Organization",
+// "Martin Luther King Jr." and "Ludwig van Beethoven" stay as they are, rather
+// than becoming "Organization, W. H.", "Jr., M. L. K." or "Beethoven, L. V.".
 type citePerson struct {
 	family, given string
+	literal       string
 }
 
-// parseCitePerson splits a name as the catalog writes it. "Knuth, Donald E."
-// is inverted at the comma, and "Donald E. Knuth" takes its last word as the
-// family name. A one-word name is a family name alone, which is also how an
-// organization is kept whole when it has no spaces to split on.
+// citeNameMaxWords is the most words a "Given Family" name may have and
+// still be split at its last word. Past it, a run of capitalized words is as
+// likely an organization or a compound name as a person.
+const citeNameMaxWords = 3
+
+// parseCitePerson splits a name in the three shapes that say which part is the
+// family name, and keeps any other name whole:
+//
+//   - "Knuth, Donald E." is inverted at its one comma.
+//   - "Knuth D.E." ends in initials, so what precedes them is the family name.
+//   - "Donald E. Knuth", two or three capitalized words with no particle,
+//     suffix or organization word among them, takes its last word as the family
+//     name.
 func parseCitePerson(name string) citePerson {
-	name = strings.TrimSpace(name)
-	if family, given, ok := strings.Cut(name, ","); ok && strings.TrimSpace(given) != "" {
-		return citePerson{family: strings.TrimSpace(family), given: strings.TrimSpace(given)}
+	name = strings.Join(strings.Fields(name), " ")
+	if name == "" {
+		return citePerson{}
+	}
+	if family, given, ok := strings.Cut(name, ","); ok {
+		family, given = strings.TrimSpace(family), strings.TrimSpace(given)
+		// A second comma means a list splitAuthors could not take apart, or a
+		// suffix ("King, Martin Luther, Jr."): neither is one family name.
+		if family == "" || given == "" || strings.Contains(given, ",") || !plainNameWords(strings.Fields(given)) {
+			return citePerson{literal: name}
+		}
+		return citePerson{family: family, given: given}
 	}
 	words := strings.Fields(name)
-	if len(words) < 2 {
-		return citePerson{family: name}
+	if n := trailingInitials(words); n > 0 && n < len(words) {
+		return citePerson{family: strings.Join(words[:len(words)-n], " "), given: strings.Join(words[len(words)-n:], " ")}
+	}
+	if len(words) < 2 || len(words) > citeNameMaxWords || !plainNameWords(words) {
+		return citePerson{literal: name}
 	}
 	return citePerson{family: words[len(words)-1], given: strings.Join(words[:len(words)-1], " ")}
 }
 
-// initials returns the given names as initials, each followed by a period
-// and separated by sep ("D. E." with a space, "D.E." without).
-func (p citePerson) initials(sep string) string {
-	words := strings.Fields(p.given)
-	parts := make([]string, 0, len(words))
+// trailingInitials counts the words at the end of a name that are initials.
+func trailingInitials(words []string) int {
+	n := 0
+	for i := len(words) - 1; i >= 0 && isInitials(words[i]); i-- {
+		n++
+	}
+	return n
+}
+
+// isInitials reports whether w is a run of initials: "D.", "D.E.", "DE" or
+// "D.-P.". Up to four capitals with optional periods and hyphens, and nothing
+// else, so a short capitalized surname such as "Li" is not one.
+func isInitials(w string) bool {
+	letters := 0
+	for _, r := range w {
+		switch {
+		case unicode.IsUpper(r):
+			letters++
+		case r == '.' || r == '-':
+		default:
+			return false
+		}
+	}
+	return letters > 0 && letters <= 4
+}
+
+// nameParticles are the lowercase words that join a family name ("van", "de")
+// and the suffixes that follow one ("Jr."). A name holding one is kept whole:
+// where the particle belongs, and whether the suffix is part of the name, is
+// a convention that differs by language and by style.
+var nameParticles = map[string]bool{
+	"van": true, "von": true, "der": true, "den": true, "de": true, "del": true, "della": true,
+	"di": true, "da": true, "du": true, "le": true, "la": true, "bin": true, "ibn": true,
+	"al": true, "el": true, "ter": true, "ten": true, "dos": true, "das": true, "y": true,
+	"jr": true, "sr": true, "ii": true, "iii": true, "iv": true,
+}
+
+// organizationWords mark a name as an organization's. Both spellings are
+// listed where British and American English differ, because catalog names
+// arrive in either.
+var organizationWords = map[string]bool{
+	"organization": true, "organisation": true, //nolint:misspell // the British spelling is matched on purpose
+	"institute": true, "university": true,
+	"association": true, "society": true, "committee": true, "council": true, "group": true,
+	"consortium": true, "agency": true, "foundation": true, "ministry": true, "department": true,
+	"center": true, "centre": true, //nolint:misspell // the British spelling is matched on purpose
+	"board": true, "office": true, "inc": true, "ltd": true,
+	"team": true, "project": true, "network": true, "collaboration": true, "commission": true,
+	"bureau": true, "service": true, "laboratory": true, "academy": true, "press": true,
+}
+
+// plainNameWords reports whether every word looks like part of a personal
+// name: capitalized, letters with at most periods, hyphens and apostrophes,
+// and neither a particle, a suffix nor an organization word.
+func plainNameWords(words []string) bool {
 	for _, w := range words {
+		key := strings.ToLower(strings.TrimRight(w, "."))
+		if nameParticles[key] || organizationWords[key] || !nameShaped(w) {
+			return false
+		}
+	}
+	return true
+}
+
+// nameShaped reports whether w starts with a capital and holds only letters,
+// periods, hyphens and apostrophes.
+func nameShaped(w string) bool {
+	r := []rune(w)
+	if len(r) == 0 || !unicode.IsUpper(r[0]) {
+		return false
+	}
+	for _, c := range r {
+		if !unicode.IsLetter(c) && !strings.ContainsRune(".-'’", c) {
+			return false
+		}
+	}
+	return true
+}
+
+// initials returns the given names as initials, each followed by a period
+// and separated by sep ("D. E." with a space, "D.E." without). A word that is
+// already initials ("D.E.", "DE") gives each of its letters.
+func (p citePerson) initials(sep string) string {
+	var parts []string
+	for w := range strings.FieldsSeq(p.given) {
+		if isInitials(w) {
+			for _, r := range w {
+				if unicode.IsUpper(r) {
+					parts = append(parts, string(r)+".")
+				}
+			}
+			continue
+		}
 		if r := firstLetter(w); r != 0 {
 			parts = append(parts, string(r)+".")
 		}
@@ -72,25 +192,63 @@ func firstLetter(w string) rune {
 	return 0
 }
 
-// inverted is "Family, Given", or the family name alone.
+// inverted is "Family, Given", the family name alone, or the literal name.
 func (p citePerson) inverted() string {
-	if p.given == "" {
+	switch {
+	case p.literal != "":
+		return p.literal
+	case p.given == "":
 		return p.family
 	}
 	return p.family + ", " + p.given
 }
 
-// natural is "Given Family", or the family name alone.
+// natural is "Given Family", the family name alone, or the literal name.
 func (p citePerson) natural() string {
+	if p.literal != "" {
+		return p.literal
+	}
 	return strings.TrimSpace(p.given + " " + p.family)
 }
 
-// withInitials is "Family, G. G." (sep " ") or "Family, G.G." (sep "").
+// withInitials is "Family, G. G." (sep " ") or "Family, G.G." (sep ""), or the
+// literal name.
 func (p citePerson) withInitials(sep string) string {
+	if p.literal != "" {
+		return p.literal
+	}
 	if ini := p.initials(sep); ini != "" {
 		return p.family + ", " + ini
 	}
 	return p.family
+}
+
+// vancouver is "Family GG", or the literal name.
+func (p citePerson) vancouver() string {
+	if p.literal != "" {
+		return p.literal
+	}
+	return strings.TrimSpace(p.family + " " + p.bareInitials())
+}
+
+// initialsFirst is "G. G. Family", the IEEE form, or the literal name.
+func (p citePerson) initialsFirst() string {
+	if p.literal != "" {
+		return p.literal
+	}
+	return strings.TrimSpace(p.initials(" ") + " " + p.family)
+}
+
+// csl is the person as a CSL name: family and given, or a literal.
+func (p citePerson) csl() map[string]any {
+	if p.literal != "" {
+		return map[string]any{"literal": p.literal}
+	}
+	name := map[string]any{"family": p.family}
+	if p.given != "" {
+		name["given"] = p.given
+	}
+	return name
 }
 
 // citePeople parses a record's author field into people, in order.
@@ -98,7 +256,7 @@ func citePeople(author string) []citePerson {
 	names := splitAuthors(author)
 	out := make([]citePerson, 0, len(names))
 	for _, n := range names {
-		if p := parseCitePerson(n); p.family != "" {
+		if p := parseCitePerson(n); p.family != "" || p.literal != "" {
 			out = append(out, p)
 		}
 	}
@@ -223,6 +381,12 @@ func placePublisher(f citeFields) string {
 // formatLocal renders one style from a record's fields, "" for a style it
 // does not know.
 func formatLocal(style string, f citeFields) string {
+	// A volume, an issue and pages locate an article only inside a journal.
+	// Without the journal's name they are numbers pointing nowhere, so they
+	// are left out rather than printed orphaned.
+	if f.isArticle && f.container == "" {
+		f.volume, f.number, f.startPg, f.endPg = "", "", "", ""
+	}
 	switch style {
 	case "apa":
 		return localAPA(f)
@@ -262,7 +426,7 @@ func localAPA(f citeFields) string {
 	}
 	var tail string
 	if f.isArticle {
-		tail = joinNonEmpty(", ", volumeIssue(f), articlePages(f))
+		tail = joinNonEmpty(", ", f.container, volumeIssue(f), articlePages(f))
 	} else {
 		tail = f.publisher
 	}
@@ -299,7 +463,7 @@ func localMLA(f citeFields) string {
 			pp = "pp. " + p
 		}
 		return joinNonEmpty(" ", sentence(head), "\""+sentence(f.title)+"\"",
-			sentence(joinNonEmpty(", ", vol, no, f.year, pp)), sentence(doiURL(f.doi)))
+			sentence(joinNonEmpty(", ", f.container, vol, no, f.year, pp)), sentence(doiURL(f.doi)))
 	}
 	return joinNonEmpty(" ", sentence(head), sentence(f.title),
 		sentence(joinNonEmpty(", ", editionText(f.edition), f.publisher, f.year)), sentence(doiURL(f.doi)))
@@ -324,7 +488,7 @@ func chicagoNames(people []citePerson) string {
 func localChicago(f citeFields) string {
 	head := chicagoNames(citePeople(f.author))
 	if f.isArticle {
-		vol := f.volume
+		vol := joinNonEmpty(" ", f.container, f.volume)
 		if f.number != "" {
 			vol = joinNonEmpty(" ", vol, "("+f.number+")")
 		}
@@ -349,7 +513,7 @@ func localHarvard(f citeFields) string {
 	head := joinNonEmpty(", ", strings.Join(names, ", "), f.year)
 	if f.isArticle {
 		return joinNonEmpty(" ", sentence(head), sentence(f.title),
-			sentence(joinNonEmpty(", ", f.volume, articlePages(f))), doiURL(f.doi))
+			sentence(joinNonEmpty(" ", f.container, joinNonEmpty(", ", f.volume, articlePages(f)))), doiURL(f.doi))
 	}
 	return joinNonEmpty(" ", sentence(head), sentence(f.title), sentence(editionText(f.edition)),
 		sentence(joinNonEmpty(", ", f.publisher, f.address)), doiURL(f.doi))
@@ -369,7 +533,7 @@ func localVancouver(f citeFields) string {
 			names = append(names, "et al")
 			break
 		}
-		names = append(names, strings.TrimSpace(p.family+" "+p.bareInitials()))
+		names = append(names, p.vancouver())
 	}
 	head := strings.Join(names, ", ")
 	if f.isArticle {
@@ -380,7 +544,7 @@ func localVancouver(f citeFields) string {
 		if p := articlePages(f); p != "" {
 			ref += ":" + p
 		}
-		return joinNonEmpty(" ", sentence(head), sentence(f.title), sentence(ref), doiURL(f.doi))
+		return joinNonEmpty(" ", sentence(head), sentence(f.title), sentence(f.container), sentence(ref), doiURL(f.doi))
 	}
 	return joinNonEmpty(" ", sentence(head), sentence(f.title), sentence(editionText(f.edition)),
 		sentence(joinNonEmpty("; ", placePublisher(f), f.year)), doiURL(f.doi))
@@ -392,7 +556,7 @@ func localIEEE(f citeFields) string {
 	people := citePeople(f.author)
 	names := make([]string, len(people))
 	for i, p := range people {
-		names[i] = strings.TrimSpace(p.initials(" ") + " " + p.family)
+		names[i] = p.initialsFirst()
 	}
 	head := joinSerial(names, ", ", serialAnd, " and ")
 	if f.isArticle {
@@ -410,7 +574,7 @@ func localIEEE(f citeFields) string {
 			doi = "doi: " + f.doi
 		}
 		quoted := "\"" + f.title + ",\""
-		return sentence(joinNonEmpty(" ", joinNonEmpty(", ", head, quoted), joinNonEmpty(", ", vol, no, pp, f.year, doi)))
+		return sentence(joinNonEmpty(" ", joinNonEmpty(", ", head, quoted), joinNonEmpty(", ", f.container, vol, no, pp, f.year, doi)))
 	}
 	return joinNonEmpty(" ", sentence(joinNonEmpty(", ", head, f.title, editionText(f.edition))),
 		sentence(joinNonEmpty(", ", placePublisher(f), f.year)))
@@ -427,11 +591,7 @@ func localCSL(f citeFields) string {
 	if len(people) > 0 {
 		authors := make([]any, len(people))
 		for i, p := range people {
-			name := map[string]any{"family": p.family}
-			if p.given != "" {
-				name["given"] = p.given
-			}
-			authors[i] = name
+			authors[i] = p.csl()
 		}
 		item["author"] = authors
 	}
@@ -443,6 +603,7 @@ func localCSL(f citeFields) string {
 	for key, value := range map[string]string{
 		"publisher": f.publisher, "publisher-place": f.address, "edition": f.edition,
 		"volume": f.volume, "issue": f.number, "page": articlePages(f), "DOI": f.doi,
+		"container-title": f.container,
 	} {
 		if value != "" {
 			item[key] = value
