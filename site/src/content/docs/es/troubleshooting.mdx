@@ -1,6 +1,6 @@
 ---
 title: Solución de problemas
-description: Soluciones para mirrors inalcanzables, descargas fallidas, artículos no encontrados, búsquedas truncadas y errores de espacio en disco.
+description: "Soluciones por síntoma: un cliente que no ve el servidor, un arranque rechazado, cada código HTTP, proxies, búsquedas lentas, descargas fallidas, rechazos de read, telemetría y cada canal de instalación."
 chips:
   - text: "Síntoma, significado, soluciones"
   - text: "Mensajes de error literales"
@@ -26,7 +26,7 @@ head:
             "name": "¿Por qué dice que todos los mirrors están inaccesibles?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "El error all libgen mirrors unreachable (network block? try a VPN or different DNS) significa que al menos un mirror falló de forma transitoria (error de red, timeout, HTTP 5xx o 429) en cada pasada de reintento — un problema de conectividad genuino, no un recurso ausente. Comprueba la conectividad y la resolución DNS a la familia libgen.li (algunos ISPs las bloquean; prueba una VPN o un resolutor como 1.1.1.1), si el propio descubrimiento está bloqueado, fija un mirror alcanzable con LIBGEN_MIRROR=https://libgen.li, o aumenta LIBGEN_MCP_TIMEOUT y LIBGEN_MCP_RETRY_ATTEMPTS. Los mirrors que fallan entran en un enfriamiento de 45 segundos y el servidor hace failover automáticamente cuando uno se recupera."
+              "text": "El error all libgen mirrors unreachable (network block? try a VPN or different DNS) significa que al menos un mirror falló de forma transitoria — un error de red, un timeout, un HTTP 5xx o un 429 — en cada pasada de reintento, lo que es un problema de conectividad genuino y no un recurso ausente. Comprueba la conectividad y el DNS hacia la familia libgen.li; algunos ISPs bloquean estos dominios, así que una VPN o un resolutor distinto como 1.1.1.1 suele ayudar. Si el propio descubrimiento está bloqueado, fija un mirror alcanzable con LIBGEN_MIRROR=https://libgen.li. También puedes subir LIBGEN_MCP_TIMEOUT y LIBGEN_MCP_RETRY_ATTEMPTS en enlaces lentos. Los mirrors que fallan entran en un enfriamiento de 45 segundos y el servidor conmuta automáticamente en cuanto uno se recupera."
             }
           },
           {
@@ -34,7 +34,7 @@ head:
             "name": "¿Por qué falló la verificación MD5 de mi descarga?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "En las descargas de libros (por md5), libgen-mcp calcula el hash del archivo descargado entero y lo compara con el MD5 solicitado. Una discrepancia (integrity check failed: MD5 mismatch) significa que los bytes descargados no coincidieron con el md5 solicitado — una transferencia corrupta o manipulada, o un mirror obsoleto. El archivo parcial se elimina automáticamente, así que basta con reintentar; si persiste en un mirror, la reserva randombook probará mirrors recién descubiertos. Ten en cuenta que solo las descargas de libros (por md5) se verifican por MD5; las descargas por DOI no llevan digest de LibGen y su campo verified es false."
+              "text": "En las descargas de libros (por md5), libgen-mcp calcula el hash del archivo descargado entero y lo compara con el MD5 solicitado. Un integrity check failed: MD5 mismatch significa que los bytes no coincidieron — normalmente una transferencia corrupta o manipulada, o un mirror obsoleto. El archivo parcial se elimina automáticamente, así que basta con reintentar; si persiste en un mirror, la reserva randombook prueba mirrors recién descubiertos. Las descargas por DOI (artículos) no se verifican por MD5, porque no hay digest de LibGen para ellas."
             }
           },
           {
@@ -42,7 +42,7 @@ head:
             "name": "¿Por qué faltan algunos artículos en los resultados?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Un artículo falta cuando ninguna de las diecisiete fuentes por DOI tiene una copia servible. La cadena las prueba por orden, primero los proveedores legales de acceso abierto. unpaywall devuelve un PDF solo cuando el artículo es genuinamente de acceso abierto (y solo cuando LIBGEN_MCP_UNPAYWALL_EMAIL está fijado); un DOI de pago, o uno sin enlace a PDF, da no open-access PDF y la cadena avanza. Luego se prueban openalex (el mismo índice de acceso abierto, sin clave — el único resolvedor de acceso abierto sin restricción de prefijo que conserva un despliegue que no configura nada), europepmc (texto completo de Europe PMC), biorxiv (preprints 10.1101), rfc (RFC 10.17487), nist (publicaciones del NIST 10.6028), dagstuhl (actas 10.4230 de Dagstuhl), acl (artículos 10.18653/10.3115 de la ACL Anthology), zenodo (depósitos 10.5281/zenodo), scielo (artículos 10.1590 de SciELO Brasil), fao (documentos 10.4060 del FAO Knowledge Repository), fatcat (Internet Archive Scholar), core (una clave de API gratuita de CORE, cuando LIBGEN_MCP_CORE_KEY está fijado); luego crossref — que no es un índice de acceso abierto, sino el enlace a texto completo que depositó la propia editorial, comprobado antes de usarlo — y oapen (las monografías también llevan DOI); finalmente las reservas de shadow libraries: scihub prueba cada host configurado hasta que uno sirve una página de artículo con un PDF extraíble, y scidb (el visor SciDB de Anna's Archive) se prueba en último lugar. Confirma que el DOI es exactamente correcto, fija tu propio LIBGEN_MCP_UNPAYWALL_EMAIL, y actualiza LIBGEN_MCP_SCIHUB_HOSTS con hosts que funcionen ahora si todos los de por defecto fallan, porque los mirrors de Sci-Hub rotan y caen a menudo."
+              "text": "Los artículos se obtienen por DOI a través de una cadena de fuentes, primero los proveedores legales de acceso abierto: unpaywall (cuando LIBGEN_MCP_UNPAYWALL_EMAIL está fijado), openalex y europepmc, después las fuentes directas de editor que sirven cada una un prefijo DOI, luego las copias preservadas (fatcat, y core cuando LIBGEN_MCP_CORE_KEY está fijado), el enlace que el editor depositó en crossref, y oapen para monografías. Las reservas de shadow libraries van al final: scihub y después scidb. Un DOI de pago sin copia en ningún punto de esa cadena no se puede descargar. Confirma que el DOI es exactamente correcto, fija tu propio LIBGEN_MCP_UNPAYWALL_EMAIL y actualiza LIBGEN_MCP_SCIHUB_HOSTS con hosts que funcionen si fallan todos los predeterminados, porque los mirrors de Sci-Hub rotan y caen a menudo."
             }
           },
           {
@@ -50,7 +50,7 @@ head:
             "name": "¿Dónde guarda libgen-mcp los archivos descargados?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Las descargas van al directorio que fija LIBGEN_MCP_DOWNLOAD_DIR, por defecto ~/Downloads. El argumento path de la herramienta download lo sustituye en cada llamada; el campo path del resultado devuelve la ruta absoluta del archivo guardado. El directorio se crea si no existe y se comprueba al arrancar que se puede escribir en él, y antes de empezar a transferir el servidor verifica que hay espacio libre suficiente (el archivo más un margen de unos 8 MiB). Las descargas interrumpidas dejan un archivo .part (con nombre .libgen-mcp-*.part) en ese directorio, que se reanuda en la siguiente llamada. Bajo Docker el contenedor corre con el UID 10001, así que el volumen de descargas montado debe ser escribible por ese usuario. Eso aplica a un servidor local stdio/Docker. Un servidor remoto/alojado (iniciado con --http) no puede escribir en disco en absoluto, así que nunca guarda ningún archivo: download devuelve siempre un enlace (un resource_link más un objeto resolved) en lugar de guardar el archivo — resolve_only queda implícito y no hace falta indicarlo. Un servidor stdio alojado —por ejemplo detrás de mcp-proxy en un catálogo como Glama— está en la misma situación remota/efímera aunque no tenga un listener HTTP; fija LIBGEN_MCP_REMOTE_DOWNLOADS=1 en él para que sus descargas también vuelvan como enlaces. Consulta Herramientas para más detalle."
+              "text": "Las descargas van al directorio que fija LIBGEN_MCP_DOWNLOAD_DIR, por defecto ~/Downloads. El argumento path de la herramienta download lo sustituye en cada llamada. El directorio se crea si no existe y se comprueba al arrancar que se puede escribir en él, y antes de transferir el servidor verifica que hay espacio libre suficiente (el archivo más un margen de ~8 MiB). Las descargas interrumpidas dejan un archivo .part llamado .libgen-mcp-*.part en ese directorio para que una llamada posterior pueda reanudarla. En Docker el contenedor corre como UID 10001, así que el volumen de descargas montado tiene que poder escribirlo ese usuario. Eso vale para un servidor local por stdio o Docker. Un servidor remoto o alojado (arrancado con --http) no puede escribir en disco, así que ningún archivo acaba en él: download devuelve automáticamente un enlace (un resource_link más un objeto resolved) en lugar de guardar un archivo — resolve_only va implícito y no hace falta fijarlo. Un servidor stdio alojado — por ejemplo detrás de mcp-proxy en un catálogo como Glama — está en la misma situación remota y efímera aunque no tenga listener HTTP; fija LIBGEN_MCP_REMOTE_DOWNLOADS=1 en él para que sus descargas también vuelvan como enlaces."
             }
           }
         ]
@@ -61,169 +61,45 @@ datePublished: "2026-07-19"
 import Facts from "../../../components/docs/Facts.astro";
 import Fact from "../../../components/docs/Fact.astro";
 
-Los cuatro fallos que es más probable que encuentres con `libgen-mcp` son mirrors de Library Genesis inalcanzables, una discrepancia de MD5 al descargar un libro, un DOI sin copia de acceso abierto en toda la cadena, y un ISBN que solo coincide con escaneos del Internet Archive restringidos a préstamo. Todos los errores llevan un mensaje explicativo, y `LIBGEN_MCP_LOG_LEVEL=debug` traza cada intento de mirror, cada enfriamiento y cada conmutación (ver [más abajo](#subir-el-nivel-de-log)).
+Las entradas siguientes se agrupan por el sitio donde aparece el síntoma: en el cliente, al arrancar, en la red, detrás de un proxy, en una búsqueda, en una descarga, en `read`, en un colector o durante una instalación. Cada una cita lo que ves, explica qué significa aquí, dice qué hacer y enlaza la página que explica el mecanismo. Todo mensaje entre comillas invertidas es texto literal del servidor, así que buscarlo en el log funciona.
 
-## Todos los mirrors inalcanzables
+Tres comprobaciones resuelven la mayoría de dudas antes que cualquier entrada:
 
-<Facts>
-	<Fact kind="symptom">
-		Las búsquedas y descargas fallan con `all libgen mirrors unreachable (network block? try a VPN or different DNS)`.
-	</Fact>
-	<Fact kind="meaning">
-		Al menos un mirror falló de forma transitoria (error de red, timeout, HTTP 5xx o 429) en cada pasada de reintento — un problema de conectividad genuino, no un recurso ausente.
-	</Fact>
-	<Fact kind="fixes">
+- **Lee el log del servidor.** Va a **stderr**, nunca a stdout, y todo arranque rechazado termina con un registro `ERROR` que nombra el problema. Dónde lo guarda cada cliente está en [Subir el nivel de log](#subir-el-nivel-de-log).
+- **Ejecuta la orden del cliente en un terminal.** Copia `command` y `args` de la configuración del cliente y ejecútalos. Un servidor stdio que funciona se queda esperando entrada e imprime una nota que lo dice. Un error ahí es del servidor; si no hay error, el fallo está en la configuración del cliente.
+- **Comprueba la versión.** `libgen-mcp --version` imprime la build. Varias entradas dependen de ella.
 
-    	- Comprueba la conectividad básica y la resolución DNS a la familia `libgen.li`. Algunos ISPs y redes bloquean estos dominios; una VPN o un resolutor alternativo (p. ej. `1.1.1.1`) suele ayudar.
-    	- Si el propio descubrimiento está bloqueado, fija un mirror que puedas alcanzar con `LIBGEN_MIRROR=https://libgen.li` (u otro host vivo) para saltarte el autodescubrimiento.
-    	- Aumenta `LIBGEN_MCP_TIMEOUT` (p. ej. `45s` o `1m`) y/o `LIBGEN_MCP_RETRY_ATTEMPTS` en enlaces lentos.
-    	- Los mirrors que fallan entran en un enfriamiento de 45 segundos; espera un momento y reintenta — el servidor hace failover automáticamente una vez que un mirror se recupera.
+## Índice rápido
 
-    	Un error relacionado pero distinto, `request rejected by all mirrors`, significa que todos los mirrors devolvieron un error _permanente_ (p. ej. 404/403). Eso es un "no encontrado / rechazado" normal, no un problema de red — vuelve a revisar la consulta o el identificador en lugar de tu conexión.
-    </Fact>
-
-</Facts>
-
-## Descarga fallida / discrepancia de MD5
-
-<Facts>
-	<Fact kind="symptom">
-		`download` devuelve un error, o `integrity check failed: MD5 mismatch`.
-	</Fact>
-	<Fact label="Significado y soluciones">
-
-    	- **Discrepancia de MD5** — los bytes descargados no coincidieron con el `md5` solicitado (transferencia corrupta o manipulada, o un mirror obsoleto). El archivo parcial se elimina automáticamente; basta con reintentar. Si persiste en un mirror, la reserva `randombook` probará mirrors recién descubiertos.
-    	- **"mirror returned an HTML page instead of the file"** — la clave de descarga expiró o el mirror sirvió una página de error/desafío. Reintenta; la canalización resuelve una clave fresca cada vez y hace failover a la siguiente fuente.
-    	- **"download exceeds the configured size limit"** — el archivo es mayor que `LIBGEN_MCP_MAX_DOWNLOAD_BYTES`. Sube el límite (hasta 50 GiB) o ponlo en `0` para desactivarlo.
-    	- **"truncated download"** — la conexión se cortó a mitad del flujo. El archivo `.part` se conserva, así que volver a ejecutar `download` reanuda desde donde se detuvo (el campo `resumed` del resultado informa `true` cuando lo hace).
-    	- **Todas las fuentes fallaron** — la herramienta devuelve los errores por fuente unidos, una línea por cada fuente que probó. Léelos para ver si el elemento simplemente no se encontró o si todos los proveedores estaban inalcanzables.
-    </Fact>
-
-</Facts>
-
-## Artículo no encontrado (acceso abierto vs Sci-Hub)
-
-<Facts>
-	<Fact kind="symptom">
-		Un `download` con un `doi` falla, o no devuelve nada útil.
-	</Fact>
-	<Fact kind="meaning">
-		Los artículos se obtienen por DOI a través de varias fuentes por orden — primero los proveedores legales de acceso abierto, luego `crossref` (el enlace que depositó la propia editorial, que no es un índice de acceso abierto), luego las reservas de shadow libraries:
-
-    	1. **`unpaywall`** — devuelve un PDF solo cuando el artículo es genuinamente de acceso abierto. Un DOI de pago, o uno sin enlace a PDF, produce `no open-access PDF for "<doi>"` y la cadena avanza. (Forma parte de la cadena cuando `LIBGEN_MCP_UNPAYWALL_EMAIL` está fijado; si no, a un cliente con capacidad de elicitación se le pide un correo de contacto puntual, y rechazarlo simplemente pasa al siguiente proveedor.)
-    	2. **`openalex`** — el mismo índice de acceso abierto que lee Unpaywall, pero la consulta que usa es gratuita y no necesita credencial, así que es el único resolvedor de acceso abierto sin restricción de prefijo presente en un despliegue que no configura nada. Solo sirve un enlace directo a PDF; un registro cuyas ubicaciones no expongan ninguno reporta un fallo limpio en vez de entregar una página de destino.
-    	3. **`europepmc`** — sirve el PDF cuando Europe PMC conserva el texto completo de acceso abierto del artículo; distingue si el DOI simplemente no está indexado o está indexado sin texto completo OA.
-    	4. **`biorxiv`** — solo para DOI de preprints `10.1101`; devuelve el PDF de texto completo de la última versión desde bioRxiv o medRxiv.
-    	5. **`rfc`** — solo para DOI de RFC `10.17487`; construye la URL de texto plano del RFC Editor a partir del número de RFC, sin consulta propia.
-    	6. **`nist`** — solo para DOI `10.6028`; los entrega al resolutor de DOI, cuya redirección termina en el PDF del repositorio del NIST.
-    	7. **`dagstuhl`** — solo para DOI `10.4230`; obtiene la página del documento en el servidor DROPS de Schloss Dagstuhl y toma el PDF que anuncia. Cubre LIPIcs, OASIcs, DARTS y los Dagstuhl Reports. Ninguna otra fuente de la cadena los alcanza: Dagstuhl registra en DataCite, así que Crossref — y por tanto Unpaywall — no tiene registro alguno de ellos.
-    	8. **`acl`** — solo para DOI `10.18653`/`10.3115` con segmento `/v1/`; construye la URL del PDF en la ACL Anthology a partir del identificador que el DOI ya contiene, sin consulta propia. Un DOI numérico `10.3115` anterior a 2014 no lleva identificador de la Anthology y se rechaza.
-    	9. **`zenodo`** — solo para DOI `10.5281/zenodo.<id>`; lista los ficheros del registro y sirve el mejor (un PDF, EPUB o fichero de texto si el registro tiene alguno, y si no su fichero más grande). Un registro restringido y un depósito solo de metadatos informan ambos de una ausencia limpia.
-    	10. **`scielo`** — solo para DOI `10.1590`; sigue el DOI hasta su página de artículo en scielo.br y toma el PDF que esa página anuncia. Los artículos recientes de SciELO son los que el resto de la cadena no alcanza: Unpaywall los marca como de acceso abierto sin aportar enlace al PDF, e Internet Archive Scholar todavía no los ha ingerido.
-    	11. **`fao`** — solo para DOI `10.4060`; deriva la página del ítem en el FAO Knowledge Repository a partir del propio sufijo del DOI, que es también el handle del ítem. La FAO no deposita ninguna ubicación de acceso abierto en Crossref, así que Unpaywall informa de sus documentos como cerrados por muy abiertas que sean sus licencias, y ninguna otra fuente de la cadena los tiene.
-    	12. **`fatcat`** — devuelve una copia preservada en Internet Archive cuando la página del release en Scholar anuncia una que sigue sirviendo un PDF; distingue un DOI que el catálogo no tiene, un release sin nada preservado y un release cuyas capturas preservadas han dejado de servir.
-    	13. **`core`** — solo forma parte de la cadena cuando `LIBGEN_MCP_CORE_KEY` está fijado; devuelve la URL de descarga de acceso abierto de CORE cuando CORE aloja una copia viva.
-    	14. **`crossref`** — obtiene el enlace a texto completo que la propia editorial depositó en Crossref, para cualquier DOI. Cada candidato se comprueba antes de devolverlo, porque un enlace depositado es un acuerdo de sindicación y no un derecho de lectura: las grandes editoriales comerciales responden 403 a un cliente anónimo diga lo que diga el enlace. Cuando todos lo rechazan, el error lo dice y señala el navegador como la vía que queda.
-    	15. **`oapen`** — para el DOI de una monografía, devuelve el libro de acceso abierto que OAPEN aloja bajo él. La mayoría de los DOI de revistas simplemente no están en su catálogo, así que normalmente informa de una ausencia limpia y la cadena avanza.
-    	16. **`scihub`** — prueba cada host configurado (`LIBGEN_MCP_SCIHUB_HOSTS`) hasta que uno sirve una página de artículo con un PDF extraíble.
-    	17. **`scidb`** — el visor SciDB de Anna's Archive, probado en último lugar cuando Sci-Hub no devuelve nada; cubre artículos publicados tras el cese de indexación de Sci-Hub.
-    </Fact>
-    <Fact kind="fixes">
-
-
-    	- Confirma que el DOI es correcto (cópialo exactamente del resultado de búsqueda del artículo).
-    	- Si fallaron todos los proveedores de acceso abierto, es probable que el artículo no sea de acceso abierto; Sci-Hub y luego SciDB son las reservas.
-    	- Los mirrors de Sci-Hub rotan y caen a menudo. Actualiza `LIBGEN_MCP_SCIHUB_HOSTS` con una lista de hosts que funcione actualmente si todos los por defecto fallan.
-    	- Fija tu propio `LIBGEN_MCP_UNPAYWALL_EMAIL` — hasta que lo hagas, Unpaywall está desactivada (las demás fuentes de acceso abierto y Sci-Hub se siguen probando). La API espera una dirección de contacto real.
-    	- Fija `LIBGEN_MCP_CORE_KEY` (una clave de API gratuita de CORE) para añadir CORE a la cadena de acceso abierto.
-    	- Ten en cuenta que las descargas por DOI **no** se verifican por MD5 (`verified` es `false`) — no hay digest de LibGen para ellas.
-    </Fact>
-
-</Facts>
-
-## Libro no encontrado por ISBN (solo acceso abierto)
-
-<Facts>
-	<Fact kind="symptom">
-		Una `download` con `isbn` falla con algo como `no catalog entry states "9780141439518"` o `no freely downloadable scan ... (every candidate is lending-restricted or holds no book file)`.
-	</Fact>
-	<Fact kind="meaning">
-		La vía `isbn` llega solo a las dos fuentes de libros de **acceso abierto** — `oapen` y `archive` — y ninguna sirve un libro que no puede redistribuir:
-
-    	- `oapen` aloja monografías académicas con licencia abierta. Comprueba que el registro encontrado declara realmente el ISBN (o DOI) pedido antes de servir nada, porque su búsqueda es de texto libre y de lo contrario devolvería una monografía ajena. Un libro comercial sencillamente no está ahí.
-    	- `archive` sirve un escaneo de Internet Archive solo cuando OpenLibrary informa del libro como `ebook_access: public` **y** el escaneo concreto no lleva la marca `access-restricted-item` ni está en una colección de préstamo. Un libro que en el Archive solo se presta se informa como ausencia en lugar de descargarse, porque los ficheros de un elemento en préstamo o rechazan la petición o llegan con DRM e inservibles.
-    </Fact>
-    <Fact kind="fixes">
-
-
-    	- Para un libro con derechos vigentes, usa la vía `md5`: busca en el catálogo y descarga por el `md5` del resultado.
-    	- Revisa el propio ISBN — una errata, o el ISBN de otra edición, es la causa habitual. Funcionan tanto la forma de 10 como la de 13 caracteres, con o sin guiones.
-    	- Si el libro es un clásico de dominio público, busca de nuevo y localiza un resultado `gutenberg` en `open_access`: su `full_text_url` es el propio fichero del ebook.
-    </Fact>
-
-</Facts>
-
-## Falta una fuente en los errores de una descarga repetida
-
-<Facts>
-	<Fact kind="symptom">
-		Una `download` falla y un segundo intento informa de menos fuentes que el primero — una que falló hace un momento no aparece en absoluto.
-	</Fact>
-	<Fact kind="meaning">
-		Esa fuente está en **enfriamiento**. Cuando una fuente falla porque no está disponible (un error de transporte, un timeout, un 5xx o un 429) se aparta durante 5 minutos, de modo que la siguiente descarga no gaste su presupuesto de resolución en un proveedor que acaba de demostrar ser inalcanzable. Se omite, no se elimina: el enfriamiento expira por sí solo, no se escribe nada en disco (un reinicio lo borra) y cuando todas las fuentes capaces de servir el elemento están en enfriamiento se prueban todas igualmente. Una fuente que solo informó de que no tiene el elemento nunca se aparta.
-
-    	El log del servidor dice qué fuentes se omitieron y por qué — `source in cooldown, skipping` con el instante en que vuelve a ser elegible, o `every capable source is in cooldown, trying them anyway`. Ejecuta con `LIBGEN_MCP_LOG_LEVEL=info` (el valor por defecto) para verlas.
-    </Fact>
-    <Fact kind="fixes">
-
-
-    	- No hace falta nada: reintenta más tarde, o de inmediato con `source: "<nombre>"` para dirigirte a ese proveedor directamente — una fuente explícita siempre se prueba, esté en enfriamiento o no.
-    	- Si una fuente entra en enfriamiento repetidamente, es realmente inalcanzable desde este host. Compruébalo a mano antes de sospechar del servidor.
-    </Fact>
-
-</Facts>
-
-## Resultados de búsqueda truncados
-
-<Facts>
-	<Fact kind="symptom">
-		Una respuesta de búsqueda tiene `truncated: true` y un `hint`, y paginar más allá de cierto punto no devuelve nada.
-	</Fact>
-	<Fact kind="meaning">
-		El mirror informa más coincidencias (`total_files`) de las que servirá realmente a través de las páginas (`reachable`). Las páginas más allá de `reachable` están vacías.
-	</Fact>
-	<Fact kind="fixes">
-		Refina en lugar de paginar más profundo, como sugiere el `hint`:
-
-    	- Añade términos distintivos (autor, año).
-    	- Restringe los campos con `search_in` (p. ej. `["title"]`).
-    	- Acota `topics` a la(s) colección(es) relevante(s).
-
-    	Consulta [Herramientas](/libgen-mcp/es/tools/#paginación-y-truncado) para los campos exactos.
-    </Fact>
-
-</Facts>
-
-## Un resultado que no se descarga (`origin: "annas"`)
-
-<Facts>
-	<Fact kind="symptom">
-		Una búsqueda devolvió un resultado etiquetado `origin: "annas"`, pero `download` falla con su md5 y da un error sobre la ausencia de CID de IPFS o de una pasarela que lo sirva.
-	</Fact>
-	<Fact kind="meaning">
-		Ese resultado vino de [una búsqueda escalada](/libgen-mcp/es/how-search-works/): el catálogo de Library Genesis no tiene el archivo, así que la única vía es Anna's Archive. La ruta sin clave lee la dirección IPFS del ítem en la página de Anna's — y **la mayoría de registros de Anna's no publica ninguna dirección IPFS**. Cuando no la hay, no hay nada que descargar sin clave, y esto es lo esperable, no un fallo.
-	</Fact>
-	<Fact kind="fixes">
-		Por orden de esfuerzo:
-
-    	- Poner en `LIBGEN_MCP_ANNAS_KEY` una clave de membresía de Anna's Archive. La API de descarga rápida de socio sirve ítems sin dirección IPFS, y la ruta IPFS sin clave se mantiene como respaldo. Ver [Configuración](/libgen-mcp/es/configuration/).
-    	- Buscar de nuevo con otros términos; otra edición de la misma obra puede estar en el catálogo, y esa sí se descarga por las fuentes ordinarias.
-    	- Llamar igualmente a `get_details` con ese md5. Recurre al registro de Anna's, así que obtienes título, autor, año e idioma — más el ISBN cuando ese registro lo lleva, que es una minoría — aunque los bytes queden fuera de alcance — suficiente para localizar el ítem en otro sitio.
-
-    	Una pasarela que solo va lenta devuelve un timeout en su lugar; reintentar más tarde suele funcionar, porque las pasarelas IPFS públicas varían mucho en lo que tardan en localizar un ítem.
-    </Fact>
-
-</Facts>
+| Lo que ves                                                                     | Ve a                                                                                                  |
+| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| El cliente marca el servidor como fallido, o no lista herramientas             | [El servidor no aparece](#el-servidor-no-aparece-o-faltan-sus-herramientas)                           |
+| `search`, `get_details` y `download`, pero no `read`                           | [Falta `read`](#el-cliente-lista-tres-herramientas-no-cuatro-falta-read)                              |
+| El proceso sale enseguida y la última línea es un `ERROR`                      | [El servidor no arranca](#cómo-es-un-arranque-rechazado)                                              |
+| `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES is set and --http …`                       | [La escotilla de direcciones privadas](#la-escotilla-de-direcciones-privadas-en-un-listener-abierto)  |
+| `this flag is read by the HTTP transport only …`                               | [Un flag sin efecto](#un-servidor-stdio-dice-que-un-flag-no-tiene-efecto)                             |
+| HTTP `400`, `403`, `404`, `405`, `413`, `429` o `503`                          | [Códigos de estado HTTP](#códigos-de-estado-http)                                                     |
+| `502 Bad Gateway` del proxy en un socket unix                                  | [`502` en un socket unix](#el-proxy-da-502-en-un-socket-unix-permission-denied)                       |
+| Las respuestas llegan de golpe, o un stream se corta                           | [Streams retenidos o cortados](#las-respuestas-llegan-de-golpe-o-un-stream-se-corta)                  |
+| Un cliente de navegador informa de un error CORS                               | [CORS detrás de un proxy](#un-cliente-de-navegador-informa-de-un-error-cors)                          |
+| `callers cannot be told apart …`                                               | [Un presupuesto para todos](#todos-los-llamantes-comparten-un-presupuesto-de-rate-limit)              |
+| `unable to get local issuer certificate`                                       | [TLS con una CA privada](#el-handshake-tls-falla-contra-una-ca-privada)                               |
+| Los clientes siguen recibiendo el certificado antiguo                          | [Un certificado renovado](#un-certificado-renovado-no-se-está-sirviendo)                              |
+| `refusing to connect to a private or local address`                            | [Tras un proxy de salida](#tras-un-proxy-de-salida-refusing-to-connect-to-a-private-or-local-address) |
+| `all libgen mirrors unreachable …`                                             | [Todos los mirrors inalcanzables](#todos-los-mirrors-inalcanzables)                                   |
+| Cada búsqueda tarda segundos, o se encolan unas tras otras                     | [Búsquedas lentas](#las-búsquedas-son-lentas-o-se-encolan-unas-tras-otras)                            |
+| `truncated: true` y un `hint`                                                  | [Resultados truncados](#resultados-de-búsqueda-truncados)                                             |
+| Un resultado con `origin: "annas"` que no se descarga                          | [Resultados de Anna's Archive](#un-resultado-que-no-se-descarga-origin-annas)                         |
+| `integrity check failed: MD5 mismatch`, u otro error de descarga               | [Descarga fallida](#descarga-fallida--discrepancia-de-md5)                                            |
+| Un DOI que no se descarga                                                      | [Artículo no encontrado](#artículo-no-encontrado-acceso-abierto-vs-sci-hub)                           |
+| Un ISBN que no se descarga                                                     | [Libro no encontrado por ISBN](#libro-no-encontrado-por-isbn-solo-acceso-abierto)                     |
+| Falta una fuente en los errores de un segundo intento                          | [Una fuente en enfriamiento](#falta-una-fuente-en-los-errores-de-una-descarga-repetida)               |
+| `not enough free disk space in …`                                              | [Espacio en disco](#espacio-en-disco)                                                                 |
+| `download` devuelve un enlace en lugar de un archivo                           | [Enlaces en lugar de archivos](#download-devuelve-un-enlace-en-lugar-de-guardar-un-archivo)           |
+| `… is outside the allowed directories …`                                       | [Una ruta fuera de los directorios permitidos](#una-ruta-está-fuera-de-los-directorios-permitidos)    |
+| `read` responde `extractable: false`                                           | [Un archivo que `read` no puede extraer](#un-archivo-que-read-no-puede-extraer)                       |
+| Nada llega al colector de OpenTelemetry                                        | [La telemetría no llega](#nada-llega-al-colector)                                                     |
+| Una instalación por npm, PyPI, NuGet, Homebrew, Docker, `.mcpb` o `go install` | [Problemas de instalación por canal](#problemas-de-instalación-por-canal)                             |
 
 ## Subir el nivel de log
 
@@ -246,11 +122,47 @@ O en el bloque `env` de tu cliente MCP:
 }
 ```
 
-Los logs van a **stderr** (stdout se reserva para el transporte MCP stdio), así que revisa la vista de logs del servidor de tu cliente o el terminal donde se ejecuta el proceso. Los niveles válidos son `debug`, `info` (por defecto), `warn` y `error`.
+Los logs van a **stderr** (stdout se reserva para el transporte MCP stdio) como un registro JSON por línea. Los niveles válidos son `debug`, `info` (por defecto), `warn` y `error`. Dónde acaba stderr depende de qué arrancó el servidor:
+
+- **Claude Desktop** lo escribe en `mcp-server-libgen.log` dentro de su directorio de logs (`~/Library/Logs/Claude` en macOS, `%APPDATA%\Claude\logs` en Windows).
+- **La mayoría de los editores** lo muestran en un panel de salida o en una vista de logs con el nombre del servidor.
+- **Docker** lo guarda como log del contenedor: `docker logs <container>`.
+- **systemd** lo guarda en el journal: `journalctl -u <unit>`.
 
 Son los logs de diagnóstico del propio servidor, escritos directamente en stderr. No son la capacidad `logging` de MCP — esa capacidad está obsoleta (SEP-2577), este servidor no declara ningún handler para ella, y ninguna línea de log llega nunca a un cliente como notificación MCP.
 
-## El cliente lista tres herramientas, no cuatro (falta `read`)
+## El cliente no ve el servidor
+
+### El servidor no aparece, o faltan sus herramientas
+
+<Facts>
+	<Fact kind="symptom">
+		El cliente marca el servidor como fallido o desconectado, no lista herramientas para él, o su log dice que no encontró la orden (`spawn npx ENOENT`, `command not found`, `The system cannot find the file specified`).
+	</Fact>
+	<Fact kind="meaning">
+
+    Una de tres cosas, y la comprobación en el terminal de arriba las distingue:
+
+    - **El cliente no pudo arrancar la orden.** Un cliente de escritorio lanzado desde el dock o el menú de inicio no lee el `PATH` de tu shell, así que un `npx`, `uvx`, `dnx` o `libgen-mcp` a secas que funciona en un terminal no se encuentra ahí. Node instalado con un gestor de versiones (nvm, fnm, volta) y binarios en `~/.local/bin`, `~/.dotnet/tools` o `/opt/homebrew/bin` son los casos habituales.
+    - **El servidor arrancó y rechazó su configuración.** Sale con estado `1` y su última línea en stderr es el motivo, en `ERROR`. Consulta [Cómo es un arranque rechazado](#cómo-es-un-arranque-rechazado).
+    - **La configuración nunca llegó al cliente.** Un error de JSON en el fichero, el fichero equivocado, o un cliente que solo lee su configuración al arrancar.
+
+    </Fact>
+    <Fact kind="fixes">
+
+    - Da a `command` una ruta absoluta: `which npx`, `which libgen-mcp` (o `where` en Windows) imprime la que hay que usar.
+    - En Windows, `npx` es un fichero por lotes, y un cliente que lanza procesos sin shell no puede ejecutarlo. Envuélvelo: `"command": "cmd"` con `"args": ["/c", "npx", "-y", "@jmrp.io/libgen-mcp"]`.
+    - Cierra el cliente del todo y vuelve a abrirlo después de cambiar su configuración. Cerrar la ventana a menudo lo deja corriendo.
+    - Ejecuta la misma orden en un terminal. Arrancado ahí, el servidor imprime `libgen-mcp <version> is a Model Context Protocol server, not an interactive program.` y espera; ese es el estado correcto, y `Ctrl+C` lo termina.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Conectar un cliente](/libgen-mcp/es/clients/) tiene la configuración de cada cliente, y [Problemas de instalación por canal](#problemas-de-instalación-por-canal) cubre cada lanzador.
+    </Fact>
+
+</Facts>
+
+### El cliente lista tres herramientas, no cuatro (falta `read`)
 
 <Facts>
 	<Fact kind="symptom">
@@ -260,212 +172,877 @@ Son los logs de diagnóstico del propio servidor, escritos directamente en stder
 		Es deliberado, y es el valor por defecto de un despliegue remoto. `read` no puede devolver una sola página sin traerse antes el archivo entero por la conexión del **servidor**, y la IP de salida de un servidor alojado la comparten todos los usuarios a los que sirve: las transferencias de uno solo pueden hacer que esa dirección quede limitada o bloqueada para todos. Por eso `LIBGEN_MCP_SERVER_FETCH` está desactivada por defecto con `--http`, en un socket unix y con `LIBGEN_MCP_REMOTE_DOWNLOADS=1`, y con ella desactivada la herramienta no se registra en absoluto en lugar de aparecer y fallar en cada llamada.
 	</Fact>
 	<Fact kind="fixes">
-		- Llama a `download` en su lugar: devuelve un enlace directo (un `resource_link` más un objeto `resolved`). Descarga ese enlace con tu propia herramienta HTTP y lee el archivo donde caiga.
-    	- `search`, `get_details` y la resolución de enlaces de `download` no se ven afectados — solo el cuerpo del archivo se queda de tu lado de la conexión.
-    	- Si el despliegue es tuyo y su salida a internet la puedes gastar (una instancia privada, o una que no sea compartida), fija `LIBGEN_MCP_SERVER_FETCH=1` para recuperar la herramienta.
-    	- En un servidor local por stdio `read` está por defecto. Si falta ahí, algo ha puesto esa variable a un valor falso.
+
+    - Llama a `download` en su lugar: devuelve un enlace directo (un `resource_link` más un objeto `resolved`). Descarga ese enlace con tu propia herramienta HTTP y lee el archivo donde caiga.
+    - `search`, `get_details` y la resolución de enlaces de `download` no se ven afectados — solo el cuerpo del archivo se queda de tu lado de la conexión.
+    - Si el despliegue es tuyo y su salida a internet la puedes gastar (una instancia privada, o una que no sea compartida), fija `LIBGEN_MCP_SERVER_FETCH=1` para recuperar la herramienta.
+    - En un servidor local por stdio `read` está por defecto. Si falta ahí, algo ha puesto esa variable a un valor falso.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Configuración](/libgen-mcp/es/configuration/#libgen_mcp_server_fetch) y [El endpoint alojado](/libgen-mcp/es/hosted/).
     </Fact>
 
 </Facts>
 
-## Un servidor stdio dice que un flag no tiene efecto
+## El servidor no arranca
+
+### Cómo es un arranque rechazado
 
 <Facts>
 	<Fact kind="symptom">
-		Un servidor stdio registra `this flag is read by the HTTP transport only, so
-		it has no effect on a stdio server`, o lo mismo sobre una variable, con un
-		`flag` como `--rate-limit-rps` y la variable `LIBGEN_MCP_*` que lo rellena.
+		El proceso sale menos de un segundo después de arrancar. Un cliente marca el servidor como fallido, un contenedor se reinicia en bucle, y la última línea en stderr es un registro `ERROR`.
 	</Fact>
 	<Fact kind="meaning">
-		El listener, los presupuestos por llamante, la lista de orígenes, los
-		ajustes de proxy, TLS y los ajustes de sesión configuran el transporte HTTP,
-		y un servidor stdio no tiene ninguno de ellos: un solo cliente al otro lado
-		de una tubería. Un valor válido se ignora y el servidor sirve igualmente, porque ignorar cualquiera de ellos no es peligroso, y los nombra uno a uno al arrancar. El valor se sigue validando antes: uno inválido o que contradice otro ajuste detiene el arranque en stdio igual que en HTTP, antes de cualquier línea de este tipo, como `--session-timeout` con el modo sin estado por defecto, `--trusted-proxy-header` sin `--trusted-proxies`, o un `--tls-cert` que nombra un fichero inexistente. La línea es un `WARN` para un flag escrito en una ejecución stdio, y un `INFO` bajo `--transport auto` (una línea de órdenes escrita para cualquiera de los dos transportes, como la de la imagen de contenedor) y para una variable fijada en el entorno (que un fichero dotenv compartido lleva a todos los procesos). La excepción es `--max-request-body-bytes`, que sigue siendo un `WARN` venga de donde venga, porque stdio tiene un ajuste propio para el mismo límite y un valor escrito para cualquiera de los dos transportes probablemente iba dirigido a ambos.
+		Cada ajuste se comprueba antes de servir nada, y un valor inválido o que contradice a otro detiene el arranque con estado `1` en lugar de descartarse o recortarse. Un despliegue que no coincide con su propia configuración no debe llegar a producción con aspecto sano. El estado `2` es otra cosa: la línea de órdenes no se pudo analizar, un flag desconocido o un valor que su tipo rechaza. Los rechazos más comunes están en la tabla de abajo.
 	</Fact>
 	<Fact kind="fixes">
-		- Quita el flag de los `args` del cliente, o la variable de su `env`, si venía de un despliegue HTTP.
-    	- `--max-request-body-bytes` es el único con equivalente en stdio: la línea lo nombra como `on_stdio_set`, `LIBGEN_MCP_STDIO_MAX_LINE_BYTES`.
-    	- Si querías servir HTTP, da a `--http` una dirección o pasa `--transport http`. Consulta [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/).
+
+    - Lee la última línea; nombra el ajuste. Una variable puede venir de un fichero dotenv y no del cliente: el servidor nombra al arrancar el fichero env que cargó, antes del rechazo.
+    - Hasta la 2.0.1 ese último registro salía en `INFO`, así que un filtro de log por errores no mostraba nada sobre por qué murió el proceso. Actualiza, o lee el flujo entero.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Modo servidor HTTP](/libgen-mcp/es/http-server-mode/#con-qué-se-niega-a-arrancar-el-servidor) lista cada rechazo y por qué es un rechazo y no un aviso, y la [referencia de línea de órdenes](/libgen-mcp/es/cli/#códigos-de-salida) tiene los códigos de salida.
     </Fact>
 
 </Facts>
 
-## Todas las rutas HTTP responden 404 (despliegues con `--http`)
+| La última línea dice                                                        | Qué cambiar                                                                                                  |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `LIBGEN_MCP_TIMEOUT: time: missing unit in duration "30"`                   | Las duraciones son duraciones de Go: `30s`, `1m`                                                             |
+| `LIBGEN_MCP_SERVER_FETCH: strconv.ParseBool: parsing "yes": invalid syntax` | Los booleanos son `1`/`0`, `t`/`f`, `true`/`false`                                                           |
+| `LIBGEN_MCP_RATE_RPS must be in (0, 20], got 50`                            | Todos los rangos están en [Configuración](/libgen-mcp/es/configuration/#referencia)                          |
+| `LIBGEN_MCP_SOURCES has unknown source "…" (allowed: …)`                    | Usa un nombre de la lista que imprime el mensaje                                                             |
+| `LIBGEN_MCP_DOWNLOAD_DIR "…" is not writable: …`                            | Apúntala a un directorio en el que este usuario pueda escribir, o arregla el montaje ([Docker](#docker))     |
+| `LIBGEN_MIRROR must use http or https, got scheme "…"`                      | Escribe el mirror como URL completa, `https://libgen.li`                                                     |
+| `listen on 0.0.0.0:8080: … bind: address already in use`                    | Otro proceso tiene el puerto: un servidor anterior, así que ejecuta `libgen-mcp --shutdown`, u otro programa |
+| `--session-timeout … cannot apply under the default stateless transport …`  | Quítalo, o pasa `--stateless=false` si de verdad quieres sesiones                                            |
+| `--trusted-proxy-header "…" names a header nobody is trusted to set …`      | Pasa `--trusted-proxies` con él, o ninguno de los dos                                                        |
+| `--rate-limit-rps cannot bound a caller on 127.0.0.1:8080 …`                | Nombra el proxy con `--trusted-proxy-header` y `--trusted-proxies`, o quita el flag                          |
+| `--public-url "…" needs an http:// or https:// scheme …`                    | Da el origen que escriben los clientes, con esquema                                                          |
+
+### La escotilla de direcciones privadas en un listener abierto
+
+<Facts>
+	<Fact kind="symptom">
+		Tras una actualización, un despliegue que llevaba meses funcionando sale inmediatamente en lugar de servir, diciendo `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES is set and --http 0.0.0.0:8080 binds a listener other machines can reach`. No cambió nada del despliegue; el health check nunca se pone en verde porque el proceso ha desaparecido.
+	</Fact>
+	<Fact kind="meaning">
+		Dos ajustes que eran independientes ahora van emparejados. La variable deja a este servidor conectar con loopback, tu LAN y el espacio de NAT de operador; un listener HTTP que sea cualquier cosa salvo una dirección loopback o un socket unix lo puede alcanzar cualquier otro que esté en esa red. Juntos, basta una llamada a herramienta que nombre una URL para que el servidor traiga una dirección que el llamante no podía alcanzar y le devuelva la respuesta — un proxy de falsificación de peticiones hacia tu red, activado por una variable que no dice nada sobre quién puede llegar al endpoint. Es un rechazo de arranque y no un aviso porque un aviso lo lee una vez quien despliega mientras que la exposición dura toda la vida del proceso. Un bind comodín se considera abierto **aunque el puerto del contenedor se publique en loopback** (`-p 127.0.0.1:8811:8080`): nada dentro del proceso distingue eso del mismo contenedor publicado en todas las interfaces.
+	</Fact>
+	<Fact kind="fixes">
+
+    - **Quita la variable.** Muy probablemente ya no hace nada. La guarda de destino exime los hosts que tú mismo nombraste — `LIBGEN_MIRROR`, `LIBGEN_MCP_SCIHUB_HOSTS` y los hosts propios de cada familia de mirrors — así que un mirror en tu propia red es alcanzable sin ella, y también una redirección desde ese mirror a un hermano privado. Consulta [el ADR del host nombrado por el operador](https://github.com/jmrplens/libgen-mcp/blob/main/docs/decisions/2026-09-17-an-operator-named-host-is-exempt-from-the-destination-guard.md).
+    - **Haz bind a loopback en su lugar**, `--http 127.0.0.1:8080`, y deja que el proxy inverso de delante lo alcance ahí. En Docker eso significa que el proxy debe compartir el espacio de red del contenedor; si no puede, un socket unix es la forma mejor y también se acepta.
+    - **Conserva la variable solo si has medido que la necesitas**: un mirror que configuraste que resuelve públicamente y después redirige a espacio privado es el único caso que la exención de arriba no cubre. Entonces haz bind a loopback o a un socket, que es lo que pide el rechazo — no un motivo para mantener un bind comodín.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Seguridad](/libgen-mcp/es/security/) y [Arquitectura](/libgen-mcp/es/architecture/#política-de-direcciones-salientes).
+    </Fact>
+
+</Facts>
+
+### Un servidor stdio dice que un flag no tiene efecto
+
+<Facts>
+	<Fact kind="symptom">
+		Un servidor stdio registra `this flag is read by the HTTP transport only, so it has no effect on a stdio server`, o lo mismo sobre una variable, con un `flag` como `--rate-limit-rps` y la variable `LIBGEN_MCP_*` que lo rellena.
+	</Fact>
+	<Fact kind="meaning">
+
+    El listener, los presupuestos por llamante, la lista de orígenes, los ajustes de proxy, TLS y los ajustes de sesión configuran el transporte HTTP, y un servidor stdio no tiene ninguno de ellos: un solo cliente al otro lado de una tubería. Un valor válido se ignora y el servidor sirve igualmente, porque ignorar cualquiera de ellos no es peligroso, y los nombra uno a uno al arrancar para que un ajuste que no hace nada no sea además un ajuste del que nadie se entera. El valor se sigue validando antes: uno inválido o que contradice otro ajuste detiene el arranque en stdio igual que en HTTP, antes de cualquier línea de este tipo, como `--session-timeout` con el modo sin estado por defecto, `--trusted-proxy-header` sin `--trusted-proxies`, o un `--tls-cert` que nombra un fichero inexistente.
+
+    La línea es un `WARN` para un flag escrito en una ejecución stdio, y un `INFO` bajo `--transport auto` (una línea de órdenes escrita para cualquiera de los dos transportes, como la de la imagen de contenedor) y para una variable fijada en el entorno (que un fichero dotenv compartido lleva a todos los procesos). La excepción es `--max-request-body-bytes`, que sigue siendo un `WARN` venga de donde venga, porque stdio tiene un ajuste propio para el mismo límite y un valor escrito para cualquiera de los dos transportes probablemente iba dirigido a ambos.
+
+    </Fact>
+    <Fact kind="fixes">
+
+    - Quita el flag de los `args` del cliente, o la variable de su `env`, si venía de un despliegue HTTP.
+    - `--max-request-body-bytes` es el único con equivalente en stdio: la línea lo nombra como `on_stdio_set`, `LIBGEN_MCP_STDIO_MAX_LINE_BYTES`.
+    - Si querías servir HTTP, da a `--http` una dirección o pasa `--transport http`.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Referencia de línea de órdenes](/libgen-mcp/es/cli/#flags-http-en-un-servidor-stdio).
+    </Fact>
+
+</Facts>
+
+## Códigos de estado HTTP
+
+Valen para un servidor arrancado con `--http`. Todo rechazo en el propio endpoint MCP se escribe como un error JSON-RPC con el id de la petición que rechaza, porque un cliente que recibe un `4xx` ilegible concluye que habla con un servidor antiguo y degrada su transporte en lugar de informar del problema. Así que el cuerpo de la respuesta, y no solo su estado, dice qué salió mal.
+
+| Estado | Qué significa en este servidor                                                                                                 | Entrada                                                                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| `400`  | Un `MCP-Protocol-Version` que este servidor no habla (código `-32022`, con la lista de los que sí), o una petición mal formada | [400](#400-bad-request)                                                                 |
+| `403`  | Una cabecera `Host` que este despliegue no sirve, o un origen de navegador que no avala                                        | [403](#403-forbidden)                                                                   |
+| `404`  | Una ruta en la que no hay nada montado, o, con sesiones, una sesión que ya no existe                                           | [404](#todas-las-rutas-http-responden-404-despliegues-con---http)                       |
+| `405`  | La ruta correcta con el método equivocado: el endpoint acepta `POST`                                                           | [405](#405-method-not-allowed)                                                          |
+| `413`  | Un cuerpo de petición mayor que `--max-request-body-bytes` (4 MiB por defecto)                                                 | [413](#413-request-entity-too-large)                                                    |
+| `429`  | Este servidor nunca lo envía: una llamada limitada vuelve como error de herramienta                                            | [429](#429-too-many-requests)                                                           |
+| `503`  | El proceso retiene tantas llamadas o sesiones como puede, o `/health` mientras drena                                           | [503](#las-llamadas-vuelven-con-this-server-is-busy-retry-later-despliegues-con---http) |
+
+### 400 Bad Request
+
+<Facts>
+	<Fact kind="symptom">
+		Una petición recibe `400`. El cuerpo JSON-RPC dice `unsupported protocol version` con código `-32022`, o el cuerpo en texto plano nombra una cabecera: `Accept must contain both 'application/json' and 'text/event-stream'`, `Content-Type must be 'application/json'` (esta última con `415`).
+	</Fact>
+	<Fact kind="meaning">
+		La respuesta de versión de protocolo lista en su miembro `data.supported` las versiones que este servidor negocia, para que el cliente reintente con una de ellas. Un despliegue con estado (`--stateless=false`) lista solo revisiones anteriores a `2026-07-28`, porque la más reciente no tiene sesiones. Los rechazos de cabecera vienen del SDK de MCP y señalan un cliente, o un `curl` escrito a mano, que no habla Streamable HTTP.
+	</Fact>
+	<Fact kind="fixes">
+
+    - Actualiza el cliente, o deja que negocie: una petición sin cabecera `MCP-Protocol-Version` nunca se rechaza por este motivo.
+    - Una prueba con `curl` necesita `-H 'Content-Type: application/json'` y `-H 'Accept: application/json, text/event-stream'`.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Arquitectura](/libgen-mcp/es/architecture/#transportes).
+    </Fact>
+
+</Facts>
+
+### 403 Forbidden
+
+<Facts>
+	<Fact kind="symptom">
+		Cada llamada a través de un proxy inverso recibe `403`, y el mensaje JSON-RPC dice `the Host header names a host this deployment does not serve. Behind a reverse proxy, pass --public-url with the origin clients use, or --trusted-proxies with the proxy's address.` El servidor registra `request refused: the Host header names a host this deployment does not serve`. O un cliente de navegador recibe `cross-origin request refused: this deployment vouches for no browser origin, or not for this one. Name it with --trusted-origins.`
+	</Fact>
+	<Fact kind="meaning">
+		El primero es la guarda contra DNS rebinding. Todas las recetas de proxy reenvían el `Host` del cliente y conectan por loopback, que es exactamente la forma que toma un ataque de rebinding, así que hay que decirle al servidor el nombre público. El segundo es la comprobación de origen que exige la especificación del transporte: un `POST` que cambia estado enviado por un navegador desde otro origen se rechaza salvo que el origen esté nombrado. Los clientes que no son navegadores no envían `Origin` y nunca los rechaza.
+	</Fact>
+	<Fact kind="fixes">
+
+    - Pasa `--public-url https://mcp.example.org/libgen` con el origen que usan los clientes, o `--trusted-proxies` con la dirección desde la que conecta el proxy. Cualquiera de los dos basta.
+    - `/health` y las tarjetas del servidor no están detrás de la guarda, así que una sonda que responde mientras el endpoint rechaza apunta justo a esto.
+    - Para un cliente de navegador, nombra su origen: `--trusted-origins https://app.example.org`.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Modo servidor HTTP](/libgen-mcp/es/http-server-mode/#el-nombre-que-usan-los-clientes-y-por-qué-sin-él-se-rechaza-una-petición-que-pasa-por-un-proxy) y [Proxy inverso](/libgen-mcp/es/deploy/reverse-proxy/).
+    </Fact>
+
+</Facts>
+
+### Todas las rutas HTTP responden 404 (despliegues con `--http`)
 
 <Facts>
 	<Fact kind="symptom">
 		Un servidor arrancado con `--http` responde `404` y `{"error":"not found","mcp_endpoint":"/"}` al cliente MCP, a `/health` o a ambos — en una ruta que antes funcionaba.
 	</Fact>
 	<Fact kind="meaning">
-		El endpoint MCP se monta en una ruta concreta y no como comodín, así que una petición que no casa con ninguna ruta montada da `404` en lugar del `405` engañoso que devolvía el comodín. Hay dos configuraciones que lo provocan: un proxy inverso que reenvía su prefijo — `https://example.org/libgen` redirigido aquí sin quitar `/libgen`, mientras que las rutas del servidor cuelgan de la raíz — o un `--http-path` con un prefijo distinto del que llega realmente en las peticiones, con el que `/health` en la raíz es un `404` como cualquier otra ruta.
-	</Fact>
-	<Fact kind="fixes">
-		El cuerpo del 404 nombra la ruta que este proceso sirve de verdad:
 
-    	- Lee su campo `mcp_endpoint` y compáralo con la ruta con la que llegó la petición — eso lo tiene el log de acceso del proxy, la URL de tu cliente puede que no.
-    	- Después elige una capa, nunca las dos: quita el prefijo en el proxy (en nginx, un `proxy_pass` cuya URI termine en `/`) o monta el servidor bajo él con `--http-path=/libgen`.
-    	- Apunta las sondas de contenedores y balanceadores a la ruta de salud montada, que se mueve con `--http-path` — `/libgen/health` en ese ejemplo.
-    	- Un `405` con `Allow: POST` es otro fallo distinto: la ruta es correcta y el método no. El endpoint MCP solo acepta `POST`.
-    	- Si el proceso aborta al arrancar quejándose de `--http-path`, el valor lleva query, fragmento, un segmento `..` o escapes porcentuales. Se rechaza a propósito — un servidor montado en una ruta que nunca puede casar respondería `404` a todo, y eso parece un fallo del proxy.
+    El endpoint MCP se monta en una ruta concreta y no como comodín, así que una petición que no casa con ninguna ruta montada da `404` en lugar del `405` engañoso que devolvía el comodín. Hay dos configuraciones que lo provocan:
+
+    - **Un proxy inverso que reenvía su prefijo.** Si `https://example.org/libgen` se redirige a este servidor sin quitar `/libgen`, el servidor ve `POST /libgen`, y por defecto sus rutas cuelgan de la raíz.
+    - **Un `--http-path` con un prefijo con el que no llegan realmente las peticiones.** Con `--http-path=/libgen` las rutas son `POST /libgen` y `GET /libgen/health`, y `/health` en la raíz es un `404` como cualquier otra.
+
+    </Fact>
+    <Fact kind="fixes">
+
+    - Lee el campo `mcp_endpoint` del cuerpo del 404: nombra la ruta en la que este proceso sirve el endpoint MCP. Compárala con la ruta con la que llegó de verdad la petición — el log de acceso del proxy la tiene, la URL de tu cliente puede que no.
+    - Después elige una capa, nunca las dos: o quitas el prefijo en el proxy (en nginx, un `proxy_pass` cuya URI acaba en `/`), o montas el servidor debajo con `--http-path=/libgen`.
+    - Apunta las sondas del contenedor y del balanceador a la ruta de salud montada, que se mueve con `--http-path` (`/libgen/health` en el ejemplo de arriba).
+    - Si el proceso sale al arrancar quejándose de `--http-path`, el valor lleva una query, un fragmento, un segmento `..` o un escape con porcentaje. Se rechaza a propósito — un servidor montado en una ruta con la que nunca puede casar respondería `404` a todo, lo que parece un fallo del proxy.
+    - Un `session not found` en texto plano con `404` es otro caso: con `--stateless=false`, la sesión que nombra el cliente la cerró `--session-timeout` o un reinicio. El cliente se recupera inicializando de nuevo.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Modo servidor HTTP](/libgen-mcp/es/http-server-mode/#el-alias-mcp): el endpoint responde también en `/mcp` bajo el montaje, así que una URL pegada con o sin él llega al mismo sitio.
     </Fact>
 
 </Facts>
 
-## Las llamadas vuelven con `This server is busy. Retry later.` (despliegues con `--http`)
+### 405 Method Not Allowed
 
 <Facts>
 	<Fact kind="symptom">
-		Un `tools/call` devuelve un resultado `isError` con ese texto, un `prompts/get` o un `initialize` recibe un error JSON-RPC con código `-50300`, o una petición se responde `503` con `Retry-After: 30`. El log lleva `request refused: too many calls held across the process` o `request refused: too many stateful sessions across the process`.
+		Una petición recibe `405` con `Allow: POST`, a menudo un `GET` que el cliente envió justo después de otro rechazo.
 	</Fact>
 	<Fact kind="meaning">
-		El proceso retiene tantas llamadas, o mantiene tantas sesiones con estado, como le permite su límite de descriptores, y rechaza la siguiente en vez de quedarse sin descriptores y dejar de responder del todo. Las llamadas hacen cola tras el cubo de salida (`LIBGEN_MCP_RATE_RPS`), así que una ráfaga de búsquedas queda retenida mientras esa cola tarde en vaciarse.
+		La ruta es correcta y el método no. El endpoint acepta solo `POST`; un despliegue sin estado (el valor por defecto) no tiene stream que un `GET` pueda abrir ni sesión que un `DELETE` pueda cerrar. Un cliente que envía primero un `GET` suele ser uno que ha vuelto al antiguo transporte HTTP+SSE, y la petición anterior es la que hay que mirar.
 	</Fact>
 	<Fact kind="fixes">
-		La línea de arranque dice qué recibió este proceso:
 
-    	- Lee `process ceilings`: `held_calls_per_process` y `descriptor_limit`. Un `descriptor_limit` de `1024` es un límite duro pequeño, y subirlo (`ulimit -n`, `LimitNOFILE=`, `--ulimit nofile=`) sube los dos techos. Ninguna bandera de este servidor los mueve.
-    	- Si un solo llamante lo retiene todo, lo que lo frena es el límite de tasa de entrada, y solo funciona por llamante detrás de un proxy nombrado con `--trusted-proxy-header` y `--trusted-proxies`.
-    	- Con `--stateless=false`, las sesiones que nadie borra conservan sus plazas hasta que `--session-timeout` las cierra. Con `--session-timeout=0` no las cierra nunca: pon un timeout.
-    	- Las cifras y las formas del rechazo están en [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/#qué-puede-retener-el-proceso-entero).
+    - Busca la respuesta anterior al `GET` en el log del cliente o del proxy: un `400` o un `403` ahí es el fallo real, y su entrada de arriba es la que hay que seguir.
+    - Un cliente que solo habla el transporte HTTP+SSE retirado no puede usar este servidor. Úsalo por stdio.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Arquitectura](/libgen-mcp/es/architecture/#modo-sin-estado).
     </Fact>
 
 </Facts>
 
-## El proxy da `502` en un socket unix (`permission denied`)
+### 413 Request Entity Too Large
 
 <Facts>
 	<Fact kind="symptom">
-		El servidor registra `listening on unix socket /run/mcp-libgen.sock (http)` y sigue en pie, pero toda petición que pasa por el proxy inverso vuelve como `502 Bad Gateway`; el log de errores del proxy nombra el socket y dice `Permission denied` — en nginx, `connect() to unix:/… failed (13: Permission denied)`.
+		Un `POST` recibe `413` con `request body exceeds 4194304 bytes`.
 	</Fact>
 	<Fact kind="meaning">
-		El socket existe y el proxy lo encontró, pero el proceso que intentó abrirlo ni es el propietario del socket ni está en su grupo. El socket se crea `0660` a propósito: a un socket unix se llega por el sistema de archivos, así que cualquier cosa más ancha que propietario+grupo significa que cualquier cuenta local puede hablar con el endpoint MCP.
+		El cuerpo es mayor que `--max-request-body-bytes`, 4 MiB por defecto. Ninguna herramienta de este servidor recibe un argumento ni de lejos tan grande, así que un `413` suele ser un cliente enviando algo que no debe, o un límite de proxy más bajo que este (el propio `client_max_body_size` de nginx es de 1 MiB por defecto, y su rechazo es una página HTML, no este texto).
 	</Fact>
 	<Fact kind="fixes">
 
-    	- Mete los procesos **worker** del proxy en el grupo del socket. En nginx eso es el segundo argumento de la directiva `user` (`user nginx 10001;`), no un grupo suplementario del contenedor: nginx llama a `initgroups()` al soltar privilegios, así que un `group_add` de Docker se descarta antes del primer connect.
-    	- Revisa también el propio directorio del socket. Un directorio `0750` que el proxy no puede atravesar da el mismo `permission denied` sea cual sea el modo del socket.
-    	- Amplía el modo solo si no queda otra: `--http-socket-mode 0666` lo hace accesible a cualquier cuenta de ese espacio de nombres, y solo es razonable cuando el directorio de encima ya está restringido.
-    	- Con Docker, los dos contenedores tienen que ver el **mismo** directorio — un bind mount, o un volumen con nombre montado en ambos. Dos contenedores escribiendo cada uno su copia de `/run/mcp` dan un servidor que arranca tan contento y un proxy que recibe `No such file or directory`, no `permission denied`.
-    	- Si lo que ocurre es que el proceso aborta al arrancar diciendo `--http-socket-mode … applies to a unix socket, but --http … is an address`, el modo se pasó junto a un `--http` TCP; quita uno de los dos. En Windows un modo explícito también se rechaza, porque allí `os.Chmod` no puede cumplirlo.
-    	- Otros dos rechazos de arranque se explican solos: `exists and is not a socket` significa que la ruta ya contiene un archivo normal o un directorio, que nunca se borra por ti, y `is already served by another process` significa que hay un servidor vivo respondiendo ahí. Un socket que dejó una ejecución que se cayó se borra automáticamente, con un aviso en el log.
+    - Comprueba qué capa respondió: el texto de este servidor es el de arriba, en texto plano.
+    - Sube el límite solo con un motivo: `--max-request-body-bytes 8388608`. Un valor negativo se rechaza al arrancar, porque quitaría el límite del todo.
+    - El equivalente en stdio es un error JSON-RPC, `Invalid Request: message exceeds the … byte limit; send a smaller message or raise LIBGEN_MCP_STDIO_MAX_LINE_BYTES`, y la sesión continúa.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Referencia de línea de órdenes](/libgen-mcp/es/cli/#límites).
     </Fact>
 
 </Facts>
 
-## El servidor no arranca: la escotilla de direcciones privadas en un listener abierto
+### 429 Too Many Requests
 
 <Facts>
 	<Fact kind="symptom">
-		Tras una actualización, un despliegue que llevaba meses funcionando sale de inmediato en vez de servir, diciendo `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES is set and --http 0.0.0.0:8080 binds a listener other machines can reach`. Nada del despliegue ha cambiado; el health check no se pone verde nunca porque el proceso ya no está.
+		Una llamada a herramienta devuelve un resultado de error que dice `rate limit exceeded for search; retry after a short backoff`, o un `prompts/get` o `tools/list` recibe un error JSON-RPC con código `-42900` y el mismo texto. El servidor registra `request refused: rate limit exceeded` como mucho una vez cada diez segundos, con la cuenta de lo que rechazó desde entonces. O el cliente informa de un `429` HTTP real.
 	</Fact>
 	<Fact kind="meaning">
-		Dos ajustes que eran independientes ahora van emparejados. La variable permite que este servidor marque loopback, tu LAN y el espacio de NAT de operador; un listener HTTP que no sea una dirección de loopback ni un socket unix lo alcanza cualquiera que esté en esa red. Juntos, basta una llamada a herramienta que nombre una URL para que el servidor descargue una dirección que quien llama no podría alcanzar y le devuelva la respuesta — un proxy de request forgery hacia tu red, encendido por una variable que no dice nada sobre quién puede alcanzar el endpoint. Es un rechazo al arrancar y no un aviso porque un aviso lo lee una vez quien desplegó, mientras que la exposición dura toda la vida del proceso. Un bind comodín se considera abierto **aunque el puerto del contenedor se publique en loopback** (`-p 127.0.0.1:8811:8080`): nada dentro del proceso lo distingue del mismo contenedor publicado en todas las interfaces.
-	</Fact>
-	<Fact kind="fixes">
 
-    	- **Quita la variable.** Es muy probable que ya no haga nada. El guardián de destinos exime los hosts que tú mismo nombraste — `LIBGEN_MIRROR`, `LIBGEN_MCP_SCIHUB_HOSTS` y los hosts propios de cada familia de mirrors —, así que un mirror en tu propia red es alcanzable sin ella, y también un redirect de ese mirror a un hermano privado. Véase [el ADR del host nombrado por el operador](https://github.com/jmrplens/libgen-mcp/blob/main/docs/decisions/2026-09-17-an-operator-named-host-is-exempt-from-the-destination-guard.md).
-    	- **Enlaza loopback**, `--http 127.0.0.1:8080`, y deja que el proxy inverso de delante lo alcance ahí. Con Docker eso implica que el proxy comparta el espacio de red del contenedor; si no puede, un socket unix es la forma mejor y también se acepta.
-    	- **Conserva la variable solo si has medido que la necesitas**: un mirror que configuraste que resuelve público y luego redirige a espacio privado es el único caso que la exención anterior no cubre. Entonces enlaza loopback o un socket, que es lo que el rechazo está pidiendo — no una razón para mantener un bind comodín.
+    Este servidor nunca responde él mismo un `429` HTTP. Su límite de entrada, `--rate-limit-rps` (10 por segundo, ráfaga de 40, por dirección cobrada), rechaza dentro de MCP, para que el modelo lea el rechazo y espere en lugar de que el transporte se rinda. Un `429` real en la red lo escribió algo delante del servidor: un proxy, una pasarela o el límite propio de una plataforma.
+
+    Existe un segundo límite por llamante para las llamadas que mueven archivos: `you already have … download or read calls in flight, which is this deployment's limit per caller; let one finish before starting another` viene de `--max-inflight-per-client`.
+
+    </Fact>
+    <Fact kind="fixes">
+
+    - Para el rechazo dentro de MCP, espera y reintenta; al modelo se le dice que lo haga.
+    - Si se rechaza a todos los llamantes a la vez, probablemente el límite los está contando como uno solo: consulta [Todos los llamantes comparten un presupuesto de rate limit](#todos-los-llamantes-comparten-un-presupuesto-de-rate-limit).
+    - Para un `429` real, mira los límites del proxy o de la plataforma, no los flags de este servidor.
+    - Que los mirrors respondan `429` es otra cosa: el servidor lo trata como un fallo transitorio y conmuta, consulta [Todos los mirrors inalcanzables](#todos-los-mirrors-inalcanzables).
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Modo servidor HTTP](/libgen-mcp/es/http-server-mode/#qué-puede-pedir-un-llamante).
     </Fact>
 
 </Facts>
 
-## Tras un proxy de salida: `refusing to connect to a private or local address`
+### Las llamadas vuelven con `This server is busy. Retry later.` (despliegues con `--http`)
 
 <Facts>
 	<Fact kind="symptom">
-		Con `HTTP_PROXY` o `HTTPS_PROXY` definidas, una descarga, un enriquecimiento o una búsqueda de acceso abierto falla con `refusing to connect to a private or local address`.
+		Un `tools/call` devuelve un resultado `isError` con ese texto, un `prompts/get` o un `initialize` recibe un error JSON-RPC con código `-50300`, o una petición recibe `503` con `Retry-After: 30`. El log lleva `request refused: too many calls held across the process` o `request refused: too many stateful sessions across the process`.
 	</Fact>
 	<Fact kind="meaning">
-		Depende de la dirección que nombre el mensaje. **La dirección del propio proxy, para todos los hosts** (Crossref, arXiv, Unpaywall, cualquier URL de descarga) significa que el servidor es la 2.0.1 o anterior, que juzgaba la conexión a un proxy en una dirección privada como si el proxy fuera el destino. Desde la 2.1.0 la conexión al proxy solo responde ante la regla de metadatos de la nube, así que un proxy corporativo en `10.x` funciona sin `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES`. **El destino** significa que la URL que aportó un registro nombra una dirección privada o de metadatos, y se rechaza tras un proxy exactamente igual que sin él. Eso incluye toda grafía numérica que acepta un resolver de C (`2852039166` y `0xa9fea9fe` son ambas `169.254.169.254`), y `is a numeric host this server cannot classify` indica un host cuya última etiqueta solo parece numérica. `resolves to 169.254.169.254, the cloud instance metadata address` (u otra dirección de metadatos) indica un nombre de host que esta máquina resuelve a un endpoint de metadatos de la nube; el servidor resuelve nombres localmente solo para esa comprobación, y una resolución que falla no rechaza.
-	</Fact>
-	<Fact kind="fixes">
 
-    	- Actualiza si el mensaje nombra el proxy.
-    	- Un destino rechazado es la guarda haciendo su trabajo con una URL de terceros, no un problema de configuración. Si es un mirror tuyo en una dirección privada, nómbralo en `LIBGEN_MIRROR` o en `LIBGEN_MCP_SCIHUB_HOSTS`: un host que nombraste está exento también tras un proxy.
-    	- Un host incluido en `NO_PROXY` se conecta directamente y lo juzga el dialer, igual que sin proxy.
-    	- Cómo distingue la guarda el proxy del destino está en [Arquitectura](/libgen-mcp/es/architecture/#política-de-direcciones-salientes).
+    El proceso retiene tantas llamadas, o mantiene tantas sesiones con estado, como le permite su límite de descriptores, y rechaza la siguiente en lugar de quedarse sin descriptores y dejar de responder del todo. Las llamadas esperan en el cubo de salida (`LIBGEN_MCP_RATE_RPS`), así que una ráfaga de búsquedas queda retenida tanto como tarde en vaciarse esa cola.
+
+    Un `503` de `GET /health` con `"status":"draining"` no es esto: es una instancia que se está apagando con `--drain-delay` y le dice al balanceador que deje de enviarle trabajo.
+
+    </Fact>
+    <Fact kind="fixes">
+
+    - Lee la línea de arranque `process ceilings`: `held_calls_per_process` y `descriptor_limit` dicen qué se le dio a este proceso. Un `descriptor_limit` de `1024` es un límite duro pequeño, y subirlo (`ulimit -n`, `LimitNOFILE=`, `--ulimit nofile=`) sube los dos techos. Ningún flag de este servidor los mueve.
+    - Si un llamante lo retiene todo, el rate limit de entrada es lo que lo frena, y solo funciona por llamante detrás de un proxy nombrado con `--trusted-proxy-header` y `--trusted-proxies`.
+    - Con `--stateless=false`, las sesiones que nadie borra retienen su hueco hasta que `--session-timeout` las cierra. Con `--session-timeout=0` nunca lo hacen: fija un timeout.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Modo servidor HTTP](/libgen-mcp/es/http-server-mode/#qué-puede-retener-el-proceso-entero) tiene las cifras y las formas del rechazo, y [Escalado](/libgen-mcp/es/deploy/scaling/) qué hacer cuando un proceso no basta.
     </Fact>
 
 </Facts>
 
-## El handshake TLS falla contra una CA privada
+## Proxies, delante y detrás
+
+### El proxy da `502` en un socket unix (`permission denied`)
 
 <Facts>
 	<Fact kind="symptom">
-		Con `--tls-cert`/`--tls-key` puestos, un cliente o un proxy no consigue completar el handshake: nginx registra `upstream SSL certificate verify error: (20:unable to get local issuer certificate)`, `curl` informa de `SSL certificate problem: unable to get local issuer certificate`, y el log del propio servidor no muestra nada raro — está sirviendo.
+		El servidor registra `listening on unix socket /run/mcp-libgen.sock (http)` y sigue arriba, pero cada petición a través del proxy inverso vuelve con `502 Bad Gateway`; el log de errores del proxy nombra el socket y dice `Permission denied` — en nginx, `connect() to unix:/… failed (13: Permission denied)`.
 	</Fact>
 	<Fact kind="meaning">
-		El certificado está bien; lo que pasa es que nada del lado cliente confía en la CA que lo emitió. Una CA privada o interna no está en el almacén de confianza del sistema, y nginx no verifica en absoluto los certificados de los upstream salvo que se le diga.
+		El socket existe y el proxy lo encontró, pero el proceso que intentó abrirlo no es el propietario del socket ni está en su grupo. El socket se crea con `0660` a propósito: a un socket unix se llega a través del sistema de ficheros, así que cualquier cosa más amplia que propietario+grupo significa que cualquier cuenta local puede hablar con el endpoint MCP.
 	</Fact>
 	<Fact kind="fixes">
 
-    	- En nginx, activa la verificación **y** aporta la CA en el mismo cambio: `proxy_ssl_verify on;`, `proxy_ssl_trusted_certificate /etc/nginx/ca.pem;` y un `proxy_ssl_name` que case con un nombre del certificado. Lo primero sin lo segundo hace fallar todas las peticiones; ninguna de las dos cosas deja el salto cifrado pero sin autenticar, que es el estado del que suele partir este síntoma.
-    	- Asegúrate de que el certificado lleva como subjectAltName el nombre por el que conecta el proxy. Un certificado con solo CN lo rechazan de plano los clientes modernos, diga lo que diga el almacén de confianza.
-    	- Para un cliente y no un proxy, añade la CA a su almacén de confianza — antes `curl --cacert ca.pem`, para confirmar la cadena sin tocar nada del sistema.
-    	- Un handshake que falla por la versión del protocolo es el suelo de TLS 1.2: este listener rechaza TLS 1.0 y 1.1.
-    	- Si el proceso ni siquiera llegó a servir y salió con `loading the TLS certificate and key`, el problema es la propia pareja — un archivo que falta, uno ilegible, o una clave que no case con el certificado. Esa comprobación se hace al arrancar a propósito, para que no se descubra en un handshake que nadie está mirando. `--tls-cert was given without --tls-key` (o al revés) es la otra mitad de la misma guarda.
-    	- **Prefiere un socket unix cuando el proxy está en la misma máquina.** Elimina el segmento de red en lugar de cifrarlo, así que no hay certificado que emitir, en el que confiar ni que rotar, y toda esta clase de fallo desaparece. Consulta [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/#dónde-escucha-el-servidor).
+    - Mete los procesos **worker** del proxy en el grupo del socket. En nginx eso es el segundo argumento de la directiva `user` (`user nginx 10001;`), no un grupo suplementario en el contenedor: nginx llama a `initgroups()` al soltar privilegios, así que un `group_add` de Docker se descarta antes de la primera conexión.
+    - Comprueba también el directorio del socket. Un directorio `0750` que el proxy no puede atravesar da el mismo `permission denied` sea cual sea el modo del socket.
+    - Amplía el modo solo si es imprescindible: `--http-socket-mode 0666` lo hace accesible a todas las cuentas de ese espacio de nombres, lo que solo es razonable cuando el directorio de encima ya está restringido.
+    - En Docker, ambos contenedores deben ver el **mismo** directorio — un único bind mount, o un único volumen con nombre montado en los dos. Dos contenedores que escriben cada uno en su propia copia de `/run/mcp` dan un servidor que hace bind sin problemas y un proxy que recibe `No such file or directory`, no `permission denied`.
+    - Si el proceso, en cambio, sale al arrancar diciendo `--http-socket-mode … applies to a unix socket, but --http … is an address`, se dio el modo junto a un `--http` TCP; quita uno de los dos. En Windows también se rechaza un modo explícito, porque allí `os.Chmod` no puede respetarlo.
+    - Hay dos rechazos de arranque más que se explican solos: `exists and is not a socket` significa que la ruta ya contiene un fichero normal o un directorio, que nunca se borra por ti, e `is already served by another process` significa que hay un servidor vivo respondiendo en ella. Un socket que deja una ejecución que se cayó se borra automáticamente, con un aviso en el log.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Modo servidor HTTP](/libgen-mcp/es/http-server-mode/#permisos-del-socket).
     </Fact>
 
 </Facts>
 
-## Un certificado renovado no se está sirviendo
+### Las respuestas llegan de golpe, o un stream se corta
+
+<Facts>
+	<Fact kind="symptom">
+		A través del proxy, el progreso de una llamada llega en una sola pieza al final en lugar de según ocurre, o una llamada larga se corta con un timeout de pasarela mientras que directamente funciona.
+	</Fact>
+	<Fact kind="meaning">
+		Las respuestas son Server-Sent Events por defecto, y un proxy que hace buffer de las respuestas retiene el stream hasta que termina. El servidor fija `X-Accel-Buffering: no` en cada respuesta SSE, que nginx respeta sin configuración; un proxy que no lee esa cabecera hace buffer igualmente. Una llamada que espera a los mirrors también puede durar más que el timeout de lectura de un proxy.
+	</Fact>
+	<Fact kind="fixes">
+
+    - Desactiva el buffer de respuestas para la ruta MCP en el proxy (en el `mod_proxy` de Apache, `flushpackets=on` en la línea `ProxyPass`).
+    - Sube el timeout de lectura del proxy por encima de la llamada más larga que esperes. Una descarga que se resuelve a través de varias fuentes puede tardar minutos.
+    - Donde el proxy no pueda hacer streaming en absoluto, `--json-response` responde cada petición con un único cuerpo `application/json` en lugar de un stream.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Proxy inverso](/libgen-mcp/es/deploy/reverse-proxy/).
+    </Fact>
+
+</Facts>
+
+### Un cliente de navegador informa de un error CORS
+
+<Facts>
+	<Fact kind="symptom">
+		Un cliente que corre en el navegador falla con un error CORS, a menudo _"the header contains multiple values … but only one is allowed"_, mientras `curl` informa `200` para la misma petición.
+	</Fact>
+	<Fact kind="meaning">
+		CORS lo responde una capa, nunca dos. Con `--trusted-origins` fijado el servidor responde él mismo al preflight y devuelve el origen en `Access-Control-Allow-Origin`; un proxy que añade su propia cabecera encima envía dos, y el navegador rechaza la respuesta de plano. Un proxy que responde él mismo al preflight, sin que el origen esté nombrado en el servidor, le dice al navegador que la petición está permitida y el `POST` que sigue se rechaza entonces con `403`.
+	</Fact>
+	<Fact kind="fixes">
+
+    - Quita el bloque CORS del proxy en el mismo cambio que fija `--trusted-origins`.
+    - Si no se pueden coordinar los dos, quita primero el bloque del proxy: eso devuelve el endpoint a rechazar navegadores, que al menos es coherente.
+    - Las tarjetas del servidor son la excepción: un proxy puede responder CORS para ese único documento, porque lo sirve en lugar de reenviarlo.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Arquitectura](/libgen-mcp/es/architecture/#transportes).
+    </Fact>
+
+</Facts>
+
+### Todos los llamantes comparten un presupuesto de rate limit
+
+<Facts>
+	<Fact kind="symptom">
+		El log lleva `callers cannot be told apart: the address requests are charged to is one no public client could have, so everyone reaching this server through the proxy in front shares a single rate-limit budget`, una vez, y después se rechaza a todos los llamantes a la vez.
+	</Fact>
+	<Fact kind="meaning">
+		Los límites por llamante se calculan sobre la dirección de la que vino la petición. Detrás de un proxy esa es la dirección del proxy, así que sin que se le diga qué cabecera lleva la dirección del cliente, el servidor cobra a todos los llamantes a la misma clave.
+	</Fact>
+	<Fact kind="fixes">
+
+    - Pasa `--trusted-proxy-header` con la cabecera que fija el proxy (`X-Real-IP`, `X-Forwarded-For`) y `--trusted-proxies` con la dirección desde la que conecta el proxy. Hacen falta los dos, y cualquiera de ellos solo se rechaza al arrancar.
+    - En un bind a loopback o en un socket unix el límite está apagado salvo que esos dos nombren el proxy, por el mismo motivo, y pasar `--rate-limit-rps` ahí se rechaza en lugar de ignorarse.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Modo servidor HTTP](/libgen-mcp/es/http-server-mode/#qué-identidad-tiene-este-despliegue).
+    </Fact>
+
+</Facts>
+
+### El handshake TLS falla contra una CA privada
+
+<Facts>
+	<Fact kind="symptom">
+		Con `--tls-cert`/`--tls-key` fijados, un cliente o un proxy no consigue completar el handshake: nginx registra `upstream SSL certificate verify error: (20:unable to get local issuer certificate)`, `curl` informa `SSL certificate problem: unable to get local issuer certificate`, y el log del propio servidor no muestra nada raro — está sirviendo.
+	</Fact>
+	<Fact kind="meaning">
+		El certificado está bien; lo que pasa es que nada del lado cliente confía en la CA que lo emitió. Una CA privada o interna no está en el almacén de confianza del sistema, y nginx no verifica los certificados de upstream en absoluto salvo que se le diga.
+	</Fact>
+	<Fact kind="fixes">
+
+    - En nginx, activa la verificación **y** proporciona la CA en el mismo cambio: `proxy_ssl_verify on;`, `proxy_ssl_trusted_certificate /etc/nginx/ca.pem;` y un `proxy_ssl_name` que coincida con un nombre del certificado. Lo primero sin lo segundo hace fallar todas las peticiones; ninguno de los dos significa que el salto va cifrado pero sin autenticar, que es el estado del que suele partir este síntoma.
+    - Asegúrate de que el certificado lleva el nombre con el que conecta el proxy, como subjectAltName. Un certificado solo con CN lo rechazan de plano los clientes modernos, diga lo que diga el almacén de confianza.
+    - Para un cliente y no un proxy, añade la CA a su almacén de confianza — primero `curl --cacert ca.pem`, para confirmar la cadena antes de cambiar nada en todo el sistema.
+    - Un handshake que falla por la versión del protocolo es el suelo de TLS 1.2: este listener rechaza TLS 1.0 y 1.1.
+    - Si el proceso no llegó a servir y salió con `loading the TLS certificate and key`, el problema es el propio par — un fichero que falta, uno ilegible, o una clave que no corresponde al certificado. Esa comprobación se hace al arrancar a propósito, para no descubrirlo en un handshake que nadie está mirando. `--tls-cert was given without --tls-key` (o al revés) es la otra mitad de la misma guarda.
+    - **Prefiere un socket unix cuando el proxy está en la misma máquina.** Elimina el tramo de red en lugar de cifrarlo, así que no hay certificado que emitir, en el que confiar ni que rotar, y toda esta clase de fallos desaparece.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Modo servidor HTTP](/libgen-mcp/es/http-server-mode/#terminar-tls-en-este-proceso).
+    </Fact>
+
+</Facts>
+
+### Un certificado renovado no se está sirviendo
 
 <Facts>
 	<Fact kind="symptom">
 		Certbot o una proyección de secretos ha escrito un certificado nuevo, los ficheros en disco están al día, y a los clientes se les sigue presentando el antiguo — o el log lleva `the TLS certificate on disk could not be loaded; serving the previous one`.
 	</Fact>
 	<Fact kind="meaning">
-		La pareja se relee cuando los ficheros cambian, y «cambiar» significa que se movió el tamaño o la fecha de modificación de alguno de los dos. Hay dos situaciones que producen este síntoma, y el log las distingue.
+		El par se vuelve a leer cuando los ficheros cambian, y «cambiar» significa que se ha movido el tamaño o la fecha de modificación de cualquiera de los dos. Dos situaciones producen este síntoma, y el log las distingue.
 	</Fact>
 	<Fact kind="fixes">
 
-    	- Un certificado **viejo en silencio**, sin nada en el log, significa que los ficheros nunca parecieron cambiar. Una renovación que escribe a través de un enlace simbólico con el que no se arrancó el servidor, o una copia hecha con `cp -p` que preserva las fechas originales, dejan las rutas que el servidor vigila exactamente como estaban. Apunta `--tls-cert`/`--tls-key` a las rutas que la renovación reescribe de verdad — en certbot son `live/<nombre>/fullchain.pem` y `privkey.pem` — o quita el flag que preserva las fechas.
-    	- Un **aviso** significa que la pareja en disco se leyó y se rechazó. A mitad de una rotación eso es esperable y se corrige solo: el certificado llega antes que su clave, la pareja no casa durante lo que tarde la segunda escritura, y mientras tanto se sirve el certificado anterior. Se escribe un aviso por cada estado distinto de los ficheros, así que una línea que se repite con fecha nueva es una rotación que sigue fallando y no un servidor con mucho tráfico. Si persiste, los dos ficheros no van juntos — comprueba que la clave case con el certificado con `openssl pkey -in key.pem -pubout` frente a `openssl x509 -in cert.pem -pubkey -noout`.
-    	- Las conexiones **ya abiertas conservan el certificado con el que hicieron el handshake**, y es a propósito. Un cliente que mantiene una conexión keep-alive ve el certificado nuevo cuando reconecta, no antes; un proxy delante con un pool de conexiones de larga vida es el motivo habitual de que una rotación parezca aplicada a medias desde fuera.
+    - Un certificado **antiguo en silencio**, sin nada en el log, significa que los ficheros nunca parecieron cambiar. Una renovación que escribe a través de un enlace simbólico con el que no se arrancó el servidor, o una copia hecha con `cp -p` que conserva las marcas de tiempo originales, dejan las rutas que vigila el servidor exactamente como estaban. Apunta `--tls-cert`/`--tls-key` a las rutas que la renovación reescribe de verdad — en certbot son `live/<name>/fullchain.pem` y `privkey.pem` — o quita el flag que conserva las marcas de tiempo.
+    - Un **aviso** significa que el par en disco se leyó y se rechazó. A mitad de una rotación eso es esperable y se corrige solo: el certificado llega antes que su clave, el par no casa mientras dura la segunda escritura, y mientras tanto se sirve el certificado anterior. Se registra un aviso por cada estado distinto de los ficheros, así que una línea que se repite con una marca de tiempo nueva es una rotación que sigue fallando, no un servidor ocupado. Si persiste, los dos ficheros no van juntos — comprueba que la clave corresponde al certificado con `openssl pkey -in key.pem -pubout` frente a `openssl x509 -in cert.pem -pubkey -noout`.
+    - Las conexiones **ya abiertas conservan el certificado con el que hicieron el handshake**, y es así por diseño. Un cliente que mantiene una conexión keep-alive ve el certificado nuevo cuando vuelve a conectar, no antes; un proxy delante con un pool de upstream de larga duración es el motivo habitual de que una rotación parezca aplicada a medias desde fuera.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Modo servidor HTTP](/libgen-mcp/es/http-server-mode/#renovar-son-dos-escrituras-de-fichero-no-un-reinicio).
     </Fact>
 
 </Facts>
 
-## Espacio en disco
+### Tras un proxy de salida: `refusing to connect to a private or local address`
+
+<Facts>
+	<Fact kind="symptom">
+		Con `HTTP_PROXY` o `HTTPS_PROXY` fijados, una descarga, un enriquecimiento o una búsqueda de acceso abierto falla con `refusing to connect to a private or local address`.
+	</Fact>
+	<Fact kind="meaning">
+
+    Depende de la dirección que nombre el mensaje.
+
+    - **La dirección del propio proxy, para todos los hosts** (Crossref, arXiv, Unpaywall, cada URL de descarga): el servidor es la 2.0.1 o anterior, que juzgaba la conexión a un proxy en una dirección privada como si el proxy fuera el destino. Desde la 2.1.0 la conexión al proxy solo responde a la regla de metadatos de la nube, así que un proxy corporativo en `10.x` funciona sin `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES`.
+    - **El destino**: la URL que proporcionó un registro nombra una dirección privada o de metadatos, y se rechaza detrás de un proxy exactamente igual que sin él. Eso incluye toda grafía numérica que acepta un resolutor de C (`2852039166` y `0xa9fea9fe` son ambos `169.254.169.254`), y `a numeric host this server cannot classify` significa un host cuya última etiqueta solo parece numérica. `resolves to 169.254.169.254, the cloud instance metadata address` (u otra dirección de metadatos) significa un nombre de host que esta máquina resuelve a un endpoint de metadatos de la nube; el servidor resuelve los nombres localmente solo para esa comprobación, y una búsqueda que falla no provoca rechazo.
+
+    </Fact>
+    <Fact kind="fixes">
+
+    - Actualiza si el mensaje nombra al proxy.
+    - Un destino rechazado es la guarda haciendo su trabajo con una URL de terceros, no un problema de configuración. Si es un mirror tuyo en una dirección privada, nómbralo en `LIBGEN_MIRROR` o `LIBGEN_MCP_SCIHUB_HOSTS`: un host que nombraste está exento también detrás de un proxy.
+    - Un host en `NO_PROXY` se conecta directamente y lo juzga el dialer, como sin proxy.
+    - Las variables de proxy tienen que llegar al entorno del propio servidor: un cliente de escritorio pasa solo lo que nombra su bloque `env`, así que un proxy que funciona para `curl` en tu shell puede no estar fijado para el servidor.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Arquitectura](/libgen-mcp/es/architecture/#política-de-direcciones-salientes).
+    </Fact>
+
+</Facts>
+
+## Búsquedas
+
+### Todos los mirrors inalcanzables
+
+<Facts>
+	<Fact kind="symptom">
+		Las búsquedas y descargas fallan con `all libgen mirrors unreachable (network block? try a VPN or different DNS)`.
+	</Fact>
+	<Fact kind="meaning">
+		Al menos un mirror falló de forma transitoria (error de red, timeout, HTTP 5xx o 429) en cada pasada de reintento — un problema de conectividad genuino, no un recurso ausente.
+	</Fact>
+	<Fact kind="fixes">
+
+    - Comprueba la conectividad básica y la resolución DNS a la familia `libgen.li`. Algunos ISPs y redes bloquean estos dominios; una VPN o un resolutor alternativo (p. ej. `1.1.1.1`) suele ayudar.
+    - Si el propio descubrimiento está bloqueado, fija un mirror que puedas alcanzar con `LIBGEN_MIRROR=https://libgen.li` (u otro host vivo). Se prueba primero, y el descubrimiento queda como reserva.
+    - Aumenta `LIBGEN_MCP_TIMEOUT` (p. ej. `45s` o `1m`) y/o `LIBGEN_MCP_RETRY_ATTEMPTS` en enlaces lentos.
+    - Los mirrors que fallan entran en un enfriamiento de 45 segundos; espera un momento y reintenta — el servidor conmuta automáticamente en cuanto un mirror se recupera.
+
+    Un error relacionado pero distinto, `request rejected by all mirrors`, significa que todos los mirrors devolvieron un error _permanente_ (p. ej. 404/403). Eso es un "no encontrado / rechazado" normal, no un problema de red — vuelve a revisar la consulta o el identificador en lugar de tu conexión.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Arquitectura](/libgen-mcp/es/architecture/#failover-reintentos-y-enfriamiento).
+    </Fact>
+
+</Facts>
+
+### Las búsquedas son lentas, o se encolan unas tras otras
+
+<Facts>
+	<Fact kind="symptom">
+		Cada búsqueda tarda varios segundos, una búsqueda que no encuentra nada tarda más que una que sí, o varias búsquedas lanzadas a la vez terminan una detrás de otra.
+	</Fact>
+	<Fact kind="meaning">
+
+    Tres cosas marcan el ritmo, y ninguna es trabajo propio del servidor:
+
+    - **El cubo de salida.** Cada petición a un mirror espera un token de un único cubo que comparte todo el proceso, `LIBGEN_MCP_RATE_RPS`, que viene a una petición por segundo con ráfaga de una. Una búsqueda son varias peticiones, y las llamadas en curso a la vez hacen cola por los mismos tokens: medido, dieciséis búsquedas en curso tardaron quince segundos en vaciarse.
+    - **La escalada.** Una búsqueda a la que el catálogo no devuelve nada se envía, con el `extra_sources: "auto"` por defecto, a Anna's Archive y a los proveedores de acceso abierto, y los espera.
+    - **El descubrimiento.** La primera llamada tras un arranque, o tras caducar la lista de mirrors en caché, descarga la lista de mirrors y los sondea.
+
+    </Fact>
+    <Fact kind="fixes">
+
+    - En un despliegue que sirve a varios llamantes, sube el cubo: `LIBGEN_MCP_RATE_RPS` hasta `20` y `LIBGEN_MCP_RATE_BURST` hasta `100`. El valor bajo por defecto es cortesía deliberada con mirrors que mantienen voluntarios, así que súbelo lo que necesite tu carga y no más.
+    - Pasa `extra_sources: "never"` (o fija `LIBGEN_MCP_EXTRA_SOURCES=never`) cuando solo importa el catálogo.
+    - Fija un mirror con `LIBGEN_MIRROR` para saltarte el descubrimiento.
+    - Un límite de entrada por encima del cubo de salida solo mueve la cola: en un despliegue HTTP ocupado, el cubo es el ajuste que cambia el rendimiento.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Cómo funciona la búsqueda](/libgen-mcp/es/how-search-works/), [Benchmarks](/libgen-mcp/es/benchmarks/) y [Configuración](/libgen-mcp/es/configuration/#libgen_mcp_extra_sources).
+    </Fact>
+
+</Facts>
+
+### Resultados de búsqueda truncados
+
+<Facts>
+	<Fact kind="symptom">
+		Una respuesta de búsqueda tiene `truncated: true` y un `hint`, y paginar más allá de cierto punto no devuelve nada.
+	</Fact>
+	<Fact kind="meaning">
+		El mirror informa de más coincidencias (`total_files`) de las que realmente servirá entre páginas (`reachable`). Las páginas más allá de `reachable` están vacías.
+	</Fact>
+	<Fact kind="fixes">
+
+    Refina en lugar de paginar más hondo, como sugiere el `hint`:
+
+    - Añade términos distintivos (autor, año).
+    - Restringe los campos con `search_in` (p. ej. `["title"]`).
+    - Acota `topics` a la(s) colección(es) relevante(s).
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Herramientas](/libgen-mcp/es/tools/#paginación-y-truncado).
+    </Fact>
+
+</Facts>
+
+### Un resultado que no se descarga (`origin: "annas"`)
+
+<Facts>
+	<Fact kind="symptom">
+		Una búsqueda devolvió un resultado etiquetado `origin: "annas"`, pero `download` falla con su md5 con un error sobre que no hay CID de IPFS o ninguna pasarela lo sirve.
+	</Fact>
+	<Fact kind="meaning">
+		Ese resultado vino de una búsqueda escalada: el catálogo de Library Genesis no tiene el archivo, así que la única ruta hasta él es Anna's Archive. La ruta sin clave lee la dirección IPFS del elemento de la página de registro de Anna's — y **la mayoría de los registros de Anna's no publican ninguna dirección IPFS**. Cuando no la hay, no hay nada que traer sin clave, y esto es lo esperado, no un fallo.
+	</Fact>
+	<Fact kind="fixes">
+
+    Por orden de esfuerzo:
+
+    - Fija `LIBGEN_MCP_ANNAS_KEY` con una clave de miembro de Anna's Archive. La API de descarga rápida para miembros sirve elementos sin dirección IPFS, y la ruta IPFS sin clave queda como reserva.
+    - Busca de nuevo con otros términos; otra edición de la misma obra puede estar en el catálogo, que se descarga por las fuentes habituales.
+    - Llama igualmente a `get_details` con el md5. Recurre al registro de Anna's, así que sigues obteniendo título, autor, año e idioma — más los ISBN cuando ese registro los trae, cosa que hace una minoría — aunque los bytes estén fuera de alcance, lo suficiente para encontrar el elemento en otro sitio.
+
+    Una pasarela que simplemente es lenta informa de un timeout; reintentar más tarde suele funcionar, porque las pasarelas IPFS públicas varían en lo rápido que localizan un elemento.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Cómo funciona la búsqueda](/libgen-mcp/es/how-search-works/) y [Fuentes](/libgen-mcp/es/sources/#annas).
+    </Fact>
+
+</Facts>
+
+## Descargas
+
+### Descarga fallida / discrepancia de MD5
+
+<Facts>
+	<Fact kind="symptom">
+		`download` devuelve un error, o `integrity check failed: MD5 mismatch`.
+	</Fact>
+	<Fact label="Significado y soluciones">
+
+    - **Discrepancia de MD5** — los bytes descargados no coincidieron con el `md5` solicitado (transferencia corrupta o manipulada, o un mirror obsoleto). El archivo parcial se elimina automáticamente; basta con reintentar. Si persiste en un mirror, la reserva `randombook` probará mirrors recién descubiertos.
+    - **"mirror returned an HTML page instead of the file"** — la clave de descarga expiró o el mirror sirvió una página de error/desafío. Reintenta; la canalización resuelve una clave fresca cada vez y conmuta a la siguiente fuente.
+    - **"download exceeds the configured size limit"** — el archivo es mayor que `LIBGEN_MCP_MAX_DOWNLOAD_BYTES`. Sube el límite (hasta 50 GiB) o ponlo en `0` para desactivarlo.
+    - **"truncated download"** — la conexión se cortó a mitad del flujo. El archivo `.part` se conserva, así que volver a ejecutar `download` reanuda desde donde se detuvo (el campo `resumed` del resultado informa `true` cuando lo hace).
+    - **Todas las fuentes fallaron** — la herramienta devuelve los errores por fuente unidos, una línea por cada fuente que probó. Léelos para ver si el elemento simplemente no se encontró o si todos los proveedores estaban inalcanzables.
+
+    El prompt `download_troubleshoot` guía a un modelo por el mismo diagnóstico a partir del texto del error.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Arquitectura](/libgen-mcp/es/architecture/#flujo-de-descarga) y [Herramientas](/libgen-mcp/es/tools/#comportamiento-y-errores).
+    </Fact>
+
+</Facts>
+
+### Artículo no encontrado (acceso abierto vs Sci-Hub)
+
+<Facts>
+	<Fact kind="symptom">
+		Un `download` con un `doi` falla, o no devuelve nada útil.
+	</Fact>
+	<Fact kind="meaning">
+		Los artículos se obtienen por DOI a través de una cadena de fuentes, por orden: los resolutores de acceso abierto (`unpaywall`, `openalex`, `europepmc`), las fuentes directas de editor que sirven cada una un prefijo DOI (`biorxiv`, `rfc`, `nist`, `dagstuhl`, `acl`, `zenodo`, `scielo`, `fao`), las copias preservadas (`fatcat`, `core`), el enlace que el editor depositó en Crossref (`crossref`), las monografías de acceso abierto (`oapen`) y, al final, las reservas de shadow libraries (`scihub` y después `scidb`). Cada fuente sirve el artículo o informa de un fallo limpio, y la cadena avanza. Dos solo están en la cadena cuando se configuran: `unpaywall` necesita `LIBGEN_MCP_UNPAYWALL_EMAIL` (a un cliente con elicitation se le pide uno en su lugar, y rechazarlo solo pasa a la siguiente), y `core` necesita `LIBGEN_MCP_CORE_KEY`.
+	</Fact>
+	<Fact kind="fixes">
+
+    - Confirma que el DOI es correcto (cópialo exactamente del resultado de búsqueda del artículo).
+    - Si todos los proveedores de acceso abierto fallaron, probablemente el artículo no es de acceso abierto; Sci-Hub y después SciDB son las reservas.
+    - Los mirrors de Sci-Hub rotan y caen a menudo. Actualiza `LIBGEN_MCP_SCIHUB_HOSTS` con una lista de hosts que funcionen si fallan todos los predeterminados.
+    - Fija tu propio `LIBGEN_MCP_UNPAYWALL_EMAIL` — hasta que lo hagas, Unpaywall está desactivado (las demás fuentes de acceso abierto y Sci-Hub se siguen probando). La API espera una dirección de contacto real.
+    - Fija `LIBGEN_MCP_CORE_KEY` (una clave gratuita de la API de CORE) para añadir CORE a la cadena de acceso abierto.
+    - Un error de `crossref` que nombra el navegador como la ruta que queda significa que todos los enlaces que depositó el editor rechazaron a un cliente anónimo; los grandes editores comerciales responden `403` diga lo que diga el enlace.
+    - Ten en cuenta que las descargas por DOI **no** se verifican por MD5 (`verified` es `false`) — no hay digest de LibGen para ellas.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Fuentes](/libgen-mcp/es/sources/) tiene el corpus de cada fuente, lo que no cubre y los errores que da, y [Descargar un artículo](/libgen-mcp/es/download-a-paper/) recorre la ruta.
+    </Fact>
+
+</Facts>
+
+### Libro no encontrado por ISBN (solo acceso abierto)
+
+<Facts>
+	<Fact kind="symptom">
+		Un `download` con un `isbn` falla con algo como `no catalog entry states "9780141439518"` o `no freely downloadable scan ... (every candidate is lending-restricted or holds no book file)`.
+	</Fact>
+	<Fact kind="meaning">
+
+    La ruta `isbn` solo alcanza las dos fuentes de libros de **acceso abierto** — `oapen` y `archive` — y ninguna servirá un libro que no pueda redistribuir:
+
+    - `oapen` contiene monografías académicas con licencia abierta. Confirma que el registro que encontró indica de verdad el ISBN (o DOI) que pediste antes de servir nada, porque su búsqueda es de texto libre y si no devolvería una monografía sin relación. Un libro comercial simplemente no está ahí.
+    - `archive` sirve un escaneo del Internet Archive solo cuando OpenLibrary informa del libro como `ebook_access: public` **y** el escaneo concreto no está marcado como `access-restricted-item` ni archivado en una colección de préstamo. Un libro que en el Archive solo se presta se notifica como fallo en lugar de descargarse, porque los archivos de un elemento en préstamo o rechazan la petición o llegan envueltos en DRM e inservibles.
+
+    </Fact>
+    <Fact kind="fixes">
+
+    - Para un libro con derechos de autor, usa la ruta `md5`: busca en el catálogo y descarga por el `md5` del resultado.
+    - Comprueba el propio ISBN — una errata, o el ISBN de otra edición, es la causa habitual. Funcionan las formas de 10 y 13 caracteres, con o sin guiones.
+    - Si el libro es un clásico de dominio público, busca de nuevo y fíjate en un resultado `gutenberg` en `open_access`: su `full_text_url` es el propio archivo del ebook.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Fuentes](/libgen-mcp/es/sources/#libros-de-acceso-abierto-y-de-dominio-público).
+    </Fact>
+
+</Facts>
+
+### Falta una fuente en los errores de una descarga repetida
+
+<Facts>
+	<Fact kind="symptom">
+		Un `download` falla, y un segundo intento informa de menos fuentes que el primero — una que falló hace un momento ni siquiera aparece.
+	</Fact>
+	<Fact kind="meaning">
+
+    Esa fuente está en **enfriamiento**. Cuando una fuente falla por no estar disponible (un error de transporte, un timeout, un 5xx o un 429) se aparta durante 5 minutos, para que la siguiente descarga no gaste su presupuesto de resolución en un proveedor que acaba de demostrar que es inalcanzable. Se omite, no se elimina: el enfriamiento caduca solo, no se escribe nada en disco (un reinicio lo borra), y cuando todas las fuentes capaces de servir el elemento están en enfriamiento se prueban todas igualmente. Una fuente que simplemente informó de que no tiene el elemento nunca se aparta.
+
+    El log del servidor dice qué fuentes se omitieron y por qué — `source in cooldown, skipping` con el instante en que vuelve a ser elegible, o `every capable source is in cooldown, trying them anyway`. Ejecuta con `LIBGEN_MCP_LOG_LEVEL=info` (el valor por defecto) para verlas.
+
+    </Fact>
+    <Fact kind="fixes">
+
+    - No hace falta nada: reintenta más tarde, o enseguida con `source: "<name>"` para dirigirte directamente a ese proveedor — una fuente explícita siempre se prueba, esté en enfriamiento o no.
+    - Si una fuente se enfría una y otra vez, es que de verdad es inalcanzable desde este host. Compruébala a mano antes de sospechar del servidor.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Arquitectura](/libgen-mcp/es/architecture/#enfriamiento-por-fuente).
+    </Fact>
+
+</Facts>
+
+### Espacio en disco
 
 <Facts>
 	<Fact kind="symptom">
 		`not enough free disk space in <dir>: need ~<n> bytes, have <m>`.
 	</Fact>
 	<Fact kind="meaning">
-		Antes de transmitir una descarga cuyo tamaño se conoce, el servidor comprueba que el destino tiene espacio para el archivo más un margen de ~8 MiB, y se niega en lugar de llenar el disco.
+		Antes de transferir una descarga de tamaño conocido, el servidor comprueba que el destino tiene sitio para el archivo más un margen de ~8 MiB, y se niega en lugar de llenar el disco. Esta comprobación solo se aplica a un servidor que guarda en disco. Un servidor remoto nunca escribe ningún archivo, así que este error no puede darse ahí.
 	</Fact>
 	<Fact kind="fixes">
 
-    	- Libera espacio en el volumen de destino, o apunta `LIBGEN_MCP_DOWNLOAD_DIR` (o el `path` por llamada) a un volumen con más espacio.
-    	- Elimina los archivos `.part` obsoletos que dejan las descargas interrumpidas si no piensas reanudarlas (viven en el directorio de descargas, con el nombre `.libgen-mcp-*.part`).
-    	- Bajo Docker, asegúrate de que el volumen de descargas montado sea lo bastante grande y escribible por el UID `10001`.
+    - Libera espacio en el volumen de destino, o apunta `LIBGEN_MCP_DOWNLOAD_DIR` (o el `path` de cada llamada) a un volumen con más sitio.
+    - Borra los archivos `.part` obsoletos de descargas interrumpidas si no piensas reanudarlas (están en el directorio de descargas, con el nombre `.libgen-mcp-*.part`). Una descarga que acaba saliendo bien intenta limpiar lo que deja, incluidos los parciales de las fuentes que fallaron antes — se salta los que otra descarga concurrente sigue escribiendo. Una descarga en la que fallaron _todas_ las fuentes conserva sus parciales a propósito, uno por cada fuente que llegó a escribir bytes, para que una llamada posterior pueda reanudar a partir de ellos.
+    - En Docker, asegúrate de que el volumen de descargas montado es lo bastante grande y que el UID `10001` puede escribir en él.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Herramientas](/libgen-mcp/es/tools/#dónde-acaba-el-archivo-local-vs-remoto).
     </Fact>
 
 </Facts>
+
+### `download` devuelve un enlace en lugar de guardar un archivo
+
+<Facts>
+	<Fact kind="symptom">
+		`download` tiene éxito pero devuelve un `resource_link` y un objeto `resolved`, y no aparece ningún archivo en ninguna parte.
+	</Fact>
+	<Fact kind="meaning">
+		El servidor corre en modo remoto: arrancado con `--http`, en un socket unix, o con `LIBGEN_MCP_REMOTE_DOWNLOADS=1`. Su disco no es uno al que el cliente pueda llegar, así que escribir ahí un archivo no le daría nada al llamante, y el servidor resuelve el enlace en su lugar. `resolve_only` va implícito y no hace falta fijarlo.
+	</Fact>
+	<Fact kind="fixes">
+
+    - Descarga el enlace con tu propia herramienta HTTP, o ejecuta el servidor en local por stdio, donde los archivos caen en `LIBGEN_MCP_DOWNLOAD_DIR` (por defecto `~/Downloads`).
+    - Un servidor stdio alojado en una máquina remota o efímera (detrás de `mcp-proxy`, por ejemplo) debería fijar `LIBGEN_MCP_REMOTE_DOWNLOADS=1`: su disco es tan inalcanzable para el cliente como el de un despliegue HTTP.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Herramientas](/libgen-mcp/es/tools/#dónde-acaba-el-archivo-local-vs-remoto) y [Configuración](/libgen-mcp/es/configuration/#libgen_mcp_remote_downloads).
+    </Fact>
+
+</Facts>
+
+## `read` rechazado
+
+### Una ruta está fuera de los directorios permitidos
+
+<Facts>
+	<Fact kind="symptom">
+		`read` falla con `path /home/me/notes.txt is outside the allowed directories; use the working directory, the OS temp directory, the download directory, or name it in LIBGEN_MCP_ALLOWED_READ_DIRS`, o `download` con un `path` falla igual sobre su `output path`. En un servidor remoto `read` dice en su lugar `path is not available on a remote server; use md5 or doi`.
+	</Fact>
+	<Fact kind="meaning">
+		Una ruta local que da el llamante queda confinada al directorio de trabajo, al directorio temporal del sistema y al directorio de descargas, tras resolver los enlaces simbólicos. Un cliente que arranca el servidor en `/` o en tu directorio personal dejaría si no que cualquier prompt leyera cualquier fichero de ahí. Un servidor remoto no acepta ninguna ruta local, porque la ruta estaría en el disco del servidor.
+	</Fact>
+	<Fact kind="fixes">
+
+    - Nombra el directorio que quieres poder leer en `LIBGEN_MCP_ALLOWED_READ_DIRS`.
+    - O lee por `md5` o `doi`, que lee el archivo descargado sin ruta.
+    - Un enlace simbólico que apunta fuera de las raíces se rechaza aunque el propio enlace esté dentro.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Seguridad](/libgen-mcp/es/security/) y [Herramientas](/libgen-mcp/es/tools/#entrada-de-read).
+    </Fact>
+
+</Facts>
+
+### Un archivo que `read` no puede extraer
+
+<Facts>
+	<Fact kind="symptom">
+		`read` devuelve `extractable: false` con un motivo: `no extractable text layer (likely a scanned or image-only PDF); OCR is not supported`, `unsupported format .djvu: text extraction is not available (comic/scanned/proprietary container)`, `unsupported file extension .env and its bytes match no supported format (unrecognized)`, o `cannot read the file: the reader did not finish within the time limit (the document is damaged or pathologically structured)`.
+	</Fact>
+	<Fact kind="meaning">
+		`read` extrae texto de PDF, EPUB y texto plano. Un escaneo no tiene texto que extraer y aquí no se hace OCR; DjVu, los archivos de cómic y los contenedores propietarios de ebooks no se leen en absoluto; a un documento dañado se le da un tiempo límite en lugar de un hilo para siempre.
+	</Fact>
+	<Fact kind="fixes">
+
+    - Descarga otra edición de la misma obra: el catálogo suele tener un PDF con texto o un EPUB junto a un escaneo.
+    - Abre el archivo en local con un lector que haga OCR.
+    - Un índice que vuelve vacío no es un fallo: muchos PDF no llevan tabla de contenidos, y `find` sigue buscando en el texto.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Herramientas](/libgen-mcp/es/tools/#no-extraíble).
+    </Fact>
+
+</Facts>
+
+## La telemetría no llega
+
+### Nada llega al colector
+
+<Facts>
+	<Fact kind="symptom">
+		`LIBGEN_MCP_TELEMETRY` está fijada y el colector no recibe nada, o solo algunas señales.
+	</Fact>
+	<Fact kind="meaning">
+
+    El log de arranque dice cuál de varias cosas es:
+
+    - **No hay línea `telemetry enabled` en `WARN`.** El interruptor no llegó al proceso, o `OTEL_SDK_DISABLED=true` lo vetó (`telemetry suppressed by OTEL_SDK_DISABLED`, en `INFO`).
+    - **`telemetry disabled: it could not be started`, en `ERROR`.** El exportador rechazó su configuración, por ejemplo `http/json` como protocolo, que este servidor rechaza en lugar de partir un despliegue entre dos codificaciones. El servidor sigue sirviendo.
+    - **Líneas `opentelemetry sdk error` repetidas.** Las exportaciones están fallando. La causa más común es un endpoint escrito sin esquema o sin fijar: los exportadores de Go usan por defecto `https://localhost:4318`, así que un colector local en texto plano rechaza cada lote.
+    - **Nada raro en el log, pero los timeouts o los ajustes de lote no tienen efecto.** Las duraciones `OTEL_*` son milisegundos enteros: `OTEL_EXPORTER_OTLP_TIMEOUT=30s` no se interpreta como nada.
+
+    </Fact>
+    <Fact kind="fixes">
+
+    - Escribe el endpoint con su esquema: `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`.
+    - Escribe toda duración `OTEL_*` en milisegundos.
+    - En stdio, nunca fijes `OTEL_TRACES_EXPORTER=console`: escribe en stdout, que es el protocolo.
+    - Un valor de las variables de telemetría propias de este servidor que no se puede interpretar detiene el arranque; un colector inalcanzable nunca lo hace.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Telemetría](/libgen-mcp/es/telemetry/#cuando-va-mal).
+    </Fact>
+
+</Facts>
+
+## Problemas de instalación por canal
+
+La página de cada canal tiene la instalación en sí; estos son los fallos propios de cada uno.
+
+### npm y npx
+
+- **`spawn npx ENOENT` o `command not found` en un cliente de escritorio.** El cliente no lee el `PATH` de tu shell, y Node instalado con un gestor de versiones vive en un sitio que solo conoce tu shell. Da la ruta absoluta que imprime `which npx`.
+- **No pasa nada en Windows.** `npx` es un fichero por lotes: usa `"command": "cmd"` con `"args": ["/c", "npx", "-y", "@jmrp.io/libgen-mcp"]`.
+- **`npm WARN EBADENGINE`, o un lanzador que falla con un Node antiguo.** El lanzador necesita Node 18 o posterior.
+- **`libgen-mcp: the @jmrp.io/libgen-mcp-<platform> package is not installed.`** El binario viaja en una dependencia opcional, y la instalación se la saltó: `--no-optional`, `--omit=optional`, o un lockfile escrito en otro sistema operativo. Reinstala sin el flag, o borra `node_modules` y el lockfile e instala de nuevo.
+- **`libgen-mcp: unsupported platform …`.** Hay binarios precompilados para Linux, macOS y Windows en x64 y arm64. Para cualquier otra cosa, compila desde el código fuente.
+- **Sigue corriendo una versión antigua.** `npx` reutiliza su caché: `npx -y @jmrp.io/libgen-mcp@latest` pide la más reciente.
+
+Consulta [npm](/libgen-mcp/es/install/npm/).
+
+### uvx y pip
+
+- **`uvx: command not found` en un cliente de escritorio.** uv se instala en `~/.local/bin`, que el `PATH` de un cliente de escritorio no incluye. Da la ruta absoluta que imprime `which uvx`.
+- **`No matching distribution found` (pip) o ninguna wheel para la plataforma (uv).** Hay wheels para Linux, macOS 11 o posterior y Windows, en x86-64 y arm64. Un sistema de 32 bits, otro sistema operativo, o un pip demasiado antiguo para leer las etiquetas de plataforma de la wheel no encuentra ninguna: actualiza pip primero.
+- **Alpine y otros sistemas musl.** Las wheels de Linux llevan etiquetas `musllinux` junto a `manylinux`, y el binario no necesita biblioteca de C, así que la misma wheel se instala ahí.
+- **`libgen-mcp binary not found next to …`.** Se ejecutó `python -m libgen_mcp` con un intérprete distinto del que instaló el paquete. Ejecuta `libgen-mcp` directamente, o usa el intérprete correspondiente.
+
+Consulta [PyPI](/libgen-mcp/es/install/pypi/).
+
+### dnx y NuGet
+
+- **No se encuentra `dnx`.** `dnx` viene con el SDK de .NET 10, y los paquetes de la herramienta lo necesitan: la estructura por runtime que usan no existe en SDKs anteriores. Instala .NET 10, o usa otro canal.
+- **Un flag del servidor acaba en `dnx` en lugar de en el servidor.** Todo lo que va antes de `--` es de `dnx`: `dnx libgen-mcp -- --http 127.0.0.1:8080`, y en los `args` de un cliente, `["libgen-mcp", "--", "--env-file", "/absolute/path/libgen.env"]`.
+- **Un cliente de escritorio no encuentra la herramienta instalada.** `dotnet tool install -g` pone el shim en `~/.dotnet/tools`; da esa ruta absoluta.
+
+Consulta [NuGet](/libgen-mcp/es/install/nuget/).
+
+### Homebrew
+
+- **Un cliente de escritorio no encuentra `libgen-mcp`.** Un cliente arrancado desde el dock no tiene el `bin` de Homebrew en su `PATH`. Da la ruta completa que imprimen las notas de la fórmula: `$(brew --prefix)/bin/libgen-mcp`, que es `/opt/homebrew/bin/libgen-mcp` en Apple silicon, `/usr/local/bin/libgen-mcp` en Intel y `/home/linuxbrew/.linuxbrew/bin/libgen-mcp` en Linux.
+- **`No available formula`.** La fórmula está en el tap de este proyecto: `brew install jmrplens/tap/libgen-mcp`.
+- **La versión antigua sigue respondiendo después de `brew upgrade`.** El proceso en marcha conserva el binario con el que arrancó. Ejecuta `libgen-mcp --shutdown` y deja que el cliente lo arranque de nuevo.
+
+Consulta [Homebrew](/libgen-mcp/es/install/homebrew/).
+
+### Docker
+
+- **El cliente espera y nunca conecta.** El `docker run` de su configuración no lleva `-i`. Sin él la entrada estándar es `/dev/null`, así que la imagen arranca su listener HTTP en lugar de stdio, y el log dice `transport inferred from stdin` con `stdin is /dev/null, so no client is speaking to this process`. Añade `-i`.
+- **`LIBGEN_MCP_DOWNLOAD_DIR "/downloads" is not writable: … permission denied`.** El contenedor corre como UID `10001`, que tiene que poder escribir en el directorio que montas: haz `chown 10001:10001` en el host, o ejecuta con `--user "$(id -u):$(id -g)"` y apunta `LIBGEN_MCP_DOWNLOAD_DIR` al montaje.
+- **`… is not usable: … read-only file system` con `--read-only`.** El directorio de descargas se comprueba al arrancar en todos los transportes. Monta ahí un volumen escribible o un `tmpfs`, y da también un `tmpfs` a `/tmp`, porque `read` por `md5` o `doi` deja ahí el archivo que trae.
+- **El contenedor sale enseguida con estado `0`.** Se añadió un argumento sin los valores por defecto: cualquier argumento sustituye entera la orden de la imagen, `--transport auto --http 0.0.0.0:8080` incluido, y sin `-i` y sin `--http` un servidor stdio lee fin de fichero y se detiene. Escribe la línea de órdenes completa, `--transport auto --http 0.0.0.0:8080` y tu flag.
+- **Sale enseguida con estado `1`, nombrando `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES`.** El listener por defecto de la imagen es un bind comodín. Consulta [la escotilla de direcciones privadas](#la-escotilla-de-direcciones-privadas-en-un-listener-abierto).
+- **`cosign verify` informa "no signatures found".** Usa un cliente cosign 3.x: el 2.x no encuentra las firmas que verifica un cliente 3.x.
+
+Consulta [Docker](/libgen-mcp/es/install/docker/) y [Contenedores](/libgen-mcp/es/deploy/containers/).
+
+### Claude Desktop (`.mcpb`)
+
+- **En Linux, abrir el fichero no hace nada.** La app de Linux no registra ningún manejador para los ficheros `.mcpb`. Instálalo desde **Extensions > Install Extension…**.
+- **Claude Desktop rechaza el paquete.** Cada paquete por sistema lista solo su propio sistema. Descarga el del tuyo, o el universal `libgen-mcp.mcpb`.
+- **La extensión se instala pero el servidor falla.** Un ajuste que se le dio no se puede interpretar, y el log del servidor en el directorio de logs de Claude termina con el motivo: un **Request timeout** de `30` en lugar de `30s` da `LIBGEN_MCP_TIMEOUT: time: missing unit in duration "30"`. Corrige el campo en los ajustes de la extensión.
+- **`no Linux binary for machine type …`** viene del lanzador de Linux en una máquina que no es ni x86-64 ni arm64. **`is still not executable after chmod; is the filesystem mounted noexec?`** significa que el directorio de extensiones está en un montaje `noexec`.
+- **Un ajuste no tiene campo.** Los campos del paquete cubren los habituales. Para cualquier otro, como `LIBGEN_MCP_ANNAS_KEY`, usa el campo **Settings file** o `~/.libgen-mcp.env`.
+
+Consulta [Claude Desktop](/libgen-mcp/es/install/claude-desktop/).
+
+### Binario de la release
+
+- **`Permission denied` al ejecutarlo.** El fichero se descargó sin su bit de ejecución: `chmod +x libgen-mcp`.
+- **`exec format error` o `cannot execute binary file`.** El asset es de otra arquitectura. Elige el que nombra `uname -m`: `amd64` para x86-64, `arm64` para aarch64.
+- **macOS se niega a abrirlo porque no puede verificar al desarrollador.** Un fichero que descarga un navegador lleva el atributo de cuarentena. Quítalo con `xattr -d com.apple.quarantine libgen-mcp`, o descarga con `curl`, que no lo pone.
+
+Consulta [Binarios de la release](/libgen-mcp/es/install/binary/).
+
+### `go install`
+
+- **Se instala una versión antigua, o `module contains a go.mod file, so major version must be compatible`.** La ruta del módulo lleva la versión mayor: `go install github.com/jmrplens/libgen-mcp/v2/cmd/server@latest`. Sin `/v2`, `@latest` resuelve en silencio la release 1.x más reciente, y un `@v2.x.y` se rechaza.
+- **`requires go >= 1.27.1`.** El toolchain es más antiguo de lo que necesita el módulo, y `GOTOOLCHAIN=local` impide que Go descargue uno más nuevo. Instala Go 1.27 o posterior, o deja que cambie de toolchain.
+- **La orden se llama `server`.** `go install` llama al binario como su paquete, `cmd/server`. Compílalo con `go build -o libgen-mcp ./cmd/server` desde un clon para tener el nombre habitual.
+- **`command not found` tras una instalación correcta.** `$(go env GOPATH)/bin` no está en tu `PATH`.
+
+Consulta [Binarios de la release](/libgen-mcp/es/install/binary/).
 
 ## Preguntas frecuentes
 
 ### ¿Por qué dice que todos los mirrors están inaccesibles?
 
-El error `all libgen mirrors unreachable (network block? try a VPN or different DNS)` significa que al menos un mirror falló de forma transitoria (error de red, timeout, HTTP 5xx o 429) en cada pasada de reintento — un problema de conectividad genuino, no un recurso ausente. Comprueba la conectividad y la resolución DNS a la familia `libgen.li` (algunos ISPs las bloquean; prueba una VPN o un resolutor como `1.1.1.1`), si el propio descubrimiento está bloqueado, fija un mirror alcanzable con `LIBGEN_MIRROR=https://libgen.li`, o aumenta `LIBGEN_MCP_TIMEOUT` y `LIBGEN_MCP_RETRY_ATTEMPTS`. Los mirrors que fallan entran en un enfriamiento de 45 segundos y el servidor hace failover automáticamente cuando uno se recupera.
+El error `all libgen mirrors unreachable (network block? try a VPN or different DNS)` significa que al menos un mirror falló de forma transitoria — un error de red, un timeout, un HTTP 5xx o un 429 — en cada pasada de reintento, lo que es un problema de conectividad genuino y no un recurso ausente. Comprueba la conectividad y el DNS hacia la familia `libgen.li`; algunos ISPs bloquean estos dominios, así que una VPN o un resolutor distinto como `1.1.1.1` suele ayudar. Si el propio descubrimiento está bloqueado, fija un mirror alcanzable con `LIBGEN_MIRROR=https://libgen.li`. También puedes subir `LIBGEN_MCP_TIMEOUT` y `LIBGEN_MCP_RETRY_ATTEMPTS` en enlaces lentos. Los mirrors que fallan entran en un enfriamiento de 45 segundos y el servidor conmuta automáticamente en cuanto uno se recupera.
 
 ### ¿Por qué falló la verificación MD5 de mi descarga?
 
-En las descargas de libros (por `md5`), libgen-mcp calcula el hash del archivo descargado entero y lo compara con el MD5 solicitado. Una discrepancia (`integrity check failed: MD5 mismatch`) significa que los bytes descargados no coincidieron con el `md5` solicitado — una transferencia corrupta o manipulada, o un mirror obsoleto. El archivo parcial se elimina automáticamente, así que basta con reintentar; si persiste en un mirror, la reserva `randombook` probará mirrors recién descubiertos. Ten en cuenta que solo las descargas de libros (por `md5`) se verifican por MD5; las descargas por DOI no llevan digest de LibGen y su campo `verified` es `false`.
+En las descargas de libros (por `md5`), libgen-mcp calcula el hash del archivo descargado entero y lo compara con el MD5 solicitado. Un `integrity check failed: MD5 mismatch` significa que los bytes no coincidieron — normalmente una transferencia corrupta o manipulada, o un mirror obsoleto. El archivo parcial se elimina automáticamente, así que basta con reintentar; si persiste en un mirror, la reserva `randombook` prueba mirrors recién descubiertos. Las descargas por DOI (artículos) no se verifican por MD5, porque no hay digest de LibGen para ellas.
 
 ### ¿Por qué faltan algunos artículos en los resultados?
 
-Un artículo falta cuando ninguna de las diecisiete fuentes por DOI tiene una copia servible. La cadena las prueba por orden, primero los proveedores legales de acceso abierto.
-
-`unpaywall` devuelve un PDF solo cuando el artículo es genuinamente de acceso abierto (y solo cuando `LIBGEN_MCP_UNPAYWALL_EMAIL` está fijado); un DOI de pago, o uno sin enlace a PDF, da `no open-access PDF` y la cadena avanza. Luego se prueban `openalex` (el mismo índice de acceso abierto, sin clave — el único resolvedor de acceso abierto sin restricción de prefijo que conserva un despliegue que no configura nada), `europepmc` (texto completo de Europe PMC), `biorxiv` (preprints `10.1101`), `rfc` (RFC `10.17487`), `nist` (publicaciones del NIST `10.6028`), `dagstuhl` (actas `10.4230` de Dagstuhl), `acl` (artículos `10.18653`/`10.3115` de la ACL Anthology), `zenodo` (depósitos `10.5281/zenodo`), `scielo` (artículos `10.1590` de SciELO Brasil), `fao` (documentos `10.4060` del FAO Knowledge Repository), `fatcat` (Internet Archive Scholar), `core` (una clave de API gratuita de CORE, cuando `LIBGEN_MCP_CORE_KEY` está fijado); luego `crossref` — que no es un índice de acceso abierto, sino el enlace a texto completo que depositó la propia editorial, comprobado antes de usarlo — y `oapen` (las monografías también llevan DOI); finalmente las reservas de shadow libraries: `scihub` prueba cada host configurado hasta que uno sirve una página de artículo con un PDF extraíble, y `scidb` (el visor SciDB de Anna's Archive) se prueba en último lugar.
-
-Confirma que el DOI es exactamente correcto, fija tu propio `LIBGEN_MCP_UNPAYWALL_EMAIL`, y actualiza `LIBGEN_MCP_SCIHUB_HOSTS` con hosts que funcionen ahora si todos los de por defecto fallan, porque los mirrors de Sci-Hub rotan y caen a menudo.
+Los artículos se obtienen por DOI a través de una cadena de fuentes, primero los proveedores legales de acceso abierto: `unpaywall` (cuando `LIBGEN_MCP_UNPAYWALL_EMAIL` está fijado), `openalex` y `europepmc`, después las fuentes directas de editor que sirven cada una un prefijo DOI, luego las copias preservadas (`fatcat`, y `core` cuando `LIBGEN_MCP_CORE_KEY` está fijado), el enlace que el editor depositó en `crossref`, y `oapen` para monografías. Las reservas de shadow libraries van al final: `scihub` y después `scidb`. Un DOI de pago sin copia en ningún punto de esa cadena no se puede descargar. Confirma que el DOI es exactamente correcto, fija tu propio `LIBGEN_MCP_UNPAYWALL_EMAIL` y actualiza `LIBGEN_MCP_SCIHUB_HOSTS` con hosts que funcionen si fallan todos los predeterminados, porque los mirrors de Sci-Hub rotan y caen a menudo.
 
 ### ¿Dónde guarda libgen-mcp los archivos descargados?
 
-Las descargas van al directorio que fija `LIBGEN_MCP_DOWNLOAD_DIR`, por defecto `~/Downloads`. El argumento `path` de la herramienta `download` lo sustituye en cada llamada; el campo `path` del resultado devuelve la ruta absoluta del archivo guardado. El directorio se crea si no existe y se comprueba al arrancar que se puede escribir en él, y antes de empezar a transferir el servidor verifica que hay espacio libre suficiente (el archivo más un margen de unos 8 MiB). Las descargas interrumpidas dejan un archivo `.part` (con nombre `.libgen-mcp-*.part`) en ese directorio, que se reanuda en la siguiente llamada. Bajo Docker el contenedor corre con el UID `10001`, así que el volumen de descargas montado debe ser escribible por ese usuario.
+Las descargas van al directorio que fija `LIBGEN_MCP_DOWNLOAD_DIR`, por defecto `~/Downloads`. El argumento `path` de la herramienta `download` lo sustituye en cada llamada. El directorio se crea si no existe y se comprueba al arrancar que se puede escribir en él, y antes de transferir el servidor verifica que hay espacio libre suficiente (el archivo más un margen de ~8 MiB). Las descargas interrumpidas dejan un archivo `.part` llamado `.libgen-mcp-*.part` en ese directorio para que una llamada posterior pueda reanudarla. En Docker el contenedor corre como UID `10001`, así que el volumen de descargas montado tiene que poder escribirlo ese usuario.
 
-Eso aplica a un servidor local stdio/Docker. Un servidor remoto/alojado (iniciado con `--http`) no puede escribir en disco en absoluto, así que nunca guarda ningún archivo: `download` devuelve siempre un enlace (un `resource_link` más un objeto `resolved`) en lugar de guardar el archivo — `resolve_only` queda implícito y no hace falta indicarlo. Un servidor **stdio** alojado —por ejemplo detrás de `mcp-proxy` en un catálogo como Glama— está en la misma situación remota/efímera aunque no tenga un listener HTTP; fija `LIBGEN_MCP_REMOTE_DOWNLOADS=1` en él para que sus descargas también vuelvan como enlaces. Consulta [Herramientas](/libgen-mcp/es/tools/#dónde-acaba-el-archivo-local-vs-remoto) para más detalle.
+Eso vale para un servidor local por stdio o Docker. Un servidor remoto o alojado (arrancado con `--http`) no puede escribir en disco, así que ningún archivo acaba en él: `download` devuelve automáticamente un enlace (un `resource_link` más un objeto `resolved`) en lugar de guardar un archivo — `resolve_only` va implícito y no hace falta fijarlo. Un servidor **stdio** alojado — por ejemplo detrás de `mcp-proxy` en un catálogo como Glama — está en la misma situación remota y efímera aunque no tenga listener HTTP; fija `LIBGEN_MCP_REMOTE_DOWNLOADS=1` en él para que sus descargas también vuelvan como enlaces.
