@@ -139,13 +139,13 @@ launch the same command disagree.
 | Claude Desktop           | the `.mcpb` extension, or `claude_desktop_config.json`      | `mcpServers`      |  yes  | custom connector           |
 | VS Code / GitHub Copilot | `.vscode/mcp.json`, or the user `mcp.json`                  | `servers`         |  yes  | `"type": "http"`           |
 | Cursor                   | `.cursor/mcp.json`, or `~/.cursor/mcp.json`                 | `mcpServers`      |  yes  | `url`                      |
-| Windsurf / Devin Desktop | `mcp_config.json`                                           | `mcpServers`      |  yes  | `serverUrl`                |
+| Windsurf / Devin Desktop | `mcp_config.json`                                           | `mcpServers`      |  yes  | `url`                      |
 | Zed                      | `settings.json`                                             | `context_servers` |  yes  | `url`                      |
 | JetBrains AI Assistant   | Settings, Tools, AI Assistant, Model Context Protocol (MCP) | `mcpServers`      |  yes  | `url`                      |
 | JetBrains Junie          | `.junie/mcp/mcp.json`, or `~/.junie/mcp/mcp.json`           | `mcpServers`      |  yes  | `url`                      |
 | Kiro                     | `.kiro/settings/mcp.json`, or `~/.kiro/settings/mcp.json`   | `mcpServers`      |  yes  | `url`                      |
 | OpenCode                 | `opencode.json`, or `~/.config/opencode/opencode.json`      | `mcp`             |  yes  | `"type": "remote"`         |
-| Cline                    | `cline_mcp_settings.json`                                   | `mcpServers`      |  yes  | `"type": "streamableHttp"` |
+| Cline                    | `~/.cline/data/settings/cline_mcp_settings.json`            | `mcpServers`      |  yes  | `"type": "streamableHttp"` |
 | Continue                 | `.continue/mcpServers/*.yaml`, or `~/.continue/config.yaml` | `mcpServers`      |  yes  | `type: streamable-http`    |
 | LM Studio                | `~/.lmstudio/mcp.json`                                      | `mcpServers`      |  yes  | `url`                      |
 | Gemini CLI               | `.gemini/settings.json`, or `~/.gemini/settings.json`       | `mcpServers`      |  yes  | `httpUrl`                  |
@@ -246,12 +246,15 @@ completely and start it again to load the change. The server's stderr is written
 `mcp-server-libgen.log` in Claude's log directory (`~/Library/Logs/Claude` on macOS,
 `%APPDATA%\Claude\logs` on Windows), which is the first place to look when it does not start.
 
-**Remote:** the configuration file has no field for a remote server. Add
-`https://mcp.jmrp.io/libgen` as a **custom connector** under **Settings > Connectors** instead.
-Claude reaches a custom connector from Anthropic's servers rather than from your machine, so
-a self-hosted URL has to be public HTTPS; a loopback or LAN address cannot work there.
+**Remote:** `claude_desktop_config.json` holds local servers only. Add
+`https://mcp.jmrp.io/libgen` as a **custom connector** instead: on a Pro or Max plan under
+**Customize > Connectors**, with **+ Add** and then **Add custom connector**; on a Team or
+Enterprise plan an owner adds it under **Organization settings > Connectors**. Claude reaches a
+custom connector from Anthropic's cloud rather than from your machine, so a self-hosted URL has
+to be reachable from the public internet; a loopback, LAN or VPN-only address cannot work there.
 
-Reference: [Connect to local MCP servers](https://modelcontextprotocol.io/docs/develop/connect-local-servers).
+References: [Connect to local MCP servers](https://modelcontextprotocol.io/docs/develop/connect-local-servers),
+[Get started with custom connectors using remote MCP](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp).
 
 ## VS Code / GitHub Copilot
 
@@ -336,11 +339,18 @@ Reference: [Cursor MCP documentation](https://cursor.com/docs/context/mcp).
 
 ## Windsurf / Devin Desktop
 
-Windsurf was renamed Devin Desktop in 2026, and its Cascade agent reads `mcp_config.json`:
+Windsurf became Devin Desktop on 2 June 2026, as an ordinary update that carried existing
+settings over. It has two agents: Devin Local, the default for new tabs, and the legacy Cascade
+agent. Both read the user-level `mcp_config.json`:
 
 - macOS and Linux: `~/.config/devin/mcp_config.json` (under `$XDG_CONFIG_HOME` when set)
 - Windows: `%APPDATA%\devin\mcp_config.json`
 - Windsurf builds from before the rename: `~/.codeium/windsurf/mcp_config.json`
+
+Devin Local also reads `.devin/mcp_config.json` in the project, and
+`devin mcp add libgen -- npx -y @jmrp.io/libgen-mcp` writes the entry for you. In Cascade, the
+file opens from the **…** menu of the Cascade panel, under **Open MCP config file**.
+`${env:NAME}` copies a variable from the environment the app was started in:
 
 ```json
 {
@@ -356,22 +366,29 @@ Windsurf was renamed Devin Desktop in 2026, and its Cascade agent reads `mcp_con
 }
 ```
 
-**Remote** — the field is `serverUrl`:
+**Remote** — the field is `url`, which both agents read (Cascade also accepts `serverUrl`):
 
 ```json
 {
   "mcpServers": {
-    "libgen": { "serverUrl": "https://mcp.jmrp.io/libgen" }
+    "libgen": { "url": "https://mcp.jmrp.io/libgen" }
   }
 }
 ```
 
-Reference: [Cascade MCP documentation](https://docs.devin.ai/desktop/cascade/mcp).
+References: [Cascade MCP configuration](https://docs.devin.ai/desktop/cascade/mcp),
+[Devin MCP configuration](https://docs.devin.ai/cli/extensibility/mcp/configuration),
+[Devin Desktop FAQ](https://docs.devin.ai/desktop/devin-desktop-faq).
 
 ## Zed
 
 Zed keeps its servers under `context_servers` in `settings.json`, which the
-**zed: open settings file** command opens (`~/.config/zed/settings.json` on macOS and Linux):
+**zed: open settings file** command opens:
+
+- macOS and Linux: `~/.config/zed/settings.json` (under `$XDG_CONFIG_HOME` on Linux when set)
+- Windows: `%APPDATA%\Zed\settings.json`
+
+**Settings > AI > MCP Servers > Add Server** writes the same entry for you:
 
 ```json
 {
@@ -395,8 +412,9 @@ Zed keeps its servers under `context_servers` in `settings.json`, which the
 }
 ```
 
-The server needs no authentication, so leave `headers` out. Reference:
-[Zed MCP documentation](https://zed.dev/docs/ai/mcp).
+The server needs no authentication, so leave `headers` out. References:
+[Zed MCP documentation](https://zed.dev/docs/ai/mcp),
+[Configuring Zed](https://zed.dev/docs/configuring-zed).
 
 ## JetBrains IDEs
 
@@ -416,12 +434,15 @@ add a server, and paste the configuration as JSON:
 }
 ```
 
-**Junie:** open **Settings > Tools > Junie > MCP Settings**, or edit the file directly —
-`.junie/mcp/mcp.json` in the project, or `~/.junie/mcp/mcp.json` (`%USERPROFILE%\.junie\mcp\mcp.json`
-on Windows) for every project. The entry is the same `mcpServers` object, with an `env` object
-for keys.
+AI Assistant's documentation names no file for that list, only the settings page, which
+also offers to import the servers Claude Desktop already has.
 
-**Remote**, in either one:
+**Junie:** open **Settings > Tools > Junie > MCP Settings**, which opens `mcp.json`, or edit
+the file directly — `.junie/mcp/mcp.json` in the project, or `~/.junie/mcp/mcp.json` in your
+home directory for every project. The plugin and the Junie CLI share both files. The entry is
+the same `mcpServers` object, with an `env` object for keys.
+
+**Remote**, in AI Assistant:
 
 ```json
 {
@@ -431,8 +452,12 @@ for keys.
 }
 ```
 
+Junie connects to remote servers too, but its documentation does not print a remote entry;
+the same `url` shape is the one to try, and Junie's `/mcp` screen in the CLI adds one for you.
+
 References: [AI Assistant MCP](https://www.jetbrains.com/help/ai-assistant/mcp.html),
-[Junie MCP settings](https://junie.jetbrains.com/docs/junie-plugin-mcp-settings.html).
+[Junie MCP settings](https://junie.jetbrains.com/docs/junie-plugin-mcp-settings.html),
+[Junie CLI MCP configuration](https://junie.jetbrains.com/docs/junie-cli-mcp-configuration.html).
 
 ## Kiro
 
@@ -503,13 +528,14 @@ Reference: [OpenCode MCP servers](https://opencode.ai/docs/mcp-servers/).
 ## Cline
 
 In the Cline panel, open **MCP Servers > Configure > Configure MCP Servers**, which opens
-`cline_mcp_settings.json`. In VS Code it lives in the extension's storage:
+`cline_mcp_settings.json`. Since Cline 4.0 the extension and the Cline CLI share one file in
+your home directory, `~/.cline/data/settings/cline_mcp_settings.json` (`CLINE_DATA_DIR`
+replaces `~/.cline/data`). Cline 3.x kept it in VS Code's storage for the extension, and 4.0
+moves its entries into the shared file on first start:
 
 - macOS: `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
 - Linux: `~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
 - Windows: `%APPDATA%\Code\User\globalStorage\saoudrizwan.claude-dev\settings\cline_mcp_settings.json`
-
-The Cline CLI reads `~/.cline/mcp.json` with the same shape.
 
 ```json
 {
@@ -538,7 +564,8 @@ The Cline CLI reads `~/.cline/mcp.json` with the same shape.
 }
 ```
 
-Reference: [Cline MCP documentation](https://docs.cline.bot/mcp/configuring-mcp-servers).
+Set `"type": "streamableHttp"` explicitly: an entry with a `url` and no `type` is read as the
+older SSE transport. Reference: [Cline MCP documentation](https://docs.cline.bot/mcp/configuring-mcp-servers).
 
 ## Continue
 

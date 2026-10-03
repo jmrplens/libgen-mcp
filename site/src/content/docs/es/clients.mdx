@@ -107,13 +107,13 @@ Claude Desktop tiene su propio camino de un clic, la extensión `.mcpb`, más ab
 | Claude Desktop           | la extensión `.mcpb` o `claude_desktop_config.json`         | `mcpServers`      |  sí   | conector personalizado     |
 | VS Code / GitHub Copilot | `.vscode/mcp.json` o el `mcp.json` de usuario               | `servers`         |  sí   | `"type": "http"`           |
 | Cursor                   | `.cursor/mcp.json` o `~/.cursor/mcp.json`                   | `mcpServers`      |  sí   | `url`                      |
-| Windsurf / Devin Desktop | `mcp_config.json`                                           | `mcpServers`      |  sí   | `serverUrl`                |
+| Windsurf / Devin Desktop | `mcp_config.json`                                           | `mcpServers`      |  sí   | `url`                      |
 | Zed                      | `settings.json`                                             | `context_servers` |  sí   | `url`                      |
 | JetBrains AI Assistant   | Settings, Tools, AI Assistant, Model Context Protocol (MCP) | `mcpServers`      |  sí   | `url`                      |
 | JetBrains Junie          | `.junie/mcp/mcp.json` o `~/.junie/mcp/mcp.json`             | `mcpServers`      |  sí   | `url`                      |
 | Kiro                     | `.kiro/settings/mcp.json` o `~/.kiro/settings/mcp.json`     | `mcpServers`      |  sí   | `url`                      |
 | OpenCode                 | `opencode.json` o `~/.config/opencode/opencode.json`        | `mcp`             |  sí   | `"type": "remote"`         |
-| Cline                    | `cline_mcp_settings.json`                                   | `mcpServers`      |  sí   | `"type": "streamableHttp"` |
+| Cline                    | `~/.cline/data/settings/cline_mcp_settings.json`            | `mcpServers`      |  sí   | `"type": "streamableHttp"` |
 | Continue                 | `.continue/mcpServers/*.yaml` o `~/.continue/config.yaml`   | `mcpServers`      |  sí   | `type: streamable-http`    |
 | LM Studio                | `~/.lmstudio/mcp.json`                                      | `mcpServers`      |  sí   | `url`                      |
 | Gemini CLI               | `.gemini/settings.json` o `~/.gemini/settings.json`         | `mcpServers`      |  sí   | `httpUrl`                  |
@@ -212,12 +212,12 @@ Usa un `command` absoluto: Claude Desktop no hereda el `PATH` de tu shell. Cierr
 </TabItem>
 <TabItem label="Remoto (HTTP)">
 
-El archivo de configuración no tiene campo para un servidor remoto. Añade `https://mcp.jmrp.io/libgen` como **conector personalizado** en **Settings > Connectors**. Claude llega a un conector personalizado desde los servidores de Anthropic y no desde tu máquina, así que una URL propia tiene que ser HTTPS pública; una dirección de loopback o de tu red local no puede funcionar ahí.
+`claude_desktop_config.json` solo admite servidores locales. Añade `https://mcp.jmrp.io/libgen` como **conector personalizado**: en un plan Pro o Max, en **Customize > Connectors**, con **+ Add** y luego **Add custom connector**; en un plan Team o Enterprise lo añade un propietario en **Organization settings > Connectors**. Claude llega a un conector personalizado desde la nube de Anthropic y no desde tu máquina, así que una URL propia tiene que ser accesible desde Internet; una dirección de loopback, de tu red local o solo accesible por VPN no puede funcionar ahí.
 
 </TabItem>
 </Tabs>
 
-Referencia: [Connect to local MCP servers](https://modelcontextprotocol.io/docs/develop/connect-local-servers).
+Referencias: [Connect to local MCP servers](https://modelcontextprotocol.io/docs/develop/connect-local-servers), [Get started with custom connectors using remote MCP](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp).
 
 ## VS Code / GitHub Copilot
 
@@ -311,11 +311,13 @@ Referencia: [documentación de MCP de Cursor](https://cursor.com/docs/context/mc
 <Tabs syncKey="transport">
 <TabItem label="Local (stdio)">
 
-Windsurf pasó a llamarse Devin Desktop en 2026, y su agente Cascade lee `mcp_config.json`:
+Windsurf pasó a ser Devin Desktop el 2 de junio de 2026, mediante una actualización normal que conservó la configuración existente. Tiene dos agentes: Devin Local, el predeterminado en las pestañas nuevas, y el agente heredado Cascade. Los dos leen el `mcp_config.json` del usuario:
 
 - macOS y Linux: `~/.config/devin/mcp_config.json` (bajo `$XDG_CONFIG_HOME` si está definida)
 - Windows: `%APPDATA%\devin\mcp_config.json`
 - Versiones de Windsurf anteriores al cambio de nombre: `~/.codeium/windsurf/mcp_config.json`
+
+Devin Local lee además `.devin/mcp_config.json` en el proyecto, y `devin mcp add libgen -- npx -y @jmrp.io/libgen-mcp` escribe la entrada por ti. En Cascade, el archivo se abre desde el menú **…** del panel de Cascade, en **Open MCP config file**. `${env:NAME}` copia una variable del entorno con el que se inició la aplicación:
 
 ```json
 {
@@ -334,12 +336,12 @@ Windsurf pasó a llamarse Devin Desktop en 2026, y su agente Cascade lee `mcp_co
 </TabItem>
 <TabItem label="Remoto (HTTP)">
 
-El campo es `serverUrl`:
+El campo es `url`, que leen los dos agentes (Cascade acepta también `serverUrl`):
 
 ```json
 {
 	"mcpServers": {
-		"libgen": { "serverUrl": "https://mcp.jmrp.io/libgen" }
+		"libgen": { "url": "https://mcp.jmrp.io/libgen" }
 	}
 }
 ```
@@ -347,14 +349,19 @@ El campo es `serverUrl`:
 </TabItem>
 </Tabs>
 
-Referencia: [documentación de MCP de Cascade](https://docs.devin.ai/desktop/cascade/mcp).
+Referencias: [configuración de MCP de Cascade](https://docs.devin.ai/desktop/cascade/mcp), [configuración de MCP de Devin](https://docs.devin.ai/cli/extensibility/mcp/configuration), [preguntas frecuentes de Devin Desktop](https://docs.devin.ai/desktop/devin-desktop-faq).
 
 ## Zed
 
 <Tabs syncKey="transport">
 <TabItem label="Local (stdio)">
 
-Zed guarda sus servidores bajo `context_servers` en `settings.json`, que abre la orden **zed: open settings file** (`~/.config/zed/settings.json` en macOS y Linux):
+Zed guarda sus servidores bajo `context_servers` en `settings.json`, que abre la orden **zed: open settings file**:
+
+- macOS y Linux: `~/.config/zed/settings.json` (bajo `$XDG_CONFIG_HOME` en Linux si está definida)
+- Windows: `%APPDATA%\Zed\settings.json`
+
+**Settings > AI > MCP Servers > Add Server** escribe la misma entrada por ti:
 
 ```json
 {
@@ -384,7 +391,7 @@ El servidor no necesita autenticación, así que deja `headers` fuera.
 </TabItem>
 </Tabs>
 
-Referencia: [documentación de MCP de Zed](https://zed.dev/docs/ai/mcp).
+Referencias: [documentación de MCP de Zed](https://zed.dev/docs/ai/mcp), [configuración de Zed](https://zed.dev/docs/configuring-zed).
 
 ## IDE de JetBrains
 
@@ -406,12 +413,14 @@ JetBrains tiene dos agentes, y cada uno tiene su propia lista de servidores.
 }
 ```
 
-**Junie:** abre **Settings > Tools > Junie > MCP Settings**, o edita el archivo directamente: `.junie/mcp/mcp.json` en el proyecto, o `~/.junie/mcp/mcp.json` (`%USERPROFILE%\.junie\mcp\mcp.json` en Windows) para todos los proyectos. La entrada es el mismo objeto `mcpServers`, con un objeto `env` para las claves.
+La documentación de AI Assistant no nombra ningún archivo para esa lista, solo la página de ajustes, que además ofrece importar los servidores que ya tenga Claude Desktop.
+
+**Junie:** abre **Settings > Tools > Junie > MCP Settings**, que abre `mcp.json`, o edita el archivo directamente: `.junie/mcp/mcp.json` en el proyecto, o `~/.junie/mcp/mcp.json` en tu directorio personal para todos los proyectos. El plugin y la CLI de Junie comparten los dos archivos. La entrada es el mismo objeto `mcpServers`, con un objeto `env` para las claves.
 
 </TabItem>
 <TabItem label="Remoto (HTTP)">
 
-En cualquiera de los dos:
+En AI Assistant:
 
 ```json
 {
@@ -421,10 +430,12 @@ En cualquiera de los dos:
 }
 ```
 
+Junie también se conecta a servidores remotos, pero su documentación no muestra una entrada remota; la misma forma con `url` es la que hay que probar, y la pantalla `/mcp` de la CLI de Junie la añade por ti.
+
 </TabItem>
 </Tabs>
 
-Referencias: [AI Assistant MCP](https://www.jetbrains.com/help/ai-assistant/mcp.html), [Junie MCP settings](https://junie.jetbrains.com/docs/junie-plugin-mcp-settings.html).
+Referencias: [AI Assistant MCP](https://www.jetbrains.com/help/ai-assistant/mcp.html), [Junie MCP settings](https://junie.jetbrains.com/docs/junie-plugin-mcp-settings.html), [Junie CLI MCP configuration](https://junie.jetbrains.com/docs/junie-cli-mcp-configuration.html).
 
 ## Kiro
 
@@ -508,13 +519,11 @@ Referencia: [OpenCode MCP servers](https://opencode.ai/docs/mcp-servers/).
 <Tabs syncKey="transport">
 <TabItem label="Local (stdio)">
 
-En el panel de Cline, abre **MCP Servers > Configure > Configure MCP Servers**, que abre `cline_mcp_settings.json`. En VS Code vive en el almacenamiento de la extensión:
+En el panel de Cline, abre **MCP Servers > Configure > Configure MCP Servers**, que abre `cline_mcp_settings.json`. Desde Cline 4.0, la extensión y la CLI de Cline comparten un único archivo en tu directorio personal, `~/.cline/data/settings/cline_mcp_settings.json` (`CLINE_DATA_DIR` sustituye a `~/.cline/data`). Cline 3.x lo guardaba en el almacenamiento de VS Code para la extensión, y 4.0 traslada sus entradas al archivo compartido en el primer arranque:
 
 - macOS: `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
 - Linux: `~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
 - Windows: `%APPDATA%\Code\User\globalStorage\saoudrizwan.claude-dev\settings\cline_mcp_settings.json`
-
-La CLI de Cline lee `~/.cline/mcp.json` con la misma forma.
 
 ```json
 {
@@ -547,7 +556,7 @@ La CLI de Cline lee `~/.cline/mcp.json` con la misma forma.
 </TabItem>
 </Tabs>
 
-Referencia: [documentación de MCP de Cline](https://docs.cline.bot/mcp/configuring-mcp-servers).
+Indica `"type": "streamableHttp"` de forma explícita: una entrada con `url` y sin `type` se lee como el antiguo transporte SSE. Referencia: [documentación de MCP de Cline](https://docs.cline.bot/mcp/configuring-mcp-servers).
 
 ## Continue
 
