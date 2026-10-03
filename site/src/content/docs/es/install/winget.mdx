@@ -1,6 +1,111 @@
 ---
 title: Instalar con winget
-description: "El manifiesto de libgen-mcp para el Windows Package Manager, pendiente de revisión, y los canales que funcionan en Windows mientras no se acepta."
+description: "El paquete jmrplens.libgen-mcp del Windows Package Manager: pendiente de revisión, cuál será la orden cuando se acepte y qué usar en Windows mientras tanto."
+datePublished: "2026-10-03"
+mentions:
+  - name: "Windows Package Manager"
+    wikidata: Q95225611
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+chips:
+  - text: "Pendiente de revisión"
+  - text: "Windows x64 y arm64"
+  - text: "Todos los canales"
+    href: "/libgen-mcp/es/install/overview/"
 ---
 
-El manifiesto del Windows Package Manager está pendiente de revisión en [microsoft/winget-pkgs#437507](https://github.com/microsoft/winget-pkgs/pull/437507), así que `winget install` todavía no encuentra el servidor. Esta página cubrirá cómo instalarlo, actualizarlo y quitarlo con winget cuando se acepte el manifiesto. Mientras tanto, la [instalación](/libgen-mcp/es/install/overview/) enumera los canales que ya funcionan en Windows.
+import { Aside } from "@astrojs/starlight/components";
+
+<Aside type="caution" title="Todavía no está disponible">
+	El primer manifiesto de `jmrplens.libgen-mcp` está en revisión en
+	[microsoft/winget-pkgs#437507](https://github.com/microsoft/winget-pkgs/pull/437507),
+	así que hoy `winget install` no encuentra el paquete. Todo lo que sigue
+	describe cómo será el paquete cuando se fusione ese pull request. Hasta
+	entonces, en Windows usa el [binario de la
+	release](/libgen-mcp/es/install/binary/), [npm](/libgen-mcp/es/install/npm/),
+	[PyPI](/libgen-mcp/es/install/pypi/) o [NuGet](/libgen-mcp/es/install/nuget/).
+</Aside>
+
+## Qué obtienes
+
+Un paquete **portable**: winget descarga el ejecutable de la release para tu arquitectura, `libgen-mcp-windows-amd64.exe` o `libgen-mcp-windows-arm64.exe`, y lo registra como la orden `libgen-mcp`. No se ejecuta ningún instalador. Cuando se acepte el primer manifiesto, cada release enviará su propia versión a `winget-pkgs` desde el workflow de release, así que las versiones nuevas seguirán a la release por sí solas tras la revisión de Microsoft.
+
+## Requisitos
+
+| Requisito      | Detalle                                                                                             |
+| -------------- | --------------------------------------------------------------------------------------------------- |
+| winget         | El Windows Package Manager, parte de App Installer en Windows 10 1809 y posteriores y en Windows 11 |
+| Una plataforma | Windows en x64 o arm64                                                                              |
+
+## Instalar
+
+```powershell
+winget install --id jmrplens.libgen-mcp -e
+```
+
+Abre después un terminal nuevo, para que recoja la entrada de `PATH` que añadió winget, y comprueba:
+
+```powershell
+libgen-mcp --version
+```
+
+## Verificar lo que instalaste
+
+winget comprueba el archivo que descarga contra el SHA256 del manifiesto, calculado sobre el asset de la release cuando se envió el manifiesto, y rechaza una discrepancia. El ejecutable es el asset de la release byte a byte, así que las comprobaciones de la [página del binario de la release](/libgen-mcp/es/install/binary/#verificar-lo-que-instalaste) también valen para él, incluida su procedencia de compilación:
+
+```powershell
+gh attestation verify (Get-Command libgen-mcp).Source -R jmrplens/libgen-mcp `
+  --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
+```
+
+## Dónde queda en el disco
+
+winget guarda los paquetes portables bajo `%LOCALAPPDATA%\Microsoft\WinGet\Packages\`, en un directorio con el nombre del paquete, y deja un enlace a la orden en `%LOCALAPPDATA%\Microsoft\WinGet\Links`, que está en tu `PATH`. El paquete lleva solo el ejecutable: `LICENSE` y `THIRD_PARTY_NOTICES` no están en él, y la release que lo produjo es donde encontrarlos. Lo que escribe el servidor cuando se ejecuta está en la [instalación](/libgen-mcp/es/install/overview/#lo-que-comparten-todos-los-canales).
+
+## Configurar un cliente
+
+```json
+{
+	"mcpServers": {
+		"libgen": { "command": "libgen-mcp" }
+	}
+}
+```
+
+Si el cliente no la encuentra, dale la ruta completa que imprime `(Get-Command libgen-mcp).Source`, con cada barra invertida duplicada. Dónde guarda cada cliente este archivo está en [Conectar un cliente](/libgen-mcp/es/clients/).
+
+## Actualizar
+
+```powershell
+winget upgrade --id jmrplens.libgen-mcp -e
+```
+
+Un cliente que ya tiene el servidor en marcha conserva el proceso viejo hasta que lo reinicia; `libgen-mcp --shutdown` pide a todas las instancias en marcha que terminen.
+
+## Fijar una versión
+
+```powershell
+winget install --id jmrplens.libgen-mcp -e --version 2.1.0
+winget pin add --id jmrplens.libgen-mcp
+```
+
+`--version` instala una versión que tenga el repositorio; `winget pin add` evita que `winget upgrade --all` la mueva.
+
+## Desinstalar
+
+```powershell
+winget uninstall --id jmrplens.libgen-mcp -e
+```
+
+## Notas por plataforma
+
+- **Windows on Arm** recibe el ejecutable arm64 nativo.
+- **Dos canales, dos órdenes.** Una instalación por npm, PyPI o NuGet es una copia aparte que winget no conoce; desinstala la que ya no uses, o acabarás con dos órdenes `libgen-mcp` en tu `PATH`.
+
+## Problemas habituales
+
+**`No package found matching input criteria`.** El paquete todavía no está publicado; mira el aviso al principio de esta página.
+
+**`libgen-mcp` no se reconoce justo después de instalar.** El terminal es anterior al cambio de `PATH`. Abre uno nuevo.
+
+Los demás canales se comparan en la [instalación](/libgen-mcp/es/install/overview/).

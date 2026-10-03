@@ -1,6 +1,243 @@
 ---
 title: Instalar con npm
-description: "El paquete lanzador @jmrp.io/libgen-mcp: ejecútalo con npx o instálalo de forma global, verifica lo que instaló npm, actualízalo y quítalo."
+description: "El paquete lanzador @jmrp.io/libgen-mcp: ejecútalo con npx o instálalo de forma global, verifica lo que instaló npm, actualízalo, fija una versión y quítalo."
+datePublished: "2026-10-03"
+mentions:
+  - name: "npm"
+    wikidata: Q7067518
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+chips:
+  - text: "Sin script de instalación"
+  - text: "Con procedencia adjunta"
+  - text: "Todos los canales"
+    href: "/libgen-mcp/es/install/overview/"
 ---
 
-Esta página cubrirá el paquete lanzador `@jmrp.io/libgen-mcp`: ejecutarlo con `npx` o instalarlo de forma global, cómo elige el lanzador el binario de tu plataforma, cómo verificar lo que instaló npm, actualizarlo, fijar una versión y quitarlo. Mientras tanto, los pasos están en la [sección npm de la instalación](/libgen-mcp/es/install/overview/#npm).
+import { Tabs, TabItem, Aside } from "@astrojs/starlight/components";
+
+`libgen-mcp` se publica en npm como [`@jmrp.io/libgen-mcp`](https://www.npmjs.com/package/@jmrp.io/libgen-mcp). Es el mismo binario de la release que entrega cualquier otro canal, empaquetado para que `npx` pueda arrancarlo sin paso de instalación y `npm install -g` pueda dejarlo en tu `PATH`. No se compila nada y no se ejecuta nada al instalar.
+
+## Qué obtienes
+
+Siete paquetes, publicados juntos con una misma versión:
+
+- **`@jmrp.io/libgen-mcp`**, el lanzador. Un pequeño archivo de Node.js (`cli.js`) registrado como la orden `libgen-mcp`. Encuentra el binario de tu plataforma, lo arranca con tus argumentos, tu entorno y tus flujos estándar intactos, y termina con el código de salida o la señal con que terminó el binario, de modo que el cliente ve el resultado real. Nunca escribe en stdout, porque stdout es el flujo JSON-RPC.
+- **`@jmrp.io/libgen-mcp-<platform>`**, uno por plataforma: `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`, `win32-x64` y `win32-arm64`. Cada uno lleva el binario, `LICENSE` y `THIRD_PARTY_NOTICES`, y está restringido por `os` y `cpu`. El lanzador declara los seis como dependencias opcionales fijadas a su propia versión exacta, así que npm instala exactamente uno: el que corresponde a tu máquina.
+
+Como el binario viaja dentro de un paquete corriente, no hay script postinstall y no se descarga nada después de instalar. Por eso funcionan `npm ci --ignore-scripts`, un mirror privado del registro y `--offline`.
+
+**El lanzador para el servidor cuando se le pide que pare.** Desde la 2.1.0, en Linux y macOS le pasa SIGTERM, SIGINT y SIGHUP al servidor, y cuando lo arrancó npm (`npx`, o un script de npm) le envía SIGTERM en menos de un segundo desde que sale la shell de npm: un SIGTERM enviado al proceso `npx` solo llega a esa shell, nunca al lanzador. Hasta la 2.0.1 un servidor HTTP arrancado con `npx` seguía ocupando su puerto después de que su supervisor lo hubiera parado. Arrancado de cualquier otra forma, un servidor que sobrevive a su padre se deja en paz, igual que el binario ejecutado directamente. En Windows el Ctrl+C de la consola llega al propio servidor, y el lanzador solo lo espera.
+
+El servidor drena con su primer SIGINT o SIGTERM y termina en seco con un segundo enviado más de un segundo después, así que el lanzador le pide parar una sola vez: las señales posteriores no se le pasan, y un Ctrl+C desde un terminal, que ya llega al servidor, no se le pasa en absoluto.
+
+## Requisitos
+
+| Requisito      | Detalle                                                                                                                |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Node.js        | 18 o posterior (`engines.node` es `>=18`). Solo ejecuta el lanzador, nunca el servidor                                 |
+| Una plataforma | Linux, macOS o Windows, en x64 o arm64. Linux con glibc o con musl por igual: el binario no necesita biblioteca C      |
+| npm            | El que traiga tu Node. pnpm y Yarn también sirven, siempre que instalen dependencias opcionales (por defecto lo hacen) |
+
+## Instalar
+
+<Tabs syncKey="npm-pm">
+<TabItem label="npx">
+
+Nada que instalar. El cliente arranca la orden, y npx guarda una copia en su caché tras la primera ejecución:
+
+```bash
+npx -y @jmrp.io/libgen-mcp
+```
+
+`-y` responde a la pregunta «¿instalar este paquete?» de npx, que un cliente MCP no tiene forma de contestar.
+
+</TabItem>
+<TabItem label="npm">
+
+```bash
+npm install -g @jmrp.io/libgen-mcp
+```
+
+</TabItem>
+<TabItem label="pnpm">
+
+```bash
+pnpm add -g @jmrp.io/libgen-mcp
+```
+
+pnpm necesita un directorio de binarios globales antes de su primera instalación global; `pnpm setup` lo crea y lo pone en tu `PATH`.
+
+</TabItem>
+<TabItem label="yarn">
+
+```bash
+# Yarn 2 y posteriores: ejecútalo en un entorno desechable, sin instalar nada
+yarn dlx @jmrp.io/libgen-mcp
+# Yarn 1 (Classic): una instalación global
+yarn global add @jmrp.io/libgen-mcp
+```
+
+</TabItem>
+</Tabs>
+
+Tras una instalación global la orden es `libgen-mcp`:
+
+```bash
+libgen-mcp --version
+# libgen-mcp 2.1.0 (commit 5493887)
+```
+
+## Verificar lo que instalaste
+
+Los paquetes se publican con un trusted publisher OIDC, así que npm adjunta una attestation de procedencia a todos ellos. `npm audit signatures` comprueba la firma del registro sobre lo que instalaste, y la procedencia allí donde la hay. Lee el lockfile del proyecto, así que ejecútalo en un proyecto que dependa del paquete:
+
+```bash
+mkdir libgen-check && cd libgen-check
+npm init -y >/dev/null
+npm install @jmrp.io/libgen-mcp
+npm audit signatures
+# 2 packages have verified registry signatures
+# 2 packages have verified attestations
+```
+
+El binario que hay dentro del paquete de plataforma es el asset de la release byte a byte, así que su procedencia de compilación también responde por él, y lo ata al commit y a la ejecución del workflow que lo compiló:
+
+```bash
+gh attestation verify node_modules/@jmrp.io/libgen-mcp-linux-x64/libgen-mcp \
+  -R jmrplens/libgen-mcp \
+  --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
+```
+
+Usa el directorio de tu plataforma en lugar de `linux-x64`. Lo que añade `--signer-workflow` se explica en la [instalación](/libgen-mcp/es/install/overview/#verificar-lo-que-instalas).
+
+## Dónde queda en el disco
+
+| Instalación      | La orden                                                   | El binario                                                                         |
+| ---------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `npx`            | Nada en tu `PATH`                                          | La caché de npx, `~/.npm/_npx/<hash>/node_modules/@jmrp.io/libgen-mcp-<platform>/` |
+| `npm install -g` | `$(npm prefix -g)/bin/libgen-mcp`, que es `cli.js`         | `$(npm root -g)/@jmrp.io/libgen-mcp-<platform>/libgen-mcp`                         |
+| `pnpm add -g`    | El directorio de binarios globales de pnpm (`pnpm bin -g`) | El almacén global de pnpm, detrás de ese directorio                                |
+
+En Windows el prefijo de npm es `%AppData%\npm` y el binario es `libgen-mcp.exe`. Lo que escribe el propio servidor cuando se ejecuta (cachés de mirrors, descargas, temporales) es lo mismo en todos los canales y está en la [instalación](/libgen-mcp/es/install/overview/#lo-que-comparten-todos-los-canales).
+
+## Configurar un cliente
+
+La forma portable no instala nada. Apunta el cliente a `npx`:
+
+```json
+{
+	"mcpServers": {
+		"libgen": { "command": "npx", "args": ["-y", "@jmrp.io/libgen-mcp"] }
+	}
+}
+```
+
+Tras una instalación global, nombra la orden: `"command": "libgen-mcp"`. Un cliente que no hereda el `PATH` de tu shell puede necesitar la ruta completa, que imprime `command -v libgen-mcp` (o `where libgen-mcp` en Windows). No hace falta bloque `env`: todos los ajustes son opcionales. Dónde guarda cada cliente este archivo, y las formas que difieren de esta, están en [Conectar un cliente](/libgen-mcp/es/clients/).
+
+## Actualizar
+
+El servidor nunca busca actualizaciones ni reemplaza su propio binario. Cada release mueve el lanzador y sus seis paquetes de plataforma juntos y con versiones exactas, así que actualizar el lanzador actualiza el binario.
+
+<Tabs syncKey="npm-pm">
+<TabItem label="npx">
+
+npx resuelve la versión más reciente con la caché vacía y reutiliza su copia después. Nombra la etiqueta para forzar una resolución nueva:
+
+```bash
+npx -y @jmrp.io/libgen-mcp@latest
+```
+
+</TabItem>
+<TabItem label="npm">
+
+```bash
+npm install -g @jmrp.io/libgen-mcp@latest
+```
+
+</TabItem>
+<TabItem label="pnpm">
+
+```bash
+pnpm update -g @jmrp.io/libgen-mcp
+```
+
+</TabItem>
+<TabItem label="yarn">
+
+```bash
+# Yarn 1 (Classic)
+yarn global upgrade @jmrp.io/libgen-mcp
+```
+
+`yarn dlx` resuelve la versión más reciente en cada ejecución.
+
+</TabItem>
+</Tabs>
+
+Un cliente que ya tiene el servidor en marcha conserva el proceso viejo hasta que lo reinicia. `libgen-mcp --shutdown` pide a todas las instancias en marcha que terminen, y el cliente arranca la nueva en su siguiente llamada.
+
+## Fijar una versión
+
+Nombra la versión allí donde nombras el paquete:
+
+```bash
+npx -y @jmrp.io/libgen-mcp@2.1.0
+npm install -g @jmrp.io/libgen-mcp@2.1.0
+```
+
+En la configuración de un cliente es `"args": ["-y", "@jmrp.io/libgen-mcp@2.1.0"]`. Una entrada de `npx` fijada no se mueve hasta que la editas, que es lo que quieres cuando todo un equipo debe ejecutar el mismo servidor.
+
+## Desinstalar
+
+<Tabs syncKey="npm-pm">
+<TabItem label="npx">
+
+No se instaló nada. Quita la entrada de la configuración del cliente, y `npm cache clean --force` si también quieres borrar la copia de npx.
+
+</TabItem>
+<TabItem label="npm">
+
+```bash
+npm uninstall -g @jmrp.io/libgen-mcp
+```
+
+</TabItem>
+<TabItem label="pnpm">
+
+```bash
+pnpm remove -g @jmrp.io/libgen-mcp
+```
+
+</TabItem>
+<TabItem label="yarn">
+
+```bash
+# Yarn 1 (Classic)
+yarn global remove @jmrp.io/libgen-mcp
+```
+
+</TabItem>
+</Tabs>
+
+El paquete de plataforma se va con el lanzador, porque el lanzador es lo único que depende de él. Los ajustes, las cachés y las descargas no se tocan; la instalación dice [dónde están](/libgen-mcp/es/install/overview/#lo-que-comparten-todos-los-canales).
+
+## Notas por plataforma
+
+- **Alpine y otros sistemas con musl** no necesitan nada especial. Ningún paquete declara `libc`, porque el binario no nombra ningún cargador dinámico y funciona con musl igual que con glibc.
+- **Windows on Arm** recibe el binario nativo `win32-arm64`, no uno emulado.
+- **Bajo systemd**, una señal enviada a todo el grupo de control (el `KillMode=control-group` por defecto) le llega al servidor dos veces con milisegundos de diferencia: una directamente y otra a través del lanzador. El servidor toma las dos por una sola petición y drena. Hasta la 2.1.0 la segunda copia lo terminaba antes de que acabara de drenar, y ejecutar el binario directamente o poner `KillMode=mixed` era la forma de evitarlo.
+
+## Problemas habituales
+
+**`the @jmrp.io/libgen-mcp-<platform> package is not installed`.** Tu plataforma está soportada pero su paquete se omitió. Las causas habituales son una instalación con `--no-optional` (o `--omit=optional`) y un lockfile generado en otro sistema operativo. Reinstala sin la opción, o borra `node_modules` y el lockfile e instala de nuevo.
+
+**`unsupported platform <os>/<arch>`.** No hay binario precompilado para ella. Compílalo desde el código fuente con [`go install`](/libgen-mcp/es/install/binary/#compilar-desde-el-código-fuente), o usa la [imagen Docker](/libgen-mcp/es/install/docker/).
+
+**`command not found` tras una instalación global.** El directorio de binarios globales no está en tu `PATH`. `npm prefix -g` muestra el de npm (la orden está en su subdirectorio `bin` en Linux y macOS); el de pnpm lo prepara `pnpm setup`.
+
+**El cliente nunca recibe respuesta de `npx`.** Casi siempre falta `-y`, y npx espera un «sí» en una tubería en la que nadie escribe. El log del cliente muestra la pregunta.
+
+**Yarn dice que todas las versiones están en cuarentena («quarantined»).** Las versiones recientes de Yarn rechazan una versión de un paquete durante sus primeros días en el registro. Nombra la versión anterior, o espera.
+
+Los demás canales se comparan en la [instalación](/libgen-mcp/es/install/overview/).

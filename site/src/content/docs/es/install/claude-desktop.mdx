@@ -1,6 +1,150 @@
 ---
 title: Extensión de Claude Desktop
-description: "El paquete .mcpb de un clic de libgen-mcp para Claude Desktop en macOS, Windows y Linux: instálalo, configúralo, actualízalo y quítalo."
+description: "El paquete .mcpb de un clic para Claude Desktop: qué archivo descargar para macOS, Windows o Linux, cómo instalarlo, cada ajuste que pide, cómo actualizarlo, quitarlo y dónde están sus logs."
+datePublished: "2026-10-03"
+mentions:
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+chips:
+  - text: "Sin runtime que instalar"
+  - text: "macOS, Windows, Linux"
+  - text: "Todos los canales"
+    href: "/libgen-mcp/es/install/overview/"
 ---
 
-Esta página cubrirá el paquete `.mcpb` de un clic adjunto a cada release: qué fichero descargar para macOS, Windows o Linux, cómo abrirlo o instalarlo en Claude Desktop, los ajustes que pide, cómo actualizarlo y quitarlo. Mientras tanto, los pasos están en la [sección Claude Desktop de la instalación](/libgen-mcp/es/install/overview/#claude-desktop-mcpb).
+import { Aside } from "@astrojs/starlight/components";
+
+`libgen-mcp` se distribuye como extensión de Claude Desktop, un paquete `.mcpb` que Claude Desktop instala y ejecuta por sí mismo. Sin Docker, Node ni Python, sin `PATH` que editar y sin JSON que escribir: los ajustes son un formulario en Claude Desktop.
+
+## Qué obtienes
+
+Un paquete es un zip con un manifiesto, el icono, el servidor para uno o varios sistemas, `LICENSE` y `THIRD_PARTY_NOTICES`. Las releases publican un paquete por sistema operativo, más el universal:
+
+| Sistema                                          | Paquete                                                                                                              | Tamaño  | Lleva                                                 |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- | ------- | ----------------------------------------------------- |
+| macOS (Apple Silicon e Intel)                    | [`libgen-mcp-darwin.mcpb`](https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp-darwin.mcpb)   | ~18 MiB | El binario universal de macOS                         |
+| Windows (x64; Windows on Arm lo ejecuta emulado) | [`libgen-mcp-windows.mcpb`](https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp-windows.mcpb) | ~10 MiB | El ejecutable x64                                     |
+| Linux (x86_64 y arm64, beta de Claude Desktop)   | [`libgen-mcp-linux.mcpb`](https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp-linux.mcpb)     | ~18 MiB | Los dos binarios de Linux y un lanzador que elige uno |
+| Los tres                                         | [`libgen-mcp.mcpb`](https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp.mcpb)                 | ~45 MiB | Todos los servidores de arriba                        |
+
+<Aside
+	type="note"
+	title="Los paquetes por sistema empiezan con la release posterior a la 2.1.0"
+>
+	Las releases hasta la 2.1.0 incluida publican solo el `libgen-mcp.mcpb`
+	universal, así que hasta la próxima release los tres enlaces que hay encima
+	responden 404 y el paquete universal es el que hay que descargar. A partir de
+	entonces cada release publica los cuatro, y el universal se mantiene para los
+	enlaces que apuntan a él.
+</Aside>
+
+Cada paquete por sistema declara solo su propio sistema, así que Claude Desktop rechaza con un mensaje el que se abre en otro sistema en lugar de instalar un servidor que no puede arrancar. Los cuatro se instalan como **la misma extensión**, de modo que instalar uno reemplaza a otro en su sitio.
+
+**En Linux el paquete arranca un pequeño lanzador**, `server/linux/launch.sh`, ejecutado con `/bin/sh`. Un manifiesto puede elegir una orden por sistema operativo pero no por arquitectura, así que el lanzador lee `uname -m`, elige `libgen-mcp-linux-amd64` o `libgen-mcp-linux-arm64`, le devuelve el bit de ejecución si la extracción lo perdió, y se reemplaza por el binario con `exec`. Por eso Claude Desktop para el servidor real cuando para la extensión, y el lanzador nunca escribe en stdout.
+
+## Requisitos
+
+| Requisito      | Detalle                                                                                                |
+| -------------- | ------------------------------------------------------------------------------------------------------ |
+| Claude Desktop | Una versión que instale extensiones (los ajustes tienen una sección **Extensions**). En Linux, la beta |
+| Una plataforma | macOS en Apple Silicon o Intel, Windows x64 o on Arm, Linux en x86_64 o arm64                          |
+
+## Instalar
+
+1. Descarga el paquete de tu sistema de la tabla de arriba, o de la [última release](https://github.com/jmrplens/libgen-mcp/releases/latest).
+
+2. Ábrelo con Claude Desktop.
+   - **macOS y Windows:** haz doble clic en el archivo, o arrástralo a la ventana de ajustes de Claude Desktop.
+   - **Linux:** en Claude Desktop, **Extensions > Install Extension…**, y elige el archivo. La app de Linux no registra ningún manejador para los archivos `.mcpb`, así que el doble clic no hace nada.
+
+3. Claude Desktop muestra los detalles de la extensión. Confirma, rellena los [ajustes](#ajustes) que quieras (ninguno es obligatorio) y actívala.
+
+Después pídele a Claude un libro o un artículo. Las cuatro herramientas de la extensión (`search`, `get_details`, `download`, `read`) aparecen en su entrada de los ajustes.
+
+## Ajustes
+
+Todos los ajustes son opcionales. Cada uno corresponde a una variable de entorno que lee el servidor, y un campo vacío deja en su sitio el valor por defecto del servidor.
+
+| Ajuste                        | Por defecto                 | Variable                        | Qué hace                                                                                                       |
+| ----------------------------- | --------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Mirror                        | vacío (elección automática) | `LIBGEN_MIRROR`                 | Prueba primero este mirror de Library Genesis, p. ej. `https://libgen.li`; el descubrimiento sigue de respaldo |
+| Download directory            | `~/Downloads`               | `LIBGEN_MCP_DOWNLOAD_DIR`       | Dónde guarda `download` los archivos. Debe poder escribirse, o el servidor se niega a arrancar                 |
+| Request timeout               | `10s`                       | `LIBGEN_MCP_TIMEOUT`            | Por petición HTTP, como duración de Go (`10s`, `1m`), como mucho `10m`                                         |
+| Maximum download size (bytes) | `0`                         | `LIBGEN_MCP_MAX_DOWNLOAD_BYTES` | Rechaza una descarga mayor que esto. `0` significa sin límite                                                  |
+| Log level                     | `info`                      | `LIBGEN_MCP_LOG_LEVEL`          | `debug`, `info`, `warn` o `error`                                                                              |
+| Settings file                 | vacío                       | `LIBGEN_MCP_ENV_FILE`           | Ruta absoluta a un archivo dotenv que se lee además de `~/.libgen-mcp.env`                                     |
+| Unpaywall email               | vacío                       | `LIBGEN_MCP_UNPAYWALL_EMAIL`    | Tu dirección de contacto para Unpaywall, que activa esa fuente de artículos                                    |
+| CORE API key                  | vacío                       | `LIBGEN_MCP_CORE_KEY`           | Una clave gratuita de core.ac.uk, que activa la fuente de artículos CORE. Marcada como sensible                |
+
+Los nombres de los ajustes son los que muestra Claude Desktop, en inglés.
+
+**El archivo de ajustes es para todo lo que el formulario no tiene.** Una variable que pasa la extensión gana sobre los dos archivos dotenv, así que usa el archivo para los ajustes sin campo, como `LIBGEN_MCP_EXTRA_SOURCES` o `LIBGEN_MCP_SOURCES`. Un `.env` en el directorio de trabajo de Claude Desktop no se lee nunca. Cada variable se describe en [Configuración](/libgen-mcp/es/configuration/).
+
+La clave de CORE está marcada como sensible, así que Claude Desktop la guarda cifrada con una clave que protege el sistema operativo (donde lo hay) y la oculta en el formulario.
+
+## Verificar lo que instalaste
+
+Cada paquete lleva procedencia de compilación SLSA como cualquier otro asset de la release:
+
+```bash
+gh attestation verify libgen-mcp-linux.mcpb -R jmrplens/libgen-mcp \
+  --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
+```
+
+Usa el archivo que descargaste. Los paquetes se adjuntan después de firmar el `checksums.txt` de la release, así que no aparecen en él: su procedencia es la comprobación. Lo que añade `--signer-workflow` se explica en la [instalación](/libgen-mcp/es/install/overview/#verificar-lo-que-instalas).
+
+## Dónde queda en el disco
+
+Claude Desktop desempaqueta el paquete en su propio directorio de extensiones:
+
+| Sistema | Directorio de extensiones                                 |
+| ------- | --------------------------------------------------------- |
+| macOS   | `~/Library/Application Support/Claude/Claude Extensions/` |
+| Windows | `%APPDATA%\Claude\Claude Extensions\`                     |
+| Linux   | `~/.config/Claude/Claude Extensions/`                     |
+
+El servidor se ejecuta desde ahí. Lo que escribe cuando se ejecuta (cachés de mirrors, descargas, temporales) está en la [instalación](/libgen-mcp/es/install/overview/#lo-que-comparten-todos-los-canales).
+
+## Configurar un cliente
+
+No hay nada que escribir: Claude Desktop es el cliente, y la extensión es su configuración. Para usar el servidor también desde otro cliente, instálalo por otro canal y mira [Conectar un cliente](/libgen-mcp/es/clients/). Una extensión y una entrada escrita a mano en `claude_desktop_config.json` para el mismo servidor ejecutarían dos copias en paralelo; quédate con una.
+
+## Actualizar
+
+El servidor nunca se actualiza solo. Descarga el paquete nuevo y ábrelo igual: todos los paquetes son la misma extensión, así que Claude Desktop reemplaza la versión instalada en lugar de añadir una segunda. Comprueba después en **Settings > Extensions** la versión que muestra.
+
+## Fijar una versión
+
+Instala el paquete de una release concreta, `https://github.com/jmrplens/libgen-mcp/releases/download/v<version>/<bundle>`, y no abras uno más nuevo. Se queda en esa versión.
+
+## Quitar
+
+En Claude Desktop, **Settings > Extensions**, abre la extensión y desinstálala. Eso borra su directorio; las descargas y las cachés se quedan donde [dice la instalación](/libgen-mcp/es/install/overview/#lo-que-comparten-todos-los-canales).
+
+## Logs
+
+El servidor escribe sus logs en stderr, y Claude Desktop los guarda en un archivo de log por servidor:
+
+| Sistema | Directorio de logs       |
+| ------- | ------------------------ |
+| macOS   | `~/Library/Logs/Claude/` |
+| Windows | `%APPDATA%\Claude\logs\` |
+| Linux   | `~/.config/Claude/logs/` |
+
+El archivo del servidor se llama `mcp-server-` seguido del nombre de la extensión; `mcp.log`, a su lado, registra la propia conexión. Pon **Log level** en `debug` para más detalle, y mira [Solución de problemas](/libgen-mcp/es/troubleshooting/#subir-el-nivel-de-log).
+
+## Notas por plataforma
+
+- **Windows on Arm** ejecuta el ejecutable x64 emulado; el paquete no lleva una compilación arm64 de Windows.
+- **Linux en otra arquitectura** recibe un rechazo en el log MCP que nombra el tipo de máquina: el paquete lleva solo x86_64 y arm64.
+- **Un montaje `noexec`** bajo tu directorio home impide que el binario de Linux se ejecute. El lanzador lo dice en el log en lugar de fallar en silencio.
+
+## Problemas habituales
+
+**No pasa nada al abrir el archivo en Linux.** Instálalo desde **Extensions > Install Extension…**, como arriba.
+
+**Claude Desktop dice que la extensión no es compatible con este sistema.** Abriste el paquete de otro sistema. Descarga el del tuyo, o el universal `libgen-mcp.mcpb`.
+
+**La extensión está activada pero sus herramientas fallan enseguida.** El servidor se negó a arrancar, casi siempre porque no se puede escribir en **Download directory**. El archivo de log del servidor dice qué ajuste rechazó.
+
+Los demás canales se comparan en la [instalación](/libgen-mcp/es/install/overview/).

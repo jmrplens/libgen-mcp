@@ -1,6 +1,240 @@
 ---
 title: Ejecutar con Docker
-description: "La imagen de libgen-mcp en GitHub Container Registry y Docker Hub: stdio o HTTP, cómo verificar su firma y su procedencia, actualizarla y quitarla."
+description: "La imagen de libgen-mcp en GitHub Container Registry y Docker Hub: ejecútala por stdio para un cliente o por HTTP como servicio, verifica su firma y su procedencia, actualízala, fija un digest y quítala."
+datePublished: "2026-10-03"
+mentions:
+  - name: "Docker"
+    wikidata: Q15206305
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+chips:
+  - text: "Sin root, UID 10001"
+  - text: "Firmada con cosign"
+  - text: "Contenedores en producción"
+    href: "/libgen-mcp/es/deploy/containers/"
 ---
 
-Esta página cubrirá la imagen publicada en GitHub Container Registry y Docker Hub: ejecutarla por stdio para un cliente o por HTTP como servicio, el transporte que elige cuando no recibe argumentos, cómo verificar su firma y su procedencia, actualizarla, fijar un digest y quitarla. Mientras tanto, los pasos están en la [sección Docker de la instalación](/libgen-mcp/es/install/overview/#docker).
+import { Tabs, TabItem, Aside } from "@astrojs/starlight/components";
+
+`libgen-mcp` se publica como imagen de contenedor multiarquitectura, en GitHub Container Registry y replicada en Docker Hub. La misma imagen sirve a un cliente de escritorio por stdio y a un equipo por HTTP; cuál de los dos obtienes depende de cómo la arranques.
+
+## Qué obtienes
+
+| Registro                  | Imagen                          |
+| ------------------------- | ------------------------------- |
+| GitHub Container Registry | `ghcr.io/jmrplens/libgen-mcp`   |
+| Docker Hub                | `docker.io/jmrplens/libgen-mcp` |
+
+Los dos reciben el mismo índice de imagen en cada release, con el mismo digest, bajo dos etiquetas:
+
+| Etiqueta    | Se mueve                |
+| ----------- | ----------------------- |
+| `<version>` | Nunca. `2.1.0`, sin `v` |
+| `latest`    | A cada release nueva    |
+
+No hay etiqueta `2` ni `2.1`: fija la versión completa, o un digest.
+
+La imagen es `linux/amd64` y `linux/arm64`, sobre Alpine, y se ejecuta como **`appuser`, UID y GID `10001`**. El punto de entrada es el binario, `/usr/local/bin/libgen-mcp`. El binario de la imagen se compila en la propia etapa de compilación de la imagen en lugar de copiarse de la release, así que sus bytes difieren del asset de la release aunque el código y la versión sean los mismos.
+
+| Ajuste de la imagen | Valor                                                                                |
+| ------------------- | ------------------------------------------------------------------------------------ |
+| `ENTRYPOINT`        | `libgen-mcp`                                                                         |
+| `CMD`               | `--transport auto --http 0.0.0.0:8080`                                               |
+| `EXPOSE`            | `8080`                                                                               |
+| `USER`              | `appuser` (`10001:10001`), con home en `/home/appuser`                               |
+| `HEALTHCHECK`       | `libgen-mcp --healthcheck` cada 30 s, 5 s de timeout, 3 reintentos, 10 s de arranque |
+| Licencias           | `/usr/share/licenses/libgen-mcp/LICENSE` y `THIRD_PARTY_NOTICES`                     |
+
+## Requisitos
+
+| Requisito      | Detalle                                                                                            |
+| -------------- | -------------------------------------------------------------------------------------------------- |
+| Un runtime     | Docker, o cualquier runtime OCI (Podman, containerd). En macOS y Windows, Docker Desktop o similar |
+| Una plataforma | Un host que ejecute contenedores `linux/amd64` o `linux/arm64`                                     |
+
+## Instalar
+
+<Tabs syncKey="registry">
+<TabItem label="ghcr.io">
+
+```bash
+docker pull ghcr.io/jmrplens/libgen-mcp:latest
+```
+
+</TabItem>
+<TabItem label="Docker Hub">
+
+```bash
+docker pull docker.io/jmrplens/libgen-mcp:latest
+```
+
+</TabItem>
+</Tabs>
+
+El pull es opcional: `docker run` descarga por sí mismo una imagen que falta.
+
+### El transporte sigue a la entrada estándar
+
+La orden por defecto es `--transport auto`, que mira qué es la entrada estándar:
+
+- **`docker run -i`** conecta una tubería y obtiene el servidor **stdio**. Es lo que arranca un cliente MCP:
+
+  ```bash
+  docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest
+  ```
+
+  El `--http 0.0.0.0:8080` de la orden por defecto queda sin uso, y el servidor lo dice en su primera línea de log.
+
+- **Una ejecución sin `-i`** conecta `/dev/null`, lo interpreta como que nadie le habla, y arranca el listener **HTTP streamable** en el puerto 8080. Es lo que obtiene un servicio de compose o un pod de Kubernetes:
+
+  ```bash
+  docker run -d --name libgen-mcp -p 127.0.0.1:8080:8080 ghcr.io/jmrplens/libgen-mcp:latest
+  curl -s http://127.0.0.1:8080/health
+  ```
+
+  El endpoint MCP es `http://127.0.0.1:8080/` y su alias `/mcp`. Publica el puerto en `127.0.0.1` como arriba salvo que algo delante de él deba alcanzarlo; [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/) tiene lo que necesita un listener compartido.
+
+<Aside
+	type="caution"
+	title="Cualquier argumento sustituye la orden por defecto entera"
+>
+	`docker run image --log-level debug` se lleva consigo `--transport auto --http
+	0.0.0.0:8080`, y arranca un servidor stdio. No pasa nada cuando el argumento
+	nombra un listener (`--http :9000` ya es en sí la elección de transporte),
+	pero un flag que añades es la línea de órdenes completa, no un añadido a ella.
+	Repite la orden por defecto cuando quieras las dos cosas: `docker run image
+	--transport auto --http 0.0.0.0:8080 --log-level debug`. Los ajustes que
+	tienen variable de entorno son más sencillos de pasar con `-e`, que deja la
+	orden en paz.
+</Aside>
+
+### Las descargas y el volumen
+
+La imagen escribe las descargas en `/home/appuser/Downloads` salvo que `LIBGEN_MCP_DOWNLOAD_DIR` diga otra cosa, y ese directorio desaparece con el contenedor. Para conservar los archivos, monta un directorio del host y apunta la variable a él:
+
+```bash
+docker run -i --rm \
+  -v "$HOME/Downloads/libgen:/downloads" \
+  -e LIBGEN_MCP_DOWNLOAD_DIR=/downloads \
+  ghcr.io/jmrplens/libgen-mcp:latest
+```
+
+**El directorio montado tiene que poder escribirlo el UID `10001`.** El servidor lo comprueba al arrancar y, si no, se niega a arrancar y registra `LIBGEN_MCP_DOWNLOAD_DIR "/downloads" is not writable: … permission denied`. O le das el directorio a ese UID, o ejecutas el contenedor con el tuyo:
+
+```bash
+mkdir -p "$HOME/Downloads/libgen"
+sudo chown 10001:10001 "$HOME/Downloads/libgen"
+# o conserva tu propiedad y ejecútalo como tú
+docker run -i --rm --user "$(id -u):$(id -g)" -v "$HOME/Downloads/libgen:/downloads" \
+  -e LIBGEN_MCP_DOWNLOAD_DIR=/downloads ghcr.io/jmrplens/libgen-mcp:latest
+```
+
+Con otro UID el proceso no tiene directorio home en la imagen (`HOME` es `/`), así que no puede escribir la caché de mirrors y descarga la lista de mirrors en cada arranque; `-e HOME=/tmp` le da un sitio. Docker Desktop en macOS y Windows traduce él mismo la propiedad de los bind mounts, así que el `chown` es cosa de Linux.
+
+## Verificar lo que instalaste
+
+**La firma.** El índice de imagen y los dos manifiestos de plataforma están firmados sin clave con cosign. Verifícalo con un cliente **cosign 3.x**: un cliente 2.x dice «no signatures found» sobre una imagen que un cliente 3.x verifica.
+
+```bash
+cosign verify ghcr.io/jmrplens/libgen-mcp:2.1.0 \
+  --certificate-identity-regexp '^https://github.com/jmrplens/libgen-mcp/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+La misma orden verifica `docker.io/jmrplens/libgen-mcp:2.1.0`.
+
+**La procedencia**, que responde a qué commit y qué ejecución del workflow la produjeron:
+
+```bash
+gh attestation verify oci://ghcr.io/jmrplens/libgen-mcp:2.1.0 -R jmrplens/libgen-mcp \
+  --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml \
+  --source-ref refs/tags/v2.1.0
+```
+
+La imagen lleva además un SBOM y la procedencia de BuildKit adjuntos al compilarla. Lo que añaden `--signer-workflow` y `--source-ref` se explica en la [instalación](/libgen-mcp/es/install/overview/#verificar-lo-que-instalas).
+
+## Dónde queda en el disco
+
+En el host no queda nada más que las capas de la imagen, en el almacenamiento de tu runtime. Dentro del contenedor:
+
+| Ruta                               | Qué guarda                                                                |
+| ---------------------------------- | ------------------------------------------------------------------------- |
+| `/usr/local/bin/libgen-mcp`        | El binario                                                                |
+| `/home/appuser/.cache/libgen-mcp/` | Las cachés de mirrors. Desaparecen con el contenedor salvo que las montes |
+| `/home/appuser/Downloads`          | Las descargas, salvo que `LIBGEN_MCP_DOWNLOAD_DIR` apunte a otro sitio    |
+| `/usr/share/licenses/libgen-mcp/`  | `LICENSE` y `THIRD_PARTY_NOTICES`                                         |
+
+Un contenedor arrancado con `--rm` en cada sesión del cliente vuelve a descargar la lista de mirrors cada vez; es una petición, y no hace daño.
+
+## Configurar un cliente
+
+Por stdio, el cliente arranca el contenedor él mismo. Conserva `-i`, y conserva `--rm` para que cada sesión no deje nada atrás:
+
+```json
+{
+	"mcpServers": {
+		"libgen": {
+			"command": "docker",
+			"args": [
+				"run",
+				"-i",
+				"--rm",
+				"-v",
+				"/home/you/Downloads/libgen:/downloads",
+				"-e",
+				"LIBGEN_MCP_DOWNLOAD_DIR=/downloads",
+				"ghcr.io/jmrplens/libgen-mcp:latest"
+			]
+		}
+	}
+}
+```
+
+Un cliente no expande `$HOME` en `args`, así que escribe la ruta completa. Por HTTP, arranca el contenedor como arriba y dale al cliente la URL, `http://127.0.0.1:8080/mcp`; la forma de una entrada HTTP cambia de un cliente a otro y está en [Conectar un cliente](/libgen-mcp/es/clients/).
+
+## Actualizar
+
+```bash
+docker pull ghcr.io/jmrplens/libgen-mcp:latest
+```
+
+`docker run` solo descarga cuando falta la imagen, así que una entrada de cliente que nombra `latest` sigue ejecutando la copia que descargó primero hasta que vuelves a hacer pull. Un contenedor HTTP hay que recrearlo después del pull: `docker rm -f libgen-mcp`, y luego el mismo `docker run`. Recrearlo, no reiniciarlo, es lo que recoge la imagen nueva.
+
+## Fijar una versión
+
+Nombra la etiqueta de versión, o el digest para unos bytes que nunca pueden cambiar a tus espaldas:
+
+```bash
+docker run -i --rm ghcr.io/jmrplens/libgen-mcp:2.1.0
+docker run -i --rm ghcr.io/jmrplens/libgen-mcp@sha256:98854e3e78ce5f0e08a57ba69e3d8a8982a96190ac62539bc71ba1235e6519ec
+```
+
+Ese digest es el índice de imagen de la 2.1.0, el mismo en los dos registros. Para cualquier etiqueta, `docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/jmrplens/libgen-mcp:<tag>` lo imprime tras un pull.
+
+## Desinstalar
+
+```bash
+docker rm -f libgen-mcp                     # un contenedor HTTP, si arrancaste uno
+docker image rm ghcr.io/jmrplens/libgen-mcp:latest
+```
+
+Quita cada etiqueta que descargaste. Un directorio de descargas montado es tuyo y se queda como está.
+
+## Notas por plataforma
+
+- **Apple Silicon y Linux arm64** descargan la imagen `linux/arm64` nativa.
+- **Un socket unix en lugar de un puerto.** `--http /run/mcp/libgen.sock` crea un socket en un directorio montado y no publica nada, la forma para un proxy inverso en el mismo host. El socket se crea `0660`, así que los workers del proxy deben estar en el grupo `10001`. [Proxy inverso](/libgen-mcp/es/deploy/reverse-proxy/) tiene la receta completa.
+- **`LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES` con la orden por defecto se rechaza al arrancar**, porque el listener por defecto escucha en `0.0.0.0` y esa combinación es justo de lo que trata el rechazo. [Solución de problemas](/libgen-mcp/es/troubleshooting/#el-servidor-no-arranca-la-escotilla-de-direcciones-privadas-en-un-listener-abierto) lo explica.
+- **Compose y Kubernetes** están en [Contenedores](/libgen-mcp/es/deploy/containers/): una definición de servicio, el health check, los volúmenes y los recursos que necesita el servidor.
+
+## Problemas habituales
+
+**El cliente espera para siempre al servidor.** Falta `-i`. Sin él el contenedor arranca un listener HTTP y nunca lee la tubería del cliente.
+
+**El contenedor sale enseguida con `is not writable`.** El UID `10001` no puede escribir en el directorio de descargas que montaste. Mira [Las descargas y el volumen](#las-descargas-y-el-volumen).
+
+**El health check tras cambiar la orden.** Sigue funcionando: `--healthcheck` lee el listener de la propia línea de órdenes del proceso en marcha, así que otro puerto, un socket, un prefijo de ruta o un TLS que termina este proceso se comprueban donde están. Un contenedor stdio no tiene nada que comprobar y se declara sano mientras el proceso vive. Si aparece `unhealthy`, el listener de verdad no responde; `docker logs` dice por qué.
+
+**`cosign verify` dice «no signatures found».** El cliente es cosign 2.x. Usa 3.x.
+
+Los demás canales se comparan en la [instalación](/libgen-mcp/es/install/overview/).

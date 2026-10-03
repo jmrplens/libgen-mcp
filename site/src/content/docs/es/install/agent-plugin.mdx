@@ -1,6 +1,149 @@
 ---
 title: Plugin para agentes
-description: "Los manifiestos Open Plugins y Agent Plugins que publica libgen-mcp: qué herramientas los leen y cómo instalar el servidor a través de ellos."
+description: "Los manifiestos Open Plugins y Agent Plugins que publica libgen-mcp: qué son plugin.json, .plugin/plugin.json y mcp.json, qué hosts los leen y qué ejecutan."
+datePublished: "2026-10-03"
+mentions:
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+  - name: "Docker"
+    wikidata: Q15206305
+chips:
+  - text: "Ejecuta la imagen Docker"
+  - text: "La instalación la decide el host"
+  - text: "Todos los canales"
+    href: "/libgen-mcp/es/install/overview/"
 ---
 
-Esta página cubrirá los dos manifiestos de plugin que publica este repositorio — el de Open Plugins en `.plugin/` y el de Agent Plugins en la raíz —, qué herramientas lee cada uno, cómo instalar el servidor a través de ellos y en qué se diferencia de registrar el servidor a mano. Mientras tanto, la [instalación](/libgen-mcp/es/install/overview/) enumera todos los demás canales.
+import { Aside } from "@astrojs/starlight/components";
+
+Un host de plugins puede instalar un servidor MCP desde un repositorio cuando el repositorio se describe en un manifiesto que el host entiende. Este repositorio lleva tres archivos para eso, en los dos formatos que leen hoy los hosts. No contienen el servidor: le dicen a un host cómo arrancarlo, y lo que arrancan es la [imagen Docker](/libgen-mcp/es/install/docker/).
+
+## Qué obtienes
+
+| Archivo               | Formato                                                                     | Qué dice                                                                                                                    |
+| --------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `plugin.json`         | [Agent Plugins](https://agent-plugins.org/) 1.0, en la raíz del repositorio | El nombre, la versión, la descripción, el autor, la licencia y las palabras clave del plugin. Su esquema no admite nada más |
+| `.plugin/plugin.json` | Open Plugins, validado por `.plugin/plugin.schema.json` a su lado           | La misma identidad, más un `logo` y `"mcpServers": "./mcp.json"`, el puntero a la entrada del servidor                      |
+| `mcp.json`            | La configuración del servidor MCP a la que apuntan los dos                  | Una entrada stdio, `libgen`, que ejecuta la imagen                                                                          |
+
+Los dos manifiestos son archivos separados y no una copia, porque los formatos no coinciden: Agent Plugins 1.0 fija `additionalProperties: false` y no tiene campo para un logo ni para la entrada del servidor, mientras que Open Plugins espera los dos. Un host Agent Plugins encuentra `mcp.json` por su sitio fijo en la raíz del plugin; un host Open Plugins sigue el puntero. Los dos manifiestos llevan la versión de la release, que estampa el workflow de release.
+
+## Qué hosts los leen
+
+Un host que implementa **Agent Plugins** lee `plugin.json` en la raíz del directorio del plugin y `mcp.json` a su lado. Un host que implementa **Open Plugins** lee `.plugin/plugin.json` y sigue su puntero `mcpServers`. Ninguna de las dos especificaciones define cómo se distribuye o se instala un plugin, así que la orden es cosa de tu host y de su versión: normalmente le das el repositorio, `jmrplens/libgen-mcp`, a través de su instalador de plugins, y él copia el directorio a su propio almacén de plugins.
+
+## Requisitos
+
+| Requisito | Detalle                                                                                             |
+| --------- | --------------------------------------------------------------------------------------------------- |
+| Un host   | Uno que instale paquetes Agent Plugins u Open Plugins con servidores MCP                            |
+| Docker    | Instalado y en marcha: la entrada arranca `docker run`. La imagen se descarga en el primer arranque |
+
+## Qué ejecuta el plugin
+
+La entrada de `mcp.json`, recortada aquí a tres de sus dieciséis variables:
+
+```json
+{
+	"mcpServers": {
+		"libgen": {
+			"command": "docker",
+			"args": [
+				"run",
+				"-i",
+				"--rm",
+				"-e",
+				"LIBGEN_MIRROR",
+				"-e",
+				"LIBGEN_MCP_DOWNLOAD_DIR",
+				"-e",
+				"LIBGEN_MCP_TIMEOUT",
+				"ghcr.io/jmrplens/libgen-mcp:latest"
+			],
+			"env": {
+				"LIBGEN_MIRROR": "${LIBGEN_MIRROR:-}",
+				"LIBGEN_MCP_DOWNLOAD_DIR": "${LIBGEN_MCP_DOWNLOAD_DIR:-}",
+				"LIBGEN_MCP_TIMEOUT": "${LIBGEN_MCP_TIMEOUT:-10s}"
+			}
+		}
+	}
+}
+```
+
+El archivo real pasa de la misma forma `LIBGEN_MIRROR`, `LIBGEN_MCP_DOWNLOAD_DIR`, `LIBGEN_MCP_TIMEOUT`, `LIBGEN_MCP_RESOLVE_BUDGET`, `LIBGEN_MCP_LOG_LEVEL`, `LIBGEN_MCP_RATE_RPS`, `LIBGEN_MCP_RATE_BURST`, `LIBGEN_MCP_MAX_DOWNLOAD_BYTES`, `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS`, `LIBGEN_MCP_RETRY_ATTEMPTS`, `LIBGEN_MCP_UNPAYWALL_EMAIL`, `LIBGEN_MCP_SCIHUB_HOSTS`, `LIBGEN_MCP_SOURCES`, `LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS`, `LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT` y `LIBGEN_MCP_REMOTE_DOWNLOADS`. Tres detalles importan:
+
+- **El `-i`.** Le da al contenedor una tubería en la entrada estándar, que es lo que hace que la imagen sirva stdio. Sin él el contenedor arranca un listener HTTP y el host espera para siempre.
+- **`-e NAME` sin valor** copia la variable del entorno en el que corre `docker` al contenedor. El bloque `env` es lo que fija ese entorno, con cada valor escrito como `${NAME:-default}`: la variable del propio entorno del host, o el valor por defecto.
+- **Sin volumen.** El directorio de descargas está dentro del contenedor, y `--rm` lo descarta al terminar la sesión. `download` sigue respondiendo, pero el archivo no sobrevive. Para conservar los archivos, edita la entrada como en [Configurar un cliente](#configurar-un-cliente).
+
+<Aside type="caution" title="Los valores ${NAME:-default} dependen del host">
+Esa forma es sintaxis de shell, y solo funciona en un host que la expanda como lo haría una shell. La especificación Agent Plugins 1.0 expande exactamente dos marcadores, `${PLUGIN_ROOT}` y `${PLUGIN_DATA}`, y exige que cualquier otro se quede literal; también exige un campo `$schema` en `mcp.json`, que este archivo no lleva, y un host conforme desactiva un `mcp.json` sin él. Un host que pasa los valores tal cual arranca el servidor con `LIBGEN_MCP_TIMEOUT` puesto al texto `${LIBGEN_MCP_TIMEOUT:-10s}`, y el servidor se niega a arrancar: `LIBGEN_MCP_TIMEOUT: time: invalid duration`. Si el plugin se instala pero el servidor nunca llega a arrancar, esa es la razón, y la entrada de [Configurar un cliente](#configurar-un-cliente) es la forma de evitarlo.
+</Aside>
+
+## Verificar lo que instalaste
+
+Los manifiestos son configuración, así que no hay nada firmado en ellos; lo que se ejecuta es la imagen, y la imagen es lo que hay que verificar. La [página de Docker](/libgen-mcp/es/install/docker/#verificar-lo-que-instalaste) tiene las órdenes de cosign y de attestation.
+
+## Dónde queda en el disco
+
+El host copia el directorio del plugin a su propio almacén, en el sitio que elija (la especificación Agent Plugins usa `~/.agents/plugins/<name>/` como ejemplo). La imagen va al almacenamiento de Docker. No se escribe nada más hasta que el servidor se ejecuta; la [instalación](/libgen-mcp/es/install/overview/#lo-que-comparten-todos-los-canales) dice lo que escribe entonces.
+
+## Configurar un cliente
+
+En este canal, el `mcp.json` del plugin es la configuración: el host lo lee y arranca la entrada. Para cambiarla, o en un host sin soporte de plugins, pon la entrada en la configuración del propio cliente, con valores literales y un volumen para las descargas:
+
+```json
+{
+	"mcpServers": {
+		"libgen": {
+			"command": "docker",
+			"args": [
+				"run",
+				"-i",
+				"--rm",
+				"-v",
+				"/home/you/Downloads/libgen:/downloads",
+				"-e",
+				"LIBGEN_MCP_DOWNLOAD_DIR=/downloads",
+				"ghcr.io/jmrplens/libgen-mcp:latest"
+			]
+		}
+	}
+}
+```
+
+El UID `10001` tiene que poder escribir en el directorio del host, como explica la [página de Docker](/libgen-mcp/es/install/docker/#las-descargas-y-el-volumen). Para usar un binario instalado de otra forma en lugar de Docker, la entrada es simplemente `"command": "/path/to/libgen-mcp"`. Dónde guarda cada cliente este archivo está en [Conectar un cliente](/libgen-mcp/es/clients/).
+
+## Actualizar
+
+La versión del manifiesto se mueve con cada release, pero lo que arranca la entrada es la etiqueta de imagen `latest`, y `docker run` solo descarga una imagen que falta. Un plugin instalado hace semanas sigue ejecutando la imagen que descargó primero hasta que vuelves a hacer pull:
+
+```bash
+docker pull ghcr.io/jmrplens/libgen-mcp:latest
+```
+
+## Fijar una versión
+
+Cambia la imagen en tu copia local de la entrada por una etiqueta de versión, `ghcr.io/jmrplens/libgen-mcp:2.1.0`, o por un digest. La [página de Docker](/libgen-mcp/es/install/docker/#fijar-una-versión) muestra las dos.
+
+## Desinstalar
+
+Quita el plugin como documente tu host, y libera después la imagen si nada más la usa:
+
+```bash
+docker image rm ghcr.io/jmrplens/libgen-mcp:latest
+```
+
+## Notas por plataforma
+
+La entrada se comporta igual allí donde funcione Docker, y por eso usa Docker: ninguna de las dos especificaciones tiene variantes por plataforma de una entrada. En macOS y Windows eso significa que Docker Desktop u otro runtime debe estar en marcha antes de que el host arranque el servidor.
+
+## Problemas habituales
+
+**El servidor nunca arranca y el log del host muestra `invalid duration`, o no aparece ningún servidor MCP.** Mira el aviso de [Qué ejecuta el plugin](#qué-ejecuta-el-plugin): el host no expande `${NAME:-default}`, o rechazó el `mcp.json`. Usa la entrada de [Configurar un cliente](#configurar-un-cliente).
+
+**`Cannot connect to the Docker daemon`.** Docker no está en marcha.
+
+**Los archivos descargados desaparecen.** Se guardaron dentro del contenedor. Añade el volumen de arriba.
+
+Los demás canales se comparan en la [instalación](/libgen-mcp/es/install/overview/).

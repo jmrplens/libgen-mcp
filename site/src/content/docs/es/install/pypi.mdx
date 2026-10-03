@@ -1,6 +1,231 @@
 ---
-title: Instalar con PyPI
-description: "Las wheels de libgen-mcp: ejecuta el servidor con uvx o instálalo con pipx, verifica lo instalado, actualízalo y quítalo."
+title: Instalar desde PyPI
+description: "Las wheels de libgen-mcp: ejecuta el servidor con uvx o instálalo con pipx, uv o pip, verifica lo instalado, actualízalo, fija una versión y quítalo."
+datePublished: "2026-10-03"
+mentions:
+  - name: "Python Package Index"
+    wikidata: Q2984686
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+chips:
+  - text: "Sin Python al ejecutarse"
+  - text: "manylinux y musllinux"
+  - text: "Todos los canales"
+    href: "/libgen-mcp/es/install/overview/"
 ---
 
-Esta página cubrirá las wheels de `libgen-mcp`: ejecutar el servidor con `uvx` o instalarlo con `pipx` o `pip`, qué wheel recibe tu plataforma, cómo verificar lo instalado, actualizarlo, fijar una versión y quitarlo. Mientras tanto, los pasos están en la [sección PyPI de la instalación](/libgen-mcp/es/install/overview/#pypi).
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
+`libgen-mcp` se publica en PyPI como [`libgen-mcp`](https://pypi.org/project/libgen-mcp/): una wheel por plataforma con el binario de la release dentro. El instalador deja ese binario en la ruta de scripts del entorno, así que `libgen-mcp` es la orden a partir de ahí y **no se ejecuta Python cuando la usas**. Python es solo el medio por el que el archivo llega a tu máquina.
+
+## Qué obtienes
+
+Seis wheels por release, una por plataforma, con la etiqueta `py3-none-<platform>`:
+
+| Plataforma          | Etiqueta de la wheel                                                       |
+| ------------------- | -------------------------------------------------------------------------- |
+| Linux x86_64        | `manylinux_2_17_x86_64`, `manylinux2014_x86_64`, `musllinux_1_1_x86_64`    |
+| Linux aarch64       | `manylinux_2_17_aarch64`, `manylinux2014_aarch64`, `musllinux_1_1_aarch64` |
+| macOS Intel         | `macosx_11_0_x86_64`                                                       |
+| macOS Apple Silicon | `macosx_11_0_arm64`                                                        |
+| Windows x64         | `win_amd64`                                                                |
+| Windows arm64       | `win_arm64`                                                                |
+
+No hay distribución de código fuente: un instalador en cualquier otra plataforma no encuentra nada que instalar, en lugar de algo que compilar.
+
+**El binario es la orden.** Viaja en el directorio `.data/scripts` de la wheel, que el formato wheel obliga al instalador a dejar en la ruta de scripts (`bin/`, o `Scripts\` en Windows) con su bit de ejecución. La distribución **no declara ningún console script** a propósito: se llamaría también `libgen-mcp`, y dos archivos que compiten por una ruta son una carrera que gana el que el instalador escriba el último.
+
+La wheel lleva además un pequeño paquete `libgen_mcp`, así que `python -m libgen_mcp` ejecuta el mismo binario y `libgen_mcp.find_binary()` devuelve su ruta. Ninguno de los dos hace falta para usar el servidor.
+
+**Las wheels de Linux llevan a la vez etiquetas `manylinux` y `musllinux`.** Eso solo es honesto para un binario que no necesita biblioteca C, y este no nombra ningún cargador dinámico, así que el mismo archivo se instala y funciona en Debian y en Alpine. Se midió de principio a fin con `python:3.13-alpine`.
+
+## Requisitos
+
+| Requisito      | Detalle                                                                                                              |
+| -------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Python         | 3.9 o posterior (`Requires-Python: >=3.9`). La etiqueta es `py3-none`, así que cualquier CPython o PyPy de esa línea |
+| Un instalador  | `uv` (para `uvx` y `uv tool`), `pipx`, o `pip` en un entorno virtual                                                 |
+| Una plataforma | Una de las seis de arriba. macOS 11 o posterior                                                                      |
+
+## Instalar
+
+<Tabs syncKey="pypi-tool">
+<TabItem label="uvx">
+
+Nada que instalar. uv descarga la wheel a su caché en la primera ejecución y la reutiliza:
+
+```bash
+uvx libgen-mcp
+```
+
+</TabItem>
+<TabItem label="uv tool">
+
+```bash
+uv tool install libgen-mcp
+```
+
+</TabItem>
+<TabItem label="pipx">
+
+```bash
+pipx install libgen-mcp
+```
+
+</TabItem>
+<TabItem label="pip">
+
+```bash
+python -m venv ~/.venvs/libgen-mcp
+~/.venvs/libgen-mcp/bin/pip install libgen-mcp
+```
+
+En un entorno virtual, para que la orden quede en uno que es tuyo. Un `pip install --user` también funciona, y la deja en `~/.local/bin`.
+
+</TabItem>
+</Tabs>
+
+Después:
+
+```bash
+libgen-mcp --version
+# libgen-mcp 2.1.0 (commit 5493887)
+```
+
+## Verificar lo que instalaste
+
+La subida es un trusted publisher OIDC, así que PyPI registra una attestation [PEP 740](https://peps.python.org/pep-0740/) para cada archivo, que se muestra en la página del proyecto junto a cada uno. Ningún instalador la comprueba todavía por ti.
+
+Lo que puedes comprobar tú es el binario que instaló la wheel. Es el asset de la release byte a byte, así que su procedencia de compilación responde por él:
+
+```bash
+# después de uv tool, pipx o pip
+gh attestation verify "$(command -v libgen-mcp)" -R jmrplens/libgen-mcp \
+  --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
+
+# uvx guarda el binario en la caché de uv, y el paquete dice dónde
+gh attestation verify "$(uvx --from libgen-mcp python -c 'import libgen_mcp as m; print(m.find_binary())')" \
+  -R jmrplens/libgen-mcp --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
+```
+
+`gh` sigue el enlace simbólico que pipx y uv dejan en tu `PATH`. Lo que añade `--signer-workflow` se explica en la [instalación](/libgen-mcp/es/install/overview/#verificar-lo-que-instalas).
+
+## Dónde queda en el disco
+
+| Instalación | La orden                                                        | El binario                                                     |
+| ----------- | --------------------------------------------------------------- | -------------------------------------------------------------- |
+| `uvx`       | Nada en tu `PATH`                                               | La caché de uv, bajo `$(uv cache dir)/archive-v0/<hash>/bin/`  |
+| `uv tool`   | Un enlace en `$(uv tool dir --bin)`, normalmente `~/.local/bin` | `$(uv tool dir)/libgen-mcp/bin/libgen-mcp`                     |
+| `pipx`      | Un enlace en `~/.local/bin`                                     | `~/.local/share/pipx/venvs/libgen-mcp/bin/libgen-mcp` en Linux |
+| `pip`       | El `bin/` del entorno (`Scripts\` en Windows)                   | El mismo archivo                                               |
+
+`LICENSE` y `THIRD_PARTY_NOTICES` están en `libgen_mcp-<version>.dist-info/licenses/` del entorno. Lo que escribe el servidor cuando se ejecuta está en la [instalación](/libgen-mcp/es/install/overview/#lo-que-comparten-todos-los-canales).
+
+## Configurar un cliente
+
+La forma portable no instala nada:
+
+```json
+{
+	"mcpServers": {
+		"libgen": { "command": "uvx", "args": ["libgen-mcp"] }
+	}
+}
+```
+
+Tras `uv tool`, `pipx` o `pip`, nombra la orden: `"command": "libgen-mcp"`, o su ruta completa si el cliente no hereda el `PATH` de tu shell (`command -v libgen-mcp` la imprime). No hace falta bloque `env`. Dónde guarda cada cliente este archivo está en [Conectar un cliente](/libgen-mcp/es/clients/).
+
+## Actualizar
+
+<Tabs syncKey="pypi-tool">
+<TabItem label="uvx">
+
+`uvx` reutiliza la versión que tiene en caché. Nombra la etiqueta para resolver la release más reciente:
+
+```bash
+uvx libgen-mcp@latest
+```
+
+</TabItem>
+<TabItem label="uv tool">
+
+```bash
+uv tool upgrade libgen-mcp
+```
+
+Una herramienta instalada con una versión exacta se queda en ella; `uv tool install libgen-mcp@latest` la mueve.
+
+</TabItem>
+<TabItem label="pipx">
+
+```bash
+pipx upgrade libgen-mcp
+```
+
+</TabItem>
+<TabItem label="pip">
+
+```bash
+~/.venvs/libgen-mcp/bin/pip install --upgrade libgen-mcp
+```
+
+</TabItem>
+</Tabs>
+
+Un cliente que ya tiene el servidor en marcha conserva el proceso viejo hasta que lo reinicia; `libgen-mcp --shutdown` pide a todas las instancias en marcha que terminen.
+
+## Fijar una versión
+
+```bash
+uvx libgen-mcp@2.1.0
+uv tool install libgen-mcp==2.1.0
+pipx install libgen-mcp==2.1.0
+pip install libgen-mcp==2.1.0
+```
+
+En la configuración de un cliente es `"args": ["libgen-mcp@2.1.0"]` bajo `uvx`.
+
+## Desinstalar
+
+<Tabs syncKey="pypi-tool">
+<TabItem label="uvx">
+
+No se instaló nada. Quita la entrada del cliente, y `uv cache clean libgen-mcp` para borrar la wheel de la caché.
+
+</TabItem>
+<TabItem label="uv tool">
+
+```bash
+uv tool uninstall libgen-mcp
+```
+
+</TabItem>
+<TabItem label="pipx">
+
+```bash
+pipx uninstall libgen-mcp
+```
+
+</TabItem>
+<TabItem label="pip">
+
+```bash
+~/.venvs/libgen-mcp/bin/pip uninstall libgen-mcp
+```
+
+</TabItem>
+</Tabs>
+
+## Notas por plataforma
+
+- **Alpine** instala la misma wheel de Linux que Debian, a través de su etiqueta `musllinux`.
+- **Windows** deja `libgen-mcp.exe` en el directorio `Scripts\` del entorno. Un cliente arrancado fuera de ese entorno necesita la ruta completa.
+- **Una plataforma sin soporte** (32 bits, FreeBSD, Linux en otra arquitectura) recibe «no matching distribution». Compílalo desde el código fuente con [`go install`](/libgen-mcp/es/install/binary/#compilar-desde-el-código-fuente).
+
+## Problemas habituales
+
+**`No matching distribution found for libgen-mcp`.** O la plataforma no tiene wheel (arriba), o el Python es anterior a 3.9. `python -m pip debug --verbose` lista las etiquetas que acepta tu intérprete.
+
+**`command not found` tras `pipx` o `uv tool`.** `~/.local/bin` no está en tu `PATH`. `pipx ensurepath` o `uv tool update-shell` lo añaden.
+
+Los demás canales se comparan en la [instalación](/libgen-mcp/es/install/overview/).
