@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"os/signal"
 	"runtime"
 	"strings"
 	"sync"
@@ -265,10 +266,16 @@ const forceExitHelperEnv = "LIBGEN_MCP_FORCE_EXIT_HELPER"
 
 // TestForceExitHelperProcess is not a test. It is the body of the child
 // TestForceExit_DiesByTheSignal spawns, which forces its own exit.
+//
+// The stop signals are registered first, as they are in production when
+// forceExit runs. Without that, a forceExit that forgot to restore the default
+// action would still die by the signal here, while the real server would catch
+// its own re-raised signal and leave through the fallback with a plain status.
 func TestForceExitHelperProcess(t *testing.T) {
 	if os.Getenv(forceExitHelperEnv) != "1" {
 		t.Skip("not the helper child")
 	}
+	signal.Notify(make(chan os.Signal, 1), stopSignals...)
 	forceExit(syscall.SIGTERM)
 }
 
@@ -283,7 +290,6 @@ func TestForceExit_DiesByTheSignal(t *testing.T) {
 	//nolint:gosec // this test binary, re-executed
 	cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestForceExitHelperProcess$")
 	cmd.Env = append(os.Environ(), forceExitHelperEnv+"=1")
-	start := time.Now()
 	err := cmd.Run()
 
 	var exitErr *exec.ExitError
@@ -295,9 +301,6 @@ func TestForceExit_DiesByTheSignal(t *testing.T) {
 	}
 	if !strings.Contains(exitErr.String(), "terminated") {
 		t.Errorf("the child ended with %q, want a death by SIGTERM", exitErr.String())
-	}
-	if elapsed := time.Since(start); elapsed >= forceExitFallbackDelay+5*time.Second {
-		t.Errorf("the forced exit took %v, so the fallback ended it rather than the signal", elapsed)
 	}
 }
 
