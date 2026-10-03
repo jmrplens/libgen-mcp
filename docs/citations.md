@@ -235,7 +235,11 @@ set it in italics. APA's `n.d.` is the one stand-in it writes for a missing valu
 split only where the record says which part is the family name (`Knuth, Donald E.`,
 `Knuth D.E.`, or two or three capitalized words such as `Donald E. Knuth`), and any other
 name, an organization or one with a particle or a suffix among them, is written as the record
-has it rather than abbreviated. The catalog does not state an article's journal, so the
+has it rather than abbreviated. Words in the plain form are read given name first, so a name
+whose family name comes first (Mao Zedong, Kim Jong-un) is split the wrong way round unless
+the catalog writes it as `Family, Given` or `Family I.`, and a compound given name such as
+Jean-Paul Sartre is abbreviated to one initial. "et al." in the record is not taken as an
+author, and each style writes its own form of it. The catalog does not state an article's journal, so the
 journal comes from Crossref once it confirms the DOI, and an article whose journal is unknown
 is written without its volume, issue and pages, which would locate nothing on their own.
 

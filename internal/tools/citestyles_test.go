@@ -105,6 +105,15 @@ func TestFormatLocal_Names(t *testing.T) {
 			"a lowercase name is not guessed at", "vancouver", "jean-paul sartre",
 			"jean-paul sartre. Concrete Mathematics. 1994.",
 		},
+		{"an all-caps surname is not initials", "apa", "LEE J.", "LEE, J. (1994). Concrete Mathematics."},
+		{"all-caps two-letter surnames", "apa", "WU X., LI Y.", "WU, X., & LI, Y. (1994). Concrete Mathematics."},
+		{"a longer all-caps surname", "vancouver", "WANG H.; XU Q", "WANG H, XU Q. Concrete Mathematics. 1994."},
+		{"et al. in APA", "apa", "Smith J., et al.", "Smith, J., et al. (1994). Concrete Mathematics."},
+		{"et al. in MLA", "mla", "Smith J.; Jones K. et al", "Smith, J., et al. Concrete Mathematics. 1994."},
+		{"et al. in Chicago", "chicago", "Smith J., Jones K., et al.", "Smith, J., K. Jones, et al. 1994. Concrete Mathematics."},
+		{"et al. in Harvard", "harvard", "Smith J., et al.", "Smith, J., et al., 1994. Concrete Mathematics."},
+		{"et al. in Vancouver", "vancouver", "Smith J., et al.", "Smith J, et al. Concrete Mathematics. 1994."},
+		{"et al. in IEEE", "ieee", "Smith J., Jones K., et al.", "J. Smith et al., Concrete Mathematics. 1994."},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -202,6 +211,11 @@ func TestParseCitePerson(t *testing.T) {
 		{"Donald E. Knuth", "Knuth", "Donald E.", "", "D. E."},
 		{"Knuth D.E.", "Knuth", "D.E.", "", "D. E."},
 		{"Knuth DE", "Knuth", "DE", "", "D. E."},
+		{"LEE J.", "LEE", "J.", "", "J."},
+		{"WU X.", "WU", "X.", "", "X."},
+		{"LI Y", "LI", "Y", "", "Y."},
+		{"WANG", "", "", "WANG", ""},
+		{"Wang LEE", "LEE", "Wang", "", "W."},
 		{"Sartre J.-P.", "Sartre", "J.-P.", "", "J. P."},
 		{"Van Der Berg A.", "Van Der Berg", "A.", "", "A."},
 		{"Wei Li", "Li", "Wei", "", "W."},

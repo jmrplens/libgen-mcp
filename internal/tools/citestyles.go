@@ -3,6 +3,7 @@
 package tools
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
@@ -67,8 +68,14 @@ func parseCitePerson(name string) citePerson {
 		return citePerson{family: family, given: given}
 	}
 	words := strings.Fields(name)
-	if n := trailingInitials(words); n > 0 && n < len(words) {
+	switch n := trailingInitials(words); {
+	case n > 0 && n < len(words):
 		return citePerson{family: strings.Join(words[:len(words)-n], " "), given: strings.Join(words[len(words)-n:], " ")}
+	case n >= 2 && n == len(words):
+		// Every word could be initials ("WU X.", "LI Y"): a short all-caps
+		// surname reads the same as two initials, and the catalog puts the
+		// surname first in this form, so the first word is taken as it.
+		return citePerson{family: words[0], given: strings.Join(words[1:], " ")}
 	}
 	if len(words) < 2 || len(words) > citeNameMaxWords || !plainNameWords(words) {
 		return citePerson{literal: name}
@@ -86,20 +93,27 @@ func trailingInitials(words []string) int {
 }
 
 // isInitials reports whether w is a run of initials: "D.", "D.E.", "DE" or
-// "D.-P.". Up to four capitals with optional periods and hyphens, and nothing
-// else, so a short capitalized surname such as "Li" is not one.
+// "D.-P.". Only capitals, periods and hyphens, so a capitalized surname such as
+// "Li" is not one. A word with a period may hold up to four letters, and one
+// without at most two: an all-caps surname ("LEE", "WANG") is three letters or
+// more and has no periods, and it must not be read as initials.
 func isInitials(w string) bool {
-	letters := 0
+	letters, dotted := 0, false
 	for _, r := range w {
 		switch {
 		case unicode.IsUpper(r):
 			letters++
-		case r == '.' || r == '-':
+		case r == '.':
+			dotted = true
+		case r == '-':
 		default:
 			return false
 		}
 	}
-	return letters > 0 && letters <= 4
+	if dotted {
+		return letters > 0 && letters <= 4
+	}
+	return letters > 0 && letters <= 2
 }
 
 // nameParticles are the lowercase words that join a family name ("van", "de")
@@ -251,13 +265,30 @@ func (p citePerson) csl() map[string]any {
 	return name
 }
 
-// citePeople parses a record's author field into people, in order.
-func citePeople(author string) []citePerson {
+// citeAuthors is a record's author field as the styles arrange it: the named
+// people, and whether the record cut the list short with "et al.".
+type citeAuthors struct {
+	people []citePerson
+	etAl   bool
+}
+
+// etAlSuffix matches an "et al." that ends a name or stands as one, in the
+// spellings catalogs use ("et al.", "et al", "et. al.", "Et Al").
+var etAlSuffix = regexp.MustCompile(`(?i)(^|[\s,;]+)et\.?\s*al\.?$`)
+
+// citePeople parses a record's author field into people, in order. An
+// "et al." is not a person: it is taken off whichever name carries it and
+// recorded, so each style can write its own form of it.
+func citePeople(author string) citeAuthors {
 	names := splitAuthors(author)
-	out := make([]citePerson, 0, len(names))
+	var out citeAuthors
 	for _, n := range names {
+		if loc := etAlSuffix.FindStringIndex(strings.TrimSpace(n)); loc != nil {
+			out.etAl = true
+			n = strings.TrimSpace(n)[:loc[0]]
+		}
 		if p := parseCitePerson(n); p.family != "" || p.literal != "" {
-			out = append(out, p)
+			out.people = append(out.people, p)
 		}
 	}
 	return out
@@ -410,9 +441,9 @@ func formatLocal(style string, f citeFields) string {
 // the year in parentheses ("n.d." when the record has none), and the DOI as a
 // URL.
 func localAPA(f citeFields) string {
-	people := citePeople(f.author)
-	names := make([]string, len(people))
-	for i, p := range people {
+	authors := citePeople(f.author)
+	names := make([]string, len(authors.people))
+	for i, p := range authors.people {
 		names[i] = p.withInitials(" ")
 	}
 	year := f.year
@@ -420,6 +451,11 @@ func localAPA(f citeFields) string {
 		year = "n.d."
 	}
 	head := joinSerial(names, ", ", ", & ", ", & ")
+	if authors.etAl && len(names) > 0 {
+		// The record names only some of the authors, so there is no last one
+		// to put "&" before.
+		head = strings.Join(names, ", ") + ", et al."
+	}
 	title := f.title
 	if ed := editionText(f.edition); ed != "" && !f.isArticle {
 		title += " (" + ed + ")"
@@ -439,9 +475,12 @@ func localAPA(f citeFields) string {
 // localMLA follows MLA 9: the first author inverted, two joined by "and",
 // three or more cut to "et al.".
 func localMLA(f citeFields) string {
-	people := citePeople(f.author)
+	authors := citePeople(f.author)
+	people := authors.people
 	var head string
 	switch {
+	case authors.etAl && len(people) > 0:
+		head = people[0].inverted() + ", et al"
 	case len(people) == 1:
 		head = people[0].inverted()
 	case len(people) == 2:
@@ -470,15 +509,19 @@ func localMLA(f citeFields) string {
 }
 
 // chicagoNames is the Chicago list: the first name inverted, the rest natural,
-// "and" before the last.
-func chicagoNames(people []citePerson) string {
-	names := make([]string, len(people))
-	for i, p := range people {
+// "and" before the last, or "et al." after the named ones when the record cut
+// the list short.
+func chicagoNames(authors citeAuthors) string {
+	names := make([]string, len(authors.people))
+	for i, p := range authors.people {
 		if i == 0 {
 			names[i] = p.inverted()
 		} else {
 			names[i] = p.natural()
 		}
+	}
+	if authors.etAl && len(names) > 0 {
+		return strings.Join(names, ", ") + ", et al"
 	}
 	return joinSerial(names, ", ", serialAnd, " and ")
 }
@@ -505,10 +548,13 @@ func localChicago(f citeFields) string {
 // localHarvard follows Elsevier's Harvard, the style doi.org is asked for:
 // inverted names with run-together initials, then the year after a comma.
 func localHarvard(f citeFields) string {
-	people := citePeople(f.author)
-	names := make([]string, len(people))
-	for i, p := range people {
-		names[i] = p.withInitials("")
+	authors := citePeople(f.author)
+	names := make([]string, 0, len(authors.people)+1)
+	for _, p := range authors.people {
+		names = append(names, p.withInitials(""))
+	}
+	if authors.etAl && len(names) > 0 {
+		names = append(names, "et al.")
 	}
 	head := joinNonEmpty(", ", strings.Join(names, ", "), f.year)
 	if f.isArticle {
@@ -526,14 +572,16 @@ const vancouverMaxAuthors = 6
 // family names with bare initials, six before "et al.", and the year before
 // volume and pages.
 func localVancouver(f citeFields) string {
-	people := citePeople(f.author)
+	authors := citePeople(f.author)
 	names := make([]string, 0, vancouverMaxAuthors+1)
-	for i, p := range people {
+	for i, p := range authors.people {
 		if i == vancouverMaxAuthors {
-			names = append(names, "et al")
 			break
 		}
 		names = append(names, p.vancouver())
+	}
+	if len(names) > 0 && (authors.etAl || len(authors.people) > vancouverMaxAuthors) {
+		names = append(names, "et al")
 	}
 	head := strings.Join(names, ", ")
 	if f.isArticle {
@@ -553,12 +601,15 @@ func localVancouver(f citeFields) string {
 // localIEEE follows IEEE: initials before the family name, "and" before the
 // last, the title in quotes for an article.
 func localIEEE(f citeFields) string {
-	people := citePeople(f.author)
-	names := make([]string, len(people))
-	for i, p := range people {
+	authors := citePeople(f.author)
+	names := make([]string, len(authors.people))
+	for i, p := range authors.people {
 		names[i] = p.initialsFirst()
 	}
 	head := joinSerial(names, ", ", serialAnd, " and ")
+	if authors.etAl && len(names) > 0 {
+		head = names[0] + " et al."
+	}
 	if f.isArticle {
 		var vol, no, pp, doi string
 		if f.volume != "" {
@@ -587,7 +638,7 @@ func localCSL(f citeFields) string {
 	if f.isArticle {
 		item["type"] = "article-journal"
 	}
-	people := citePeople(f.author)
+	people := citePeople(f.author).people
 	if len(people) > 0 {
 		authors := make([]any, len(people))
 		for i, p := range people {
