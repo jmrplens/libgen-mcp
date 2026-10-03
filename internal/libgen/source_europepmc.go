@@ -15,37 +15,35 @@ import (
 // europePMCSource so tests can point the source at an httptest server.
 const europePMCSearchBase = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
 
-// europePMCRenderBase is the default host serving the article PDF. The PMC render
-// path (/backend/ptpmcrender.fcgi) and the article render path
-// (/articles/<pmcid>?pdf=render) both live under it.
-const europePMCRenderBase = "https://europepmc.org"
-
 // europePMCMaxBody bounds how many bytes of a Europe PMC search JSON response are
 // read, guarding against an unexpectedly large or hostile body.
 const europePMCMaxBody = 1 << 20 // 1 MiB
 
-// europePMCSource resolves a DOI to a freely downloadable PDF through Europe PMC
-// (https://europepmc.org), which mirrors the open-access subset of PubMed Central.
+// europePMCSource resolves a DOI to a freely downloadable PDF of an article in the
+// open-access subset of PubMed Central, found through Europe PMC
+// (https://europepmc.org).
 //
-// It first maps the DOI to a PMCID via the REST search API and inspects the
-// record's open-access and in-EPMC flags; only a DOI that Europe PMC both indexes
-// AND holds the full text for yields a PDF. The PDF is then taken from the PMC
-// render backend, with the article render path as a fallback when the backend is
-// unreachable — both are official Europe PMC endpoints serving the same bytes.
+// It first maps the DOI to a PMCID via Europe PMC's REST search API and inspects
+// the record's open-access and in-EPMC flags; only a DOI that Europe PMC both
+// indexes AND holds an open-access full text for goes further. The PDF itself
+// comes from the PMC Article Datasets NCBI publishes on AWS Open Data, because
+// Europe PMC's own PDF routes now answer automated clients with a browser
+// challenge (see pdfURL). The source keeps its name: what it resolves through,
+// and what it serves, are still the Europe PMC open-access record.
 //
 // It is keyless, and distinguishes a DOI Europe PMC does not index from one it
 // indexes without an open-access full text, so the chain log explains which
 // happened. MD5 verification is disabled: DOI-keyed items carry no LibGen digest.
 type europePMCSource struct {
-	// http is the client used for the search and PDF-probe requests; when nil,
-	// http.DefaultClient is used.
+	// http is the client used for the search, listing, metadata and PDF-probe
+	// requests; when nil, the guarded fallback client is used.
 	http *http.Client
 	// searchBase overrides the REST search endpoint (defaults to
 	// europePMCSearchBase); tests set it to a local httptest server.
 	searchBase string
-	// renderBase overrides the PDF render host (defaults to europePMCRenderBase);
-	// tests set it to a local httptest server.
-	renderBase string
+	// bucketBase overrides the PMC Article Datasets root (defaults to
+	// pmcOABucketBase); tests set it to a local httptest server.
+	bucketBase string
 }
 
 // Compile-time assertion that europePMCSource satisfies the DownloadSource contract.
@@ -75,7 +73,8 @@ func (s europePMCSource) Name() string { return "europepmc" }
 func (s europePMCSource) Supports(it Item) bool { return it.DOI != "" }
 
 // Resolve maps the item's DOI to a PMCID via Europe PMC's search API and, when the
-// article's full text is held open-access, returns a render URL for its PDF. A DOI
+// article's full text is held open-access, returns the URL of its PDF in the PMC
+// Article Datasets. A DOI
 // Europe PMC does not index, or indexes without an open-access full text, yields a
 // distinct error so the caller tries the next source.
 //
@@ -140,30 +139,6 @@ func (s europePMCSource) lookup(ctx context.Context, doi string) (europePMCResul
 		return europePMCResult{}, notIndexed(fmt.Errorf("europepmc: %q is not indexed", doi))
 	}
 	return rec.ResultList.Result[0], nil
-}
-
-// pdfURL returns the first render endpoint that actually serves a PDF for the
-// PMCID: the PMC render backend, then the article render path as a fallback. It
-// probes because the backend can be unreachable from a given network while the
-// article path stays up (both are official Europe PMC endpoints).
-func (s europePMCSource) pdfURL(ctx context.Context, pmcid string) (string, error) {
-	base := s.renderBase
-	if base == "" {
-		base = europePMCRenderBase
-	}
-	base = strings.TrimRight(base, "/")
-	candidates := []string{
-		base + "/backend/ptpmcrender.fcgi?accid=" + url.QueryEscape(pmcid) + "&blobtype=pdf",
-		base + "/articles/" + url.PathEscape(pmcid) + "?pdf=render",
-	}
-	for _, c := range candidates {
-		if probePDF(ctx, s.client(), c) {
-			return c, nil
-		}
-	}
-	// Both candidates are official Europe PMC hosts, so neither answering is the
-	// service being unreachable rather than a statement about this article.
-	return "", unavailable(fmt.Errorf("europepmc: no reachable PDF endpoint for %s", pmcid))
 }
 
 // client returns the configured HTTP client, or the shared default when none was

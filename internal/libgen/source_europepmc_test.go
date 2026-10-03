@@ -29,21 +29,15 @@ func europePMCSearchServer(t *testing.T, fixture string, status int, gotQuery *s
 	}))
 }
 
-// europePMCRenderServer builds an httptest server that serves a PDF at the render
-// paths whose Content-Type gate serves reports true for, unless the path is listed
-// in fail404, which returns 404 so the fallback branch is exercised.
-func europePMCRenderServer(t *testing.T, fail404 ...string) *httptest.Server {
+// europePMCBucketServer builds a stand-in PMC Article Datasets bucket holding the
+// recorded copy of PMC4991899, the PMCID the europepmc_oa.json fixture names.
+func europePMCBucketServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		for _, p := range fail404 {
-			if strings.HasPrefix(r.URL.Path, p) {
-				w.WriteHeader(http.StatusNotFound)
-				return
-			}
-		}
-		w.Header().Set("Content-Type", "application/pdf")
-		_, _ = w.Write([]byte("%PDF-1.4 europe pmc payload"))
-	}))
+	return pmcOABucket{
+		listing:  pmcOAFixture(t, "pmcoa_list.xml"),
+		meta:     map[string][]byte{"PMC4991899.1": pmcOAFixture(t, "pmcoa_meta_published.json")},
+		servePDF: true,
+	}.serve(t)
 }
 
 // TestEuropePMCErrorClassification pins which failures Resolve reports as Europe
@@ -97,22 +91,19 @@ func TestEuropePMCErrorClassification(t *testing.T) {
 		assertUnavailable(t, err)
 	})
 
-	t.Run("no reachable render endpoint is unavailability", func(t *testing.T) {
-		// The article IS open access — the search said so — and both render candidates
-		// are official Europe PMC hosts. Neither answering is the service being
-		// unreachable, so tagging it as a miss would deny an article we know is held.
+	t.Run("a failing PDF bucket is unavailability", func(t *testing.T) {
+		// The article IS open access — the search said so. A bucket that cannot
+		// answer is the service failing, so tagging it as a miss would deny an
+		// article we know is held.
 		search := europePMCSearchServer(t, "europepmc_oa.json", http.StatusOK, nil)
 		defer search.Close()
-		render := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusBadGateway)
-		}))
-		defer render.Close()
-		s := europePMCSource{http: search.Client(), searchBase: search.URL, renderBase: render.URL}
+		bucket := pmcOABucket{listStatus: http.StatusBadGateway}.serve(t)
+		s := europePMCSource{http: search.Client(), searchBase: search.URL, bucketBase: bucket.URL}
 
 		_, err := s.Resolve(context.Background(), Item{DOI: doi})
 		assertUnavailable(t, err)
 		if errors.Is(err, ErrNotIndexed) {
-			t.Error("an unreachable render host read as the article being unheld")
+			t.Error("an unreachable bucket read as the article being unheld")
 		}
 	})
 
@@ -151,18 +142,17 @@ func TestEuropePMCSupports(t *testing.T) {
 	}
 }
 
-// TestEuropePMCResolveOA verifies an open-access DOI resolves to the PMC render
-// backend URL, sends an exact-match DOI query, declares a pdf extension, and leaves
-// MD5 verification off (DOI items carry no digest).
+// TestEuropePMCResolveOA verifies an open-access DOI resolves to the article's PDF
+// in the PMC Article Datasets, sends an exact-match DOI query, declares a pdf
+// extension, and leaves MD5 verification off (DOI items carry no digest).
 func TestEuropePMCResolveOA(t *testing.T) {
 	const doi = "10.1371/journal.pbio.1002533"
 	var gotQuery string
 	search := europePMCSearchServer(t, "europepmc_oa.json", http.StatusOK, &gotQuery)
 	defer search.Close()
-	render := europePMCRenderServer(t)
-	defer render.Close()
+	bucket := europePMCBucketServer(t)
 
-	s := europePMCSource{http: search.Client(), searchBase: search.URL, renderBase: render.URL}
+	s := europePMCSource{http: search.Client(), searchBase: search.URL, bucketBase: bucket.URL}
 	got, err := s.Resolve(context.Background(), Item{DOI: doi})
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
@@ -170,32 +160,14 @@ func TestEuropePMCResolveOA(t *testing.T) {
 	if want := `DOI:"` + doi + `"`; gotQuery != want {
 		t.Errorf("search query = %q, want %q", gotQuery, want)
 	}
-	if !strings.Contains(got.FileURL, "/backend/ptpmcrender.fcgi") || !strings.Contains(got.FileURL, "PMC4991899") {
-		t.Errorf("FileURL = %q, want the ptpmcrender backend for PMC4991899", got.FileURL)
+	if want := bucket.URL + "/PMC4991899.1/PMC4991899.1.pdf"; got.FileURL != want {
+		t.Errorf("FileURL = %q, want %q", got.FileURL, want)
 	}
 	if got.Ext != "pdf" {
 		t.Errorf("Ext = %q, want pdf", got.Ext)
 	}
 	if got.VerifyMD5 {
 		t.Error("VerifyMD5 = true, want false for a DOI-keyed item")
-	}
-}
-
-// TestEuropePMCResolveFallsBackToArticleRender verifies that when the PMC render
-// backend does not serve a PDF, Resolve falls back to the article render path.
-func TestEuropePMCResolveFallsBackToArticleRender(t *testing.T) {
-	search := europePMCSearchServer(t, "europepmc_oa.json", http.StatusOK, nil)
-	defer search.Close()
-	render := europePMCRenderServer(t, "/backend/ptpmcrender.fcgi")
-	defer render.Close()
-
-	s := europePMCSource{http: search.Client(), searchBase: search.URL, renderBase: render.URL}
-	got, err := s.Resolve(context.Background(), Item{DOI: "10.1371/journal.pbio.1002533"})
-	if err != nil {
-		t.Fatalf("Resolve() error = %v", err)
-	}
-	if !strings.Contains(got.FileURL, "/articles/PMC4991899") {
-		t.Errorf("FileURL = %q, want the article render fallback", got.FileURL)
 	}
 }
 
@@ -233,12 +205,11 @@ func TestEuropePMCResolveNoOpenAccess(t *testing.T) {
 func TestEuropePMCResolveIndexedButNotOpenAccess(t *testing.T) {
 	search := europePMCSearchServer(t, "europepmc_indexed_not_oa.json", http.StatusOK, nil)
 	defer search.Close()
-	// A render server that would happily serve a PDF, so a pass here can only mean
-	// the OA guard let the record through.
-	render := europePMCRenderServer(t)
-	defer render.Close()
+	// A bucket that would happily serve a PDF, so a pass here can only mean the OA
+	// guard let the record through.
+	bucket := europePMCBucketServer(t)
 
-	s := europePMCSource{http: search.Client(), searchBase: search.URL, renderBase: render.URL}
+	s := europePMCSource{http: search.Client(), searchBase: search.URL, bucketBase: bucket.URL}
 	_, err := s.Resolve(context.Background(), Item{DOI: "10.9999/indexed.but.not.oa"})
 	if err == nil || !strings.Contains(err.Error(), "no open-access full text") {
 		t.Fatalf("Resolve() error = %v, want a 'no open-access full text' error for a non-OA record", err)
@@ -271,18 +242,20 @@ func TestEuropePMCResolveMalformed(t *testing.T) {
 	}
 }
 
-// TestEuropePMCResolveNoReachableRender verifies that when neither render endpoint
-// serves a PDF, Resolve reports it rather than returning a dead URL.
-func TestEuropePMCResolveNoReachableRender(t *testing.T) {
+// TestEuropePMCResolvePDFNotServed verifies that when the bucket lists a PDF and
+// then does not serve it, Resolve reports it rather than returning a dead URL.
+func TestEuropePMCResolvePDFNotServed(t *testing.T) {
 	search := europePMCSearchServer(t, "europepmc_oa.json", http.StatusOK, nil)
 	defer search.Close()
-	render := europePMCRenderServer(t, "/backend", "/articles")
-	defer render.Close()
+	bucket := pmcOABucket{
+		listing: pmcOAFixture(t, "pmcoa_list.xml"),
+		meta:    map[string][]byte{"PMC4991899.1": pmcOAFixture(t, "pmcoa_meta_published.json")},
+	}.serve(t)
 
-	s := europePMCSource{http: search.Client(), searchBase: search.URL, renderBase: render.URL}
+	s := europePMCSource{http: search.Client(), searchBase: search.URL, bucketBase: bucket.URL}
 	_, err := s.Resolve(context.Background(), Item{DOI: "10.1371/journal.pbio.1002533"})
-	if err == nil || !strings.Contains(err.Error(), "no reachable PDF endpoint") {
-		t.Fatalf("Resolve() error = %v, want a 'no reachable PDF endpoint' error", err)
+	if err == nil || !strings.Contains(err.Error(), "listed but not served") {
+		t.Fatalf("Resolve() error = %v, want a 'listed but not served' error", err)
 	}
 }
 

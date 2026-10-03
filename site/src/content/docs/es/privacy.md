@@ -6,11 +6,11 @@ mentions:
     wikidata: Q133436854
   - name: "OpenTelemetry"
     wikidata: Q121746046
-datePublished: "2026-09-24"
+datePublished: "2026-10-03"
 # Traducción de PRIVACY.md. El digest de abajo fija la versión del original de la
 # que procede: scripts/sync-privacy.mjs --check falla cuando el original cambia y
 # esta traducción se queda atrás.
-privacySource: "bdfeabc52bd95a6b"
+privacySource: "76dc65f0adac77d9"
 head:
   - tag: script
     attrs:
@@ -154,8 +154,9 @@ destinos son:
 - **Proveedores de acceso abierto sin clave (solo cuando pides un artículo por
   DOI).** Antes de cualquier alternativa de shadow library, la cadena de
   `download` de artículos pregunta a los repositorios abiertos por una copia con
-  licencia libre: [Europe PMC](https://europepmc.org) (`ebi.ac.uk`,
-  `europepmc.org`), [bioRxiv/medRxiv](https://www.biorxiv.org)
+  licencia libre: [Europe PMC](https://europepmc.org) (`ebi.ac.uk`, con el PDF
+  en sí descargado de los PMC Article Datasets del NCBI en
+  `pmc-oa-opendata.s3.amazonaws.com`), [bioRxiv/medRxiv](https://www.biorxiv.org)
   (`api.biorxiv.org`, más los hosts de contenido `biorxiv.org`/`medrxiv.org`), el
   [RFC Editor](https://www.rfc-editor.org) (`www.rfc-editor.org`) para un DOI de
   RFC, [NIST](https://nvlpubs.nist.gov) para un DOI `10.6028` (la petición va a
