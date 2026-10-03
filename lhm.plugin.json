@@ -194,6 +194,20 @@
               "file"
             ],
             "type": "string"
+          },
+          "related": {
+            "description": "one value: references (works this record cites) or cited_by (works citing it, most cited first), from OpenAlex by the record's DOI. Off by default. A record with no confirmed DOI says it is not available",
+            "enum": [
+              "references",
+              "cited_by"
+            ],
+            "type": "string"
+          },
+          "related_limit": {
+            "description": "with related, how many works to list, 1 to 25 (default 10)",
+            "maximum": 25,
+            "minimum": 1,
+            "type": "integer"
           }
         },
         "type": "object"

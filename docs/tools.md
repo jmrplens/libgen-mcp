@@ -194,15 +194,17 @@ LibGen JSON API.
 
 ### get_details input
 
-| Parameter  | Type   | Required | Description                                                                                                                                                                                                                                                                              |
-| ---------- | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `md5`      | string | one of   | File MD5 hash from a search result. Returns the file record plus its first related edition. Must be a 32-character hex string.                                                                                                                                                           |
-| `id`       | string | one of   | Edition or file id.                                                                                                                                                                                                                                                                      |
-| `doi`      | string | one of   | Article DOI, e.g. `10.1016/j.cell.2011.02.013`. Looked up exactly against the catalog; the response carries the edition plus the file `md5` to pass to `download`.                                                                                                                       |
-| `citation` | string | one of   | A reference pasted as free text, in any style. Resolved through Crossref to the DOI of the one work that clearly matches it, then looked up as that `doi`. With no clear match, the candidates come back instead of a record. See [Citations](citations.md#which-identifier-gives-what). |
-| `object`   | string | no       | Used with `id`: `edition` (default) or `file`.                                                                                                                                                                                                                                           |
-| `cite_as`  | array  | no       | Extra citation styles beside BibTeX and RIS: any of `apa`, `mla`, `chicago`, `harvard`, `vancouver`, `ieee`, `csl-json`. Off by default. See [Citations](citations.md#other-citation-styles).                                                                                            |
-| `enrich`   | bool   | no       | When `true`, augment the record with keyless metadata from Crossref (by DOI) and OpenLibrary (by ISBN). Best-effort and off by default.                                                                                                                                                  |
+| Parameter       | Type   | Required | Description                                                                                                                                                                                                                                                                              |
+| --------------- | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `md5`           | string | one of   | File MD5 hash from a search result. Returns the file record plus its first related edition. Must be a 32-character hex string.                                                                                                                                                           |
+| `id`            | string | one of   | Edition or file id.                                                                                                                                                                                                                                                                      |
+| `doi`           | string | one of   | Article DOI, e.g. `10.1016/j.cell.2011.02.013`. Looked up exactly against the catalog; the response carries the edition plus the file `md5` to pass to `download`.                                                                                                                       |
+| `citation`      | string | one of   | A reference pasted as free text, in any style. Resolved through Crossref to the DOI of the one work that clearly matches it, then looked up as that `doi`. With no clear match, the candidates come back instead of a record. See [Citations](citations.md#which-identifier-gives-what). |
+| `object`        | string | no       | Used with `id`: `edition` (default) or `file`.                                                                                                                                                                                                                                           |
+| `related`       | string | no       | `references` (works this record cites) or `cited_by` (works citing it, most cited first), from OpenAlex by the record's DOI. Off by default. See [Related works](#related-works).                                                                                                        |
+| `related_limit` | int    | no       | With `related`, how many works to list: 1 to 25, default 10.                                                                                                                                                                                                                             |
+| `cite_as`       | array  | no       | Extra citation styles beside BibTeX and RIS: any of `apa`, `mla`, `chicago`, `harvard`, `vancouver`, `ieee`, `csl-json`. Off by default. See [Citations](citations.md#other-citation-styles).                                                                                            |
+| `enrich`        | bool   | no       | When `true`, augment the record with keyless metadata from Crossref (by DOI) and OpenLibrary (by ISBN). Best-effort and off by default.                                                                                                                                                  |
 
 Provide exactly one of `md5`, `id`, `doi` or `citation`. Supplying more than one, none,
 an `md5` that is not 32 hex chars, a `citation` over 1000 characters, or an `object` other
@@ -226,6 +228,7 @@ reported.
 | `file`           | object | The file record (present for an `md5` lookup, or an `id` lookup with `object: file`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `edition`        | object | The edition record (present for an `md5` lookup's related edition, or an `id` lookup with `object: edition`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `citations`      | object | `{"bibtex": ..., "ris": ..., "doi_status": ..., "provenance": ...}` — a ready-to-paste BibTeX and RIS export built from the record's metadata, with `doi_status` (`confirmed`, `unverified` or `mismatch` against Crossref, and only a confirmed DOI is written into the entries) and `provenance` (where each field came from, to relay with the citation). Omitted when the record has no title (the minimum needed for a usable citation). Empty metadata fields are dropped rather than emitted blank, and the export carries no ISBN field at all. With `cite_as`, `formatted` adds the requested styles (see [Citations](citations.md#other-citation-styles)). |
+| `related`        | object | Present when `related` was set: `kind`, the `total` OpenAlex counts, up to `related_limit` `works` (title, year, DOI, open access, citation count) and a `note` when the list is empty or partial. See [Related works](#related-works).                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `enrichment`     | object | Best-effort external metadata (Crossref/OpenLibrary), present when `enrich` was requested and something was found — and on the Crossref fallback below, which returns it whether or not you asked. See [Metadata enrichment](#metadata-enrichment).                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 An `md5` lookup returns `file` and, best-effort, its related `edition`. An `id` lookup
@@ -284,6 +287,33 @@ failing upstream, or exceeding the 6s budget all degrade silently to an absent `
 Enrichment runs synchronously within the `get_details` call: it **never fails the core result**
 (`file`, `edition`, `citations` are always returned), but it **may add bounded latency** — up to
 the ~6s budget — before the response returns. No API key is required; both APIs are used keyless.
+
+### Related works
+
+Set `related` to `references` for the works a record cites, or to `cited_by` for the works
+citing it, and `related_limit` for how many (1 to 25, default 10):
+
+```json
+{ "doi": "10.1038/nature12373", "related": "cited_by", "related_limit": 5 }
+```
+
+The list comes from [OpenAlex](https://openalex.org), the most cited first, with the title,
+year, DOI, an open-access flag and the citation count of each work, and `total` is how many
+there are in all. The work is found by its DOI (a single-record lookup, which OpenAlex does
+not charge for) and the list is one filtered query, so a call costs one credit of the
+allowance described under
+[`LIBGEN_MCP_OPENALEX_KEY`](configuration.md#libgen_mcp_openalex_key). References are
+ranked from the first 100 a work lists, the most one query can name, and `note` says so when
+a work lists more, or when the count OpenAlex states differs from the references it names.
+
+The DOI used is the one the [citation styles](citations.md#other-citation-styles) may send to
+doi.org: a DOI Crossref confirmed, or the DOI of a record Crossref or the registry answered.
+A record without one gets `related` with a `note` saying the list is not available, because
+a catalog DOI that failed the check belongs to another work. Every other failure (an unknown
+DOI, OpenAlex not answering, a refusal for asking too fast, which says to try again shortly,
+or the daily allowance spent, which suggests the key only to a server without one) is also a
+`note`, never an error, and
+`LIBGEN_MCP_ENRICH=false` turns the lookup off with the rest of the outbound metadata.
 
 ## download
 

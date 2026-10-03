@@ -231,8 +231,37 @@ func renderDetailsMarkdown(out DetailsOutput) string {
 	}
 	writeCitation(&b, out.Citations)
 	writeEnrichment(&b, out.Enrichment)
+	writeRelated(&b, out.Related)
 	card.End(out.NextSteps...)
 	return b.String()
+}
+
+// writeRelated appends the related works related asked for: the total as a
+// row, the works as a table whose every cell is OpenAlex text through the
+// cell escapers, and the note as a quote. It is a no-op when related was not
+// set.
+func writeRelated(b *strings.Builder, r *libgen.RelatedWorks) {
+	if r == nil {
+		return
+	}
+	title := "Cited by (via OpenAlex)"
+	if r.Kind == libgen.RelatedReferences {
+		title = "References (via OpenAlex)"
+	}
+	section := toolutil.NewCard(b, "").Section(title)
+	section.Count("Total", int64(r.Total))
+	if len(r.Works) > 0 {
+		toolutil.EndBlock(b)
+		b.WriteString("UNTRUSTED external metadata, the most cited first.\n\n")
+		b.WriteString("| # | Title | Year | DOI | Open access | Cited by |\n")
+		b.WriteString("| - | ----- | ---- | --- | ----------- | -------- |\n")
+		for i, w := range r.Works {
+			fmt.Fprintf(b, "| %d | %s | %s | %s | %s | %d |\n",
+				i+1, mdCell(w.Title), candidateYear(w.Year), toolutil.MdCodeSpanCell(w.DOI),
+				openAccessFlag(w.OpenAccess), w.CitedByCount)
+		}
+	}
+	section.Quote(r.Note)
 }
 
 // renderUnresolvedCitationMarkdown renders a citation lookup that chose no
