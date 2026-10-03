@@ -5416,6 +5416,38 @@ func TestYearFilterStep(t *testing.T) {
 	}
 }
 
+// TestSearchNextSteps_RangeEmptiedCatalogRescued checks a catalog page the year
+// range emptied, rescued by open-access hits, is described as having no match in
+// the range rather than no match at all.
+func TestSearchNextSteps_RangeEmptiedCatalogRescued(t *testing.T) {
+	out := SearchOutput{YearFiltered: 5, OpenAccess: []discovery.DiscoveryResult{{Origin: "arxiv", PDFURL: "https://arxiv.org/pdf/1"}}}
+	joined := strings.Join(searchNextSteps(out, true, config.ExtraSourcesAuto), " ")
+	if !strings.Contains(joined, "no match in the year range") {
+		t.Errorf("steps = %s", joined)
+	}
+}
+
+// TestEmptySearchVerdictStep checks a range-emptied page with more pages points
+// at the next page instead of telling the user nothing was found.
+func TestEmptySearchVerdictStep(t *testing.T) {
+	cases := []struct {
+		name string
+		out  SearchOutput
+		want string
+	}{
+		{name: "range emptied a full page", out: SearchOutput{YearFiltered: 25, HasMore: true, Page: 1}, want: "request page 2"},
+		{name: "range emptied the last page", out: SearchOutput{YearFiltered: 3, Page: 4}, want: "Tell the user nothing was found"},
+		{name: "no range", out: SearchOutput{HasMore: true}, want: "Tell the user nothing was found"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := emptySearchVerdictStep(tc.out); !strings.Contains(got, tc.want) {
+				t.Errorf("emptySearchVerdictStep() = %q, want it to contain %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestEmptySearchSteps_YearFilterReplacesNoMatches checks that when the range is
 // what emptied the page, the guidance says so instead of claiming no matches.
 func TestEmptySearchSteps_YearFilterReplacesNoMatches(t *testing.T) {

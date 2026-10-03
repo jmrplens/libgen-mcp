@@ -910,8 +910,7 @@ func searchNextSteps(out SearchOutput, extrasRan bool, policy config.ExtraSource
 	if len(out.Results) > 0 {
 		steps = append(steps, firstResultSteps(out.Results[0])...)
 	} else {
-		steps = append(steps, "The Library Genesis catalog had no match. Every hit below is in open_access, "+
-			"from the searchers beyond the catalog.")
+		steps = append(steps, noCatalogMatchStep(out))
 	}
 	if step := openAccessStep(out.OpenAccess, extrasRan); step != "" {
 		steps = append(steps, step)
@@ -938,8 +937,32 @@ func emptySearchSteps(out SearchOutput, extrasRan bool, policy config.ExtraSourc
 		steps = append(steps, "No matches. Broaden the query text, drop search_in field filters, or try other topics: "+
 			strings.Join(libgen.TopicNames(), ", ")+".")
 	}
-	return append(steps, emptySearchEscalationStep(extrasRan, policy),
-		"Tell the user nothing was found; do not present titles, authors or download links that were not returned.")
+	return append(steps, emptySearchEscalationStep(extrasRan, policy), emptySearchVerdictStep(out))
+}
+
+// noCatalogMatchStep introduces an open_access list the catalog contributed
+// nothing to. When the year range is what emptied the catalog page, it says the
+// catalog had no match in the range, since it did have matches outside it.
+func noCatalogMatchStep(out SearchOutput) string {
+	if out.YearFiltered > 0 {
+		return "The Library Genesis catalog had no match in the year range on this page. Every hit below is in " +
+			"open_access, from the searchers beyond the catalog."
+	}
+	return "The Library Genesis catalog had no match. Every hit below is in open_access, " +
+		"from the searchers beyond the catalog."
+}
+
+// emptySearchVerdictStep is what to tell the user about a search that returned
+// nothing. A page the year range emptied is not proof that nothing exists in the
+// range: when a next page may exist, the step points at it rather than at "nothing
+// was found".
+func emptySearchVerdictStep(out SearchOutput) string {
+	if out.YearFiltered > 0 && out.HasMore {
+		return fmt.Sprintf("Nothing on this page falls in the year range, but the catalog has more pages: request page %d "+
+			"before telling the user nothing was found. Do not present titles, authors or download links that were not returned.",
+			out.Page+1)
+	}
+	return "Tell the user nothing was found; do not present titles, authors or download links that were not returned."
 }
 
 // firstResultSteps are the ready-to-run follow-ups for the first catalog result:
