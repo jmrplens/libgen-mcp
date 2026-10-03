@@ -16,7 +16,7 @@ repository-code: "https://github.com/jmrplens/libgen-mcp"
 url: "https://jmrp.io/docs/libgen-mcp/"
 license: MIT
 version: 2.1.0
-date-released: 2026-09-23
+date-released: 2026-10-03
 keywords:
   - mcp
   - model-context-protocol
