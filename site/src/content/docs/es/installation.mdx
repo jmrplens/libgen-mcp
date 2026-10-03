@@ -71,7 +71,7 @@ Cada release va firmada, y lo que eso te da depende del canal:
 | Docker                         | Una firma cosign sin claves sobre el índice y los dos manifiestos de plataforma, más procedencia SLSA | Tú, con la receta de abajo       |
 | npm                            | La procedencia de npm, adjuntada automáticamente porque la publicación es de un trusted publisher     | `npm audit signatures`           |
 | PyPI                           | Attestations PEP 740, adjuntadas automáticamente por la misma razón                                   | Se ven en la página del proyecto |
-| NuGet                          | La firma de repositorio de nuget.org, más procedencia SLSA por paquete (después de v2.0.1)            | `dotnet nuget verify`, tú        |
+| NuGet                          | La firma de repositorio de nuget.org, más procedencia SLSA por paquete (desde la 2.1.0)               | `dotnet nuget verify`, tú        |
 | Homebrew                       | Un SHA256 por cada asset de plataforma, fijado en la fórmula                                          | El propio `brew`, al descargar   |
 | `go install`                   | La base de datos de checksums de Go, sobre el **código fuente**                                       | La cadena de herramientas de Go  |
 
@@ -114,7 +114,7 @@ npm audit signatures
 
 En una plataforma sin binario precompilado el lanzador sale con un mensaje que apunta a los binarios de la release y a compilar desde el código fuente.
 
-**Pararlo.** Desde la primera release posterior a la 2.0.1 el lanzador para el servidor cuando se le pide que pare. En Linux y macOS le pasa SIGTERM, SIGINT y SIGHUP al servidor, y cuando lo arrancó npm (`npx`, o un script de npm) le envía SIGTERM en menos de un segundo desde que sale la shell de npm: un SIGTERM enviado al proceso `npx` solo llega a esa shell, nunca al lanzador. Hasta la 2.0.1 un servidor HTTP arrancado con `npx` seguía ocupando su puerto después de que su supervisor lo hubiera parado. Arrancado de cualquier otra forma, un servidor que sobrevive a su padre se deja en paz, igual que el binario ejecutado directamente. En Windows el Ctrl+C de la consola llega al propio servidor, y el lanzador solo lo espera.
+**Pararlo.** Desde la 2.1.0 el lanzador para el servidor cuando se le pide que pare. En Linux y macOS le pasa SIGTERM, SIGINT y SIGHUP al servidor, y cuando lo arrancó npm (`npx`, o un script de npm) le envía SIGTERM en menos de un segundo desde que sale la shell de npm: un SIGTERM enviado al proceso `npx` solo llega a esa shell, nunca al lanzador. Hasta la 2.0.1 un servidor HTTP arrancado con `npx` seguía ocupando su puerto después de que su supervisor lo hubiera parado. Arrancado de cualquier otra forma, un servidor que sobrevive a su padre se deja en paz, igual que el binario ejecutado directamente. En Windows el Ctrl+C de la consola llega al propio servidor, y el lanzador solo lo espera.
 
 El servidor drena con su primer SIGINT o SIGTERM y termina en seco con el segundo, así que el lanzador le pide parar una sola vez: las señales posteriores no se le pasan, y un Ctrl+C desde un terminal, que ya llega al servidor, no se le pasa en absoluto. Una señal enviada a todos los procesos a la vez por otra vía le llega dos veces y se salta el drenaje, que es lo que hace el `KillMode=control-group` por defecto de systemd. Con systemd ejecuta el binario directamente, o pon `KillMode=mixed`.
 
@@ -194,7 +194,7 @@ gh attestation verify "$(readlink -f "$(command -v libgen-mcp)")" \
   -R jmrplens/libgen-mcp --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
 ```
 
-Las releases posteriores a v2.0.1 atestiguan además los siete paquetes, tal como eran antes de que nuget.org añadiera su firma de repositorio. Quita esa entrada de una copia descargada y verifica lo que queda:
+Desde la 2.1.0, las releases atestiguan además los siete paquetes, tal como eran antes de que nuget.org añadiera su firma de repositorio. Quita esa entrada de una copia descargada y verifica lo que queda:
 
 ```bash
 curl -sSLO https://api.nuget.org/v3-flatcontainer/libgen-mcp/<version>/libgen-mcp.<version>.nupkg
@@ -301,7 +301,7 @@ gh attestation verify libgen-mcp-linux-amd64 -R jmrplens/libgen-mcp \
 
 `-R` por sí solo acepta una attestation que haya emitido cualquier workflow del repositorio, así que `--signer-workflow` la ata al workflow de release, y `--source-ref` a la release que has descargado. Cada `gh attestation verify` de esta página lleva el primero, y el segundo siempre que conozcas la versión.
 
-**Licencias.** El binario enlaza módulos de terceros cuyas licencias piden que su texto viaje con él. Cada release los publica como `THIRD_PARTY_NOTICES`, listado en el `checksums.txt` firmado igual que los binarios. Los paquetes de npm, PyPI y NuGet, el bundle de Claude Desktop, la imagen (en `/usr/share/licenses/libgen-mcp`) y la fórmula de Homebrew lo llevan junto a `LICENSE`; un binario descargado suelto, o mediante winget, no, y ese asset de la release es donde están sus avisos.
+**Licencias.** El binario enlaza módulos de terceros cuyas licencias piden que su texto viaje con él. Desde la 2.1.0, cada release los publica como `THIRD_PARTY_NOTICES`, listado en el `checksums.txt` firmado igual que los binarios. Los paquetes de npm, PyPI y NuGet, el bundle de Claude Desktop, la imagen (en `/usr/share/licenses/libgen-mcp`) y la fórmula de Homebrew lo llevan junto a `LICENSE`; un binario descargado suelto, o mediante winget, no, y ese asset de la release es donde están sus avisos.
 
 **Actualizar.** Descarga el asset nuevo encima del viejo. Ejecuta antes `libgen-mcp --shutdown` si un cliente ya tiene uno en marcha, o el proceso viejo se queda con sus plazas y su listener.
 

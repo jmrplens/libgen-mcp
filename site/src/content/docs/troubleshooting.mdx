@@ -369,6 +369,25 @@ These are the server's own diagnostic logs, written straight to stderr. They are
 
 </Facts>
 
+## Behind an outbound proxy: `refusing to connect to a private or local address`
+
+<Facts>
+	<Fact kind="symptom">
+		With `HTTP_PROXY` or `HTTPS_PROXY` set, a download, an enrichment or an open-access search fails with `refusing to connect to a private or local address`.
+	</Fact>
+	<Fact kind="meaning">
+		It depends on the address the message names. **The proxy's own address, for every host** (Crossref, arXiv, Unpaywall, every download URL) means the server is 2.0.1 or older, which judged the dial to a proxy on a private address as if the proxy were the destination. From 2.1.0 the dial to the proxy answers only to the cloud-metadata rule, so a corporate proxy on `10.x` works without `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES`. **The destination** means the URL a record supplied names a private or metadata address, and it is refused behind a proxy exactly as it is without one. That includes every numeric spelling a C resolver accepts (`2852039166` and `0xa9fea9fe` are both `169.254.169.254`), and `is a numeric host this server cannot classify` means a host whose last label only looks numeric. `resolves to 169.254.169.254, the cloud instance metadata address` (or another metadata address) means a hostname this machine resolves to a cloud metadata endpoint; the server resolves names locally for that check alone, and a lookup that fails does not refuse.
+	</Fact>
+	<Fact kind="fixes">
+
+    	- Upgrade if the message names the proxy.
+    	- A refused destination is the guard doing its job on a third-party URL, not a configuration problem. If it is a mirror of yours on a private address, name it in `LIBGEN_MIRROR` or `LIBGEN_MCP_SCIHUB_HOSTS`: a host you named is exempt behind a proxy too.
+    	- A host in `NO_PROXY` is dialed directly and judged by the dialer, as without a proxy.
+    	- How the guard tells the proxy from the destination is in [Architecture](/libgen-mcp/architecture/#outbound-address-policy).
+    </Fact>
+
+</Facts>
+
 ## TLS handshake fails against a private CA
 
 <Facts>

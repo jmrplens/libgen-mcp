@@ -19,7 +19,7 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 
 Everything about *how* the export happens — the endpoint, the protocol, headers,
 timeouts, sampling, batch sizes, resource attributes, the service name — comes
-from the standard `OTEL_*` variables, which the SDK reads itself. Two names are
+from the standard `OTEL_*` variables, which the SDK reads itself. Four names are
 this server's own beyond the switch:
 
 | Variable                                 | Default       | What it does                                                                                              |

@@ -52,7 +52,7 @@ gh attestation verify ~/.nuget/packages/libgen-mcp.linux-x64/<version>/tools/any
   -R jmrplens/libgen-mcp --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
 ```
 
-Releases after v2.0.1 also attest the packages themselves, as they were before nuget.org added its repository signature: remove `.signature.p7s` from a downloaded copy with `zip -d` and run the same `gh attestation verify` on what is left. The steps are in the [installation guide](https://jmrp.io/docs/libgen-mcp/installation/#nuget).
+From 2.1.0, releases also attest the packages themselves, as they were before nuget.org added its repository signature: remove `.signature.p7s` from a downloaded copy with `zip -d` and run the same `gh attestation verify` on what is left. The steps are in the [installation guide](https://jmrp.io/docs/libgen-mcp/installation/#nuget).
 
 ## Configuration
 

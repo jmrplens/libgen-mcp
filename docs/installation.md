@@ -77,7 +77,7 @@ Every release is signed, and what that buys you depends on the channel:
 | Docker                  | A keyless cosign signature on the index and both platform manifests, plus SLSA build provenance | You, with the recipe below |
 | npm                     | npm provenance, attached automatically because the publish is a trusted publisher               | `npm audit signatures`     |
 | PyPI                    | PEP 740 attestations, attached automatically for the same reason                                | Shown on the project page  |
-| NuGet                   | nuget.org's repository signature, plus SLSA build provenance per package (after v2.0.1)         | `dotnet nuget verify`, you |
+| NuGet                   | nuget.org's repository signature, plus SLSA build provenance per package (from 2.1.0)           | `dotnet nuget verify`, you |
 | Homebrew                | A SHA256 per platform asset, pinned in the formula                                              | `brew` itself, on download |
 | `go install`            | The Go checksum database, over the **source**                                                   | The Go toolchain           |
 
@@ -140,8 +140,8 @@ goes with it, because the launcher is the only thing that depends on it.
 On a platform with no prebuilt binary the launcher exits with a message pointing
 at the release binaries and at building from source.
 
-**Stopping it.** From the first release after 2.0.1 the launcher stops the
-server when it is told to stop. On Linux and macOS it passes SIGTERM, SIGINT
+**Stopping it.** From 2.1.0 the launcher stops the server when it is told to
+stop. On Linux and macOS it passes SIGTERM, SIGINT
 and SIGHUP on to the server, and when npm started it (`npx`, or an npm script)
 it sends the server SIGTERM within a second of npm's shell exiting: a SIGTERM
 sent to the `npx` process reaches only that shell, never the launcher. Up to
@@ -260,7 +260,7 @@ gh attestation verify "$(readlink -f "$(command -v libgen-mcp)")" \
   -R jmrplens/libgen-mcp --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
 ```
 
-Releases after v2.0.1 also attest the seven packages themselves, as they were
+From 2.1.0, releases also attest the seven packages themselves, as they were
 before nuget.org added its repository signature. Remove that entry from a
 downloaded copy and verify what is left:
 
@@ -396,9 +396,9 @@ to the release you downloaded. Every `gh attestation verify` on this page takes
 the first, and the second wherever you know the version.
 
 **Licences.** The binary links third-party modules whose licences ask for their
-texts to travel with it. Every release ships them as `THIRD_PARTY_NOTICES`,
-listed in the signed `checksums.txt` like the binaries. The npm, PyPI and NuGet
-packages, the Claude Desktop bundle, the image (under
+texts to travel with it. From 2.1.0 every release ships them as
+`THIRD_PARTY_NOTICES`, listed in the signed `checksums.txt` like the binaries.
+The npm, PyPI and NuGet packages, the Claude Desktop bundle, the image (under
 `/usr/share/licenses/libgen-mcp`) and the Homebrew formula carry it with
 `LICENSE`; a binary downloaded on its own, or through winget, does not, and that
 release asset is where its notices are.
