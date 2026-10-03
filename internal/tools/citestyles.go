@@ -105,6 +105,10 @@ func citePeople(author string) []citePerson {
 	return out
 }
 
+// serialAnd is the separator before the last of three or more names, with the
+// serial comma the MLA, Chicago and IEEE styles all write.
+const serialAnd = ", and "
+
 // joinSerial joins names with sep and puts last before the final one: "A, B,
 // and C" or, with two, "A and C" (last is used alone when sep would only
 // separate two).
@@ -277,7 +281,7 @@ func localMLA(f citeFields) string {
 	case len(people) == 1:
 		head = people[0].inverted()
 	case len(people) == 2:
-		head = people[0].inverted() + ", and " + people[1].natural()
+		head = people[0].inverted() + serialAnd + people[1].natural()
 	case len(people) > 2:
 		head = people[0].inverted() + ", et al"
 	}
@@ -312,7 +316,7 @@ func chicagoNames(people []citePerson) string {
 			names[i] = p.natural()
 		}
 	}
-	return joinSerial(names, ", ", ", and ", " and ")
+	return joinSerial(names, ", ", serialAnd, " and ")
 }
 
 // localChicago follows Chicago author-date: names, year, title, then the
@@ -390,7 +394,7 @@ func localIEEE(f citeFields) string {
 	for i, p := range people {
 		names[i] = strings.TrimSpace(p.initials(" ") + " " + p.family)
 	}
-	head := joinSerial(names, ", ", ", and ", " and ")
+	head := joinSerial(names, ", ", serialAnd, " and ")
 	if f.isArticle {
 		var vol, no, pp, doi string
 		if f.volume != "" {
