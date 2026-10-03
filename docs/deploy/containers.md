@@ -20,7 +20,7 @@ UID and GID `10001`, listens on `8080`, and its default command is
 | Standard input          | Leave it closed: no `stdin_open`, no `tty`, no `-i`. Or pass `--transport http`                         | With a pipe on stdin, `--transport auto` serves stdio: nothing listens on `8080`, and the health check still reports healthy |
 | A writable download dir | Give `/home/appuser` a volume, or point `LIBGEN_MCP_DOWNLOAD_DIR` at a writable path                    | On a read-only root the server refuses to start: `LIBGEN_MCP_DOWNLOAD_DIR "/home/appuser/Downloads" is not usable`           |
 | Volume ownership        | Mount volumes where UID `10001` can write                                                               | A volume Docker creates for a path the image lacks is owned by root, and the server cannot write to it                       |
-| The descriptor limit    | Set `nofile` if the runtime's default is low                                                            | The process holds fewer calls: 83 at a limit of 1024                                                                         |
+| The descriptor limit    | Set `nofile` if the runtime's default is low                                                            | The process holds fewer calls: 75 at a limit of 1024                                                                         |
 | The stop grace period   | Longer than `--drain-delay` plus 8 seconds                                                              | The runtime kills the process mid-drain: `docker stop` waits 10 seconds by default, Kubernetes 30                            |
 | The caller's address    | Name the proxy with `--trusted-proxies` and `--trusted-proxy-header`, using the address the server sees | Every caller is charged as the proxy or the bridge gateway, and the server logs a warning saying so                          |
 
@@ -442,7 +442,7 @@ How the parts fit:
   directory and the mirror cache, `/tmp` for fetches. `fsGroup: 10001` makes them writable by
   the server's group.
 - **Kubernetes has no per-pod descriptor limit.** The container inherits the runtime's, often
-  1048576, which sizes the process at 91744 held calls; the memory limit is the bound that
+  1048576, which sizes the process at 83403 held calls; the memory limit is the bound that
   arrives first, so set it.
 - **Replicas need no affinity.** The default transport is stateless: each `POST` is complete and
   any replica can answer it, so the Service and the Ingress need no session affinity. Every

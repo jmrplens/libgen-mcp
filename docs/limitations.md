@@ -198,8 +198,8 @@ records. See
 callers: any client that can reach the endpoint can call every tool, and the server card
 declares no authentication scheme. What the server bounds is per caller, by address: an
 inbound rate limit and a ceiling on downloads and reads in flight. Above those, the whole
-process holds no more calls and stateful sessions than its descriptor limit allows (83 and
-41 under a hard limit of 1024) and answers the next one "busy", which keeps the process from
+process holds no more calls and stateful sessions than its descriptor limit allows (75 and
+37 under a hard limit of 1024) and answers the next one "busy", which keeps the process from
 running out of descriptors but does not tell callers apart. Access control, where a
 deployment needs it, belongs to whatever sits in front of the server, such as one of the
 proxies in [Behind a reverse proxy](deploy/reverse-proxy.md). See

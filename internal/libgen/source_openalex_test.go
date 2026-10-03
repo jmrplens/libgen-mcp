@@ -11,6 +11,9 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/jmrplens/libgen-mcp/v2/internal/openalex"
 )
 
 // openalexTestServer serves the given testdata fixture at any path and records the
@@ -438,5 +441,47 @@ func TestOpenAlexSupports(t *testing.T) {
 	}
 	if s.Name() != "openalex" {
 		t.Errorf("Name() = %q, want %q", s.Name(), "openalex")
+	}
+}
+
+// TestOpenAlexSendsTheKeyAndReportsTheBudget pins the two things the shared
+// OpenAlex helper gives this source: a configured key travels as a bearer token
+// and never in the request URL, and the rate-limit headers of the response reach
+// the budget the search provider spends from.
+func TestOpenAlexSendsTheKeyAndReportsTheBudget(t *testing.T) {
+	body, err := os.ReadFile("testdata/openalex_oa.json")
+	if err != nil {
+		t.Fatalf("reading fixture: %v", err)
+	}
+	var gotAuth, gotURI string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth, gotURI = r.Header.Get("Authorization"), r.RequestURI
+		w.Header().Set("X-RateLimit-Remaining", "640")
+		w.Header().Set("X-RateLimit-Reset", "3600")
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+	budget := &openalex.Budget{}
+	s := openalexSource{http: srv.Client(), baseURL: srv.URL, key: "oa-secret", budget: budget}
+
+	if _, resolveErr := s.Resolve(context.Background(), Item{DOI: "10.1093/bib/bbad467"}); resolveErr != nil {
+		t.Fatalf("Resolve() error = %v", resolveErr)
+	}
+	if gotAuth != "Bearer oa-secret" {
+		t.Errorf("Authorization = %q, want the key as a bearer token", gotAuth)
+	}
+	if strings.Contains(gotURI, "oa-secret") {
+		t.Errorf("request URI %q carries the key", gotURI)
+	}
+	if credits, _, ok := budget.Remaining(time.Now()); !ok || credits != 640 {
+		t.Errorf("budget = %d (known %v), want the 640 the response reported", credits, ok)
+	}
+}
+
+// TestOpenAlexBudgetDefaultsToTheSharedOne checks a source built without a budget
+// reports to the process-wide one, which is what the chain builds.
+func TestOpenAlexBudgetDefaultsToTheSharedOne(t *testing.T) {
+	if (openalexSource{}).budgetOrShared() != openalex.Shared() {
+		t.Error("a source with no budget did not report to openalex.Shared")
 	}
 }

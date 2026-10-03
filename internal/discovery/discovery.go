@@ -36,7 +36,7 @@ func discoveryUserAgent() string { return version.UserAgent() }
 //
 //nolint:revive // DiscoveryResult is the deliberate cross-package contract name.
 type DiscoveryResult struct {
-	Origin  string `json:"origin" jsonschema:"provider: arxiv, crossref, openlibrary, gutenberg, dblp, pubmed, eric, annas"`
+	Origin  string `json:"origin" jsonschema:"provider: arxiv, openalex, crossref, openlibrary, gutenberg, dblp, pubmed, eric, annas"`
 	Title   string `json:"title,omitempty" jsonschema:"record title"`
 	Authors string `json:"authors,omitempty" jsonschema:"authors"`
 	Year    string `json:"year,omitempty" jsonschema:"publication year"`
@@ -57,11 +57,13 @@ type DiscoveryResult struct {
 	Extension string `json:"extension,omitempty" jsonschema:"file extension"`
 	Size      string `json:"size,omitempty" jsonschema:"size text, e.g. 12.0MB"`
 	// PDFURL is a candidate full-text PDF link. For arxiv and eric it is the
-	// provider's own hosted file and is reliably fetchable; for crossref it is the
-	// link the PUBLISHER advertises, which is unverified — many publishers 403
-	// anonymous clients — so nothing may present it as proof the work is readable.
-	// A Gutenberg ebook is not an article PDF and rides FullTextURL instead.
-	PDFURL string `json:"pdf_url,omitempty" jsonschema:"candidate full-text PDF: a real file for arxiv/eric (eric's only route, no doi). For crossref it is an UNVERIFIED publisher link, not proof it is readable"`
+	// provider's own hosted file and is reliably fetchable; for openalex it is the
+	// open-access copy OpenAlex's index located, set only when that location is
+	// open access, but not fetched here; for crossref it is the link the PUBLISHER
+	// advertises, which is unverified — many publishers 403 anonymous clients — so
+	// nothing may present it as proof the work is readable. A Gutenberg ebook is
+	// not an article PDF and rides FullTextURL instead.
+	PDFURL string `json:"pdf_url,omitempty" jsonschema:"candidate full-text PDF: a real file for arxiv/eric (eric's only route, no doi). For openalex an open-access copy it indexes. For crossref it is an UNVERIFIED publisher link, not proof it is readable"`
 	// ArchiveURL is a free-to-read archive.org "details" page for a publicly
 	// readable book (surfaced by OpenLibrary when ebook_access is "public"). Empty
 	// for every other result, so it doubles as the "this book is freely readable"
@@ -74,7 +76,8 @@ type DiscoveryResult struct {
 	// obtained. Distinct from PDFURL, which is specifically an article PDF.
 	FullTextURL string `json:"full_text_url,omitempty" jsonschema:"book file (epub/txt/pdf), to fetch directly"`
 	// OpenAccess states the record's LICENSING status as the provider reports it (a
-	// Creative Commons license for crossref, a hosted free copy for the rest). It is
+	// Creative Commons license for crossref, OpenAlex's own is_oa for openalex, a
+	// hosted free copy for the rest). It is
 	// not a claim that the file can be fetched right now: an openly licensed article
 	// can still sit behind a publisher that refuses automated clients.
 	OpenAccess bool `json:"open_access" jsonschema:"openly licensed, which is not proof it can be fetched"`
@@ -130,7 +133,7 @@ func (t closingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 // beside the catalog: the length of [ExtraProviders], counted from the list
 // itself so a provider added there moves every figure sized from it.
 func ExtraProviderCount() int {
-	return len(ExtraProviders("", nil))
+	return len(ExtraProviders(Settings{}))
 }
 
 // allowPrivateAddresses mirrors the deployment's LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES
@@ -208,6 +211,8 @@ type ProviderBases struct {
 	Gutendex string
 	// ERIC is the Institute of Education Sciences API root (ericBase).
 	ERIC string
+	// OpenAlex is the OpenAlex API root (openAlexBase).
+	OpenAlex string
 }
 
 // SetBasesForTest overrides every provider base URL and returns a restore func that
@@ -225,14 +230,15 @@ func SetBasesForTest(bases ProviderBases) (restore func()) {
 		PubMed:      pubmedBase,
 		Gutendex:    gutendexBase,
 		ERIC:        ericBase,
+		OpenAlex:    openAlexBase,
 	}
 	arxivBase, crossrefBase, openLibraryBase = bases.Arxiv, bases.Crossref, bases.OpenLibrary
 	dblpBase, pubmedBase = bases.DBLP, bases.PubMed
-	gutendexBase, ericBase = bases.Gutendex, bases.ERIC
+	gutendexBase, ericBase, openAlexBase = bases.Gutendex, bases.ERIC, bases.OpenAlex
 	return func() {
 		arxivBase, crossrefBase, openLibraryBase = old.Arxiv, old.Crossref, old.OpenLibrary
 		dblpBase, pubmedBase = old.DBLP, old.PubMed
-		gutendexBase, ericBase = old.Gutendex, old.ERIC
+		gutendexBase, ericBase, openAlexBase = old.Gutendex, old.ERIC, old.OpenAlex
 	}
 }
 

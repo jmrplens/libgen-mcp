@@ -29,9 +29,9 @@ import (
 //
 // # Why the credential-shaped settings are not on this list
 //
-// LIBGEN_MCP_ANNAS_KEY, LIBGEN_MCP_CORE_KEY and LIBGEN_MCP_UNPAYWALL_EMAIL are
-// deliberately left without flags, and that is a security position rather than
-// an oversight. A secret on a command line is visible to every user on the
+// LIBGEN_MCP_ANNAS_KEY, LIBGEN_MCP_CORE_KEY, LIBGEN_MCP_OPENALEX_KEY and
+// LIBGEN_MCP_UNPAYWALL_EMAIL are deliberately left without flags, and that is a
+// security position rather than an oversight. A secret on a command line is visible to every user on the
 // machine through ps, is captured by process accounting, and lands in shell
 // history. The environment is not perfect either, but it is not world-readable
 // on any platform this server supports, and a --annas-key flag would make the

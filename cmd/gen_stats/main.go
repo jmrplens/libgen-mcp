@@ -128,7 +128,7 @@ func collect(dir string) (Stats, error) {
 		Tools:     len(tools),
 		Prompts:   len(prompts),
 		Sources:   len(config.KnownSources),
-		Providers: len(discovery.ExtraProviders("", nil)),
+		Providers: len(discovery.ExtraProviders(discovery.Settings{})),
 		EnvVars:   len(config.KnownEnvNames()),
 		ByLayer:   map[string]int{},
 	}

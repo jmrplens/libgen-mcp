@@ -54,7 +54,7 @@ head:
             "name": "¿Qué fuentes consulta una búsqueda más allá del catálogo?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Ocho: Anna's Archive y los siete proveedores de acceso abierto y bibliográficos arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC. Los resultados de Anna's se identifican por md5 y se fusionan en la lista principal junto a los del catálogo; los demás se identifican por DOI, ISBN o una URL directa de fichero y caen en su propia lista. Cada resultado lleva una etiqueta origin que nombra al buscador que lo produjo, y es eso lo que te dice qué identificador pasar a download."
+              "text": "Nueve: Anna's Archive y los ocho proveedores de acceso abierto y bibliográficos arXiv, OpenAlex, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC. Los resultados de Anna's se identifican por md5 y se fusionan en la lista principal junto a los del catálogo; los demás se identifican por DOI, ISBN o una URL directa de fichero y caen en su propia lista. Cada resultado lleva una etiqueta origin que nombra al buscador que lo produjo, y es eso lo que te dice qué identificador pasar a download."
             }
           },
           {
@@ -77,7 +77,7 @@ head:
       }
 ---
 
-**`search` es federada: consulta primero el catálogo primario — Library Genesis — y, por defecto, ahí se queda.** Cuando el catálogo no devuelve nada o falla directamente, la búsqueda escala a Anna's Archive y a otros siete proveedores — cinco repositorios de acceso abierto más los índices bibliográficos dblp y PubMed, de modo que un «no encontrado» nunca se reporta como callejón sin haber mirado más allá. Cuál de las dos cosas ocurre lo controla un único ajuste, `extra_sources`, con tres valores: `auto` (el predeterminado), `always` y `never`.
+**`search` es federada: consulta primero el catálogo primario — Library Genesis — y, por defecto, ahí se queda.** Cuando el catálogo no devuelve nada o falla directamente, la búsqueda escala a Anna's Archive y a otros ocho proveedores — seis repositorios y catálogos de acceso abierto más los índices bibliográficos dblp y PubMed, de modo que un «no encontrado» nunca se reporta como callejón sin haber mirado más allá. Cuál de las dos cosas ocurre lo controla un único ajuste, `extra_sources`, con tres valores: `auto` (el predeterminado), `always` y `never`.
 
 Esta página explica ese flujo: qué hace una búsqueda por defecto, cuándo y por qué va más allá del catálogo, y qué devuelve y cómo actuar sobre ello.
 
@@ -93,6 +93,7 @@ A veces el catálogo genuinamente no tiene lo que buscas — el elemento vive en
 
 - [Anna's Archive](https://annas-archive.org/) — un motor de búsqueda de shadow libraries que indexa colecciones que el catálogo no alcanza de ninguna otra forma (Z-Library, Nexus/STC, DuXiu, Internet Archive y más). Sus resultados se identifican por el digest del archivo (un md5), así que se comportan igual que los del catálogo.
 - [arXiv](https://arxiv.org/), [Crossref](https://www.crossref.org/), [OpenLibrary](https://openlibrary.org/) y [Project Gutenberg](https://www.gutenberg.org/) (a través de la API de terceros [Gutendex](https://gutendex.com/)) — proveedores de acceso abierto. Sus resultados no se identifican por md5, así que van a su propia lista, cada uno con un identificador accionable: un DOI en Crossref, una `pdf_url` directa en arXiv, un `isbn` en OpenLibrary (pásalo a `download` para obtener una copia con licencia abierta, o úsalo para refinar una búsqueda del catálogo) y una `full_text_url` en Gutenberg — el propio fichero del ebook, ya que un texto de Gutenberg no tiene DOI, ISBN ni md5 con el que descargarlo. Solo se muestran los registros que Gutenberg declara libres de derechos; los que aloja con permiso del titular se descartan.
+- [OpenAlex](https://openalex.org/) — el catálogo académico abierto construido sobre el índice de acceso abierto que publica Unpaywall. Sus resultados llevan un DOI, un medio y el veredicto del propio OpenAlex sobre si existe una copia libre, más un `pdf_url` cuando esa copia es un PDF directo. OpenAlex mide a cada llamante por su dirección — una búsqueda sin clave cuesta diez de los mil créditos diarios —, así que sin `LIBGEN_MCP_OPENALEX_KEY` se aparta en cuanto los créditos del día bajan hasta la reserva que se guarda para las consultas filtradas de un crédito que hace `get_details`, y vuelve cuando la asignación se renueva a medianoche UTC.
 - [dblp](https://dblp.org/) y [PubMed](https://pubmed.ncbi.nlm.nih.gov/) — índices bibliográficos, de informática y biomedicina respectivamente. Responden _qué es el artículo_ (medio, año, lista completa de autores, DOI) sin afirmar que sea de lectura libre, y justo por eso vale la pena consultarlos: PubMed en particular cubre la literatura que no tiene ninguna copia en acceso abierto. Sus resultados van a la misma lista, nunca marcados como acceso abierto.
 - [ERIC](https://eric.ed.gov/) — el índice de investigación educativa del Institute of Education Sciences de EE. UU., y la única fuente de esta lista que llega a la **literatura gris**: informes técnicos, tesis, ponencias de congreso y documentos gubernamentales o de agencias que no llevan DOI y por tanto no aparecen en ninguno de los proveedores anteriores. Un registro del que ERIC aloja un texto completo autorizado lleva un `pdf_url` descargable directamente y se marca como acceso abierto — son documentos de financiación pública servidos sin necesidad de cuenta. Un registro que solo indexa no lleva ninguna de las dos cosas, y es una entrada bibliográfica como una de dblp o PubMed.
 
@@ -129,6 +130,7 @@ Cada resultado se etiqueta con un **`origin`** (origen) que indica qué buscador
 
 - **`libgen`** y **`annas`** — el resultado lleva un md5, más el formato y el tamaño del fichero, de modo que ambos se pueden comparar. Descárgalo con el argumento `md5` de `download`.
 - **`crossref`** — el resultado lleva un DOI. Descárgalo con el argumento `doi` de `download`. También puede llevar un `pdf_url`: ese es el enlace que la _editorial_ depositó en Crossref, y está sin comprobar — la mayoría de las grandes editoriales comerciales solo lo sirven a suscriptores o rechazan de plano a los clientes automáticos —, así que pasa el DOI a `download`/`read`, que sondea ese mismo enlace como parte de la cadena, en lugar de ofrecer la URL como texto completo. Aquí `open_access: true` significa que la obra lleva una licencia Creative Commons, no que el fichero se pueda descargar.
+- **`openalex`** — el resultado lleva un DOI (casi siempre), y `open_access: true` es la conclusión del propio OpenAlex de que existe una copia libre en algún sitio. Un `pdf_url` es el enlace directo a esa copia tal como OpenAlex lo indexó, sin que la búsqueda lo haya descargado: pasa el DOI a `download`/`read`, cuya cadena consulta el mismo índice y pasa a la siguiente fuente cuando el enlace se niega.
 - **`arxiv`** — el resultado lleva una `pdf_url` directa. Descarga esa URL; `download` no acepta identificadores de arXiv.
 - **`openlibrary`** — el resultado lleva un `isbn` y un título. OpenLibrary es principalmente un catálogo, no un repositorio, así que úsalos para lanzar una `search` mejor dirigida — salvo que el libro sea de lectura pública, en cuyo caso también lleva un `archive_url` que puedes leer directamente en Internet Archive.
 - **`dblp`** y **`pubmed`** — el resultado lleva un DOI y un `venue`, y no se afirma nada sobre su disponibilidad. Cítalo, o prueba el argumento `doi` de `download` sabiendo que puede no encontrar copia libre.
@@ -140,6 +142,7 @@ flowchart LR
     O -->|libgen| M[tiene un md5<br/>→ descargar por md5]
     O -->|annas| M
     O -->|crossref| P[tiene un DOI<br/>→ descargar por doi]
+    O -->|openalex| P
     O -->|arxiv| U[tiene una pdf_url<br/>→ descargarla directamente]
     O -->|openlibrary| S[tiene un isbn<br/>→ descargar por isbn,<br/>o refinar la búsqueda]
     O -->|eric| U
@@ -147,13 +150,13 @@ flowchart LR
     O -->|dblp / pubmed| C[tiene DOI + venue<br/>→ citarlo, o probar download por doi]
 ```
 
-En prosa: qué hacer con un resultado se deduce de su `origin`. Un resultado de `libgen` o `annas` lleva un md5 — descarga por md5. Uno de `crossref` lleva un DOI — descarga por doi. Uno de `arxiv` o `eric` lleva un `pdf_url` que obtienes directamente. Uno de `openlibrary` lleva un ISBN — descarga por isbn, o úsalo para afinar la búsqueda. Uno de `gutenberg` lleva un `full_text_url` con el propio ebook. Uno de `dblp` o `pubmed` es un registro bibliográfico con DOI y venue: cítalo, o prueba una descarga por doi.
+En prosa: qué hacer con un resultado se deduce de su `origin`. Un resultado de `libgen` o `annas` lleva un md5 — descarga por md5. Uno de `crossref` o de `openalex` lleva un DOI — descarga por doi. Uno de `arxiv` o `eric` lleva un `pdf_url` que obtienes directamente. Uno de `openlibrary` lleva un ISBN — descarga por isbn, o úsalo para afinar la búsqueda. Uno de `gutenberg` lleva un `full_text_url` con el propio ebook. Uno de `dblp` o `pubmed` es un registro bibliográfico con DOI y venue: cítalo, o prueba una descarga por doi.
 
 Un resultado de Anna's también sirve para `get_details`: el catálogo no tiene registro de él, así que la herramienta recurre a los metadatos propios de Anna's y etiqueta el registro con `origin: "annas"`. Ese registro es más pobre que uno del catálogo, y la mayoría de ítems de Anna's no publica dirección IPFS, así que puede que la descarga sin clave siga sin ser posible aunque los metadatos sí lo sean.
 
 Esta división es la razón por la que los resultados de Anna's se fusionan en la lista principal junto a los del catálogo, mientras que los de acceso abierto aparecen en una lista aparte: los dos grupos se identifican de forma distinta, y `download` lee la clave para saber de dónde obtener el archivo. Considera el `origin` como la instrucción para el siguiente paso — te dice exactamente qué argumento pasar.
 
-Una distinción que vale la pena afirmar con claridad: **Anna's Archive no es una fuente de acceso abierto.** Es una shadow library, no una editorial de material con licencia libre, así que se lista aparte de los proveedores de acceso abierto (arXiv, Crossref, OpenLibrary). Tampoco los índices bibliográficos (dblp, PubMed) son fuentes de acceso abierto: indexan artículos con independencia de su licencia y no dicen nada sobre ella, así que sus resultados nunca se marcan como acceso abierto. ERIC es las dos cosas a la vez — aloja una parte de lo que indexa y del resto solo da la ficha — y por eso sus resultados se marcan como acceso abierto uno a uno y no en bloque. No infieras nada sobre la licencia de un resultado del mero hecho de que una búsqueda lo haya encontrado.
+Una distinción que vale la pena afirmar con claridad: **Anna's Archive no es una fuente de acceso abierto.** Es una shadow library, no una editorial de material con licencia libre, así que se lista aparte de los proveedores de acceso abierto (arXiv, OpenAlex, Crossref, OpenLibrary). Tampoco los índices bibliográficos (dblp, PubMed) son fuentes de acceso abierto: indexan artículos con independencia de su licencia y no dicen nada sobre ella, así que sus resultados nunca se marcan como acceso abierto. ERIC es las dos cosas a la vez — aloja una parte de lo que indexa y del resto solo da la ficha — y por eso sus resultados se marcan como acceso abierto uno a uno y no en bloque. No infieras nada sobre la licencia de un resultado del mero hecho de que una búsqueda lo haya encontrado.
 
 ## Por qué funciona así
 
@@ -172,7 +175,7 @@ Con la política `auto` predeterminada, solo cuando el catálogo no devuelve nad
 
 ### ¿Qué fuentes consulta una búsqueda más allá del catálogo?
 
-Ocho: Anna's Archive y los siete proveedores de acceso abierto y bibliográficos arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC. Los resultados de Anna's se identifican por md5 y se fusionan en la lista principal junto a los del catálogo; los demás se identifican por DOI, ISBN o una URL directa de fichero y caen en su propia lista. Cada resultado lleva una etiqueta `origin` que nombra al buscador que lo produjo, y es eso lo que te dice qué identificador pasar a `download`.
+Nueve: Anna's Archive y los ocho proveedores de acceso abierto y bibliográficos arXiv, OpenAlex, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC. Los resultados de Anna's se identifican por md5 y se fusionan en la lista principal junto a los del catálogo; los demás se identifican por DOI, ISBN o una URL directa de fichero y caen en su propia lista. Cada resultado lleva una etiqueta `origin` que nombra al buscador que lo produjo, y es eso lo que te dice qué identificador pasar a `download`.
 
 ### ¿Cómo se tratan los resultados duplicados?
 

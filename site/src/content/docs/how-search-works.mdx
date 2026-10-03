@@ -54,7 +54,7 @@ head:
             "name": "Which sources does a search consult beyond the catalog?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Eight: Anna's Archive, and the seven open-access and bibliographic providers arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed and ERIC. Anna's hits are keyed by md5 and merge into the main results list alongside catalog hits; the others are keyed by DOI, ISBN or a direct file URL and land in their own list. Every result carries an origin label naming the searcher that produced it, which is what tells you which identifier to pass to download."
+              "text": "Nine: Anna's Archive, and the eight open-access and bibliographic providers arXiv, OpenAlex, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed and ERIC. Anna's hits are keyed by md5 and merge into the main results list alongside catalog hits; the others are keyed by DOI, ISBN or a direct file URL and land in their own list. Every result carries an origin label naming the searcher that produced it, which is what tells you which identifier to pass to download."
             }
           },
           {
@@ -77,7 +77,7 @@ head:
       }
 ---
 
-**`search` is federated: it queries the primary catalog — Library Genesis — first and, by default, stops there.** When the catalog returns nothing or fails outright, the search escalates to Anna's Archive and seven further providers — five open-access repositories plus the bibliographic indexes dblp and PubMed, so a miss is never reported as a dead end without having looked further. Which of the two happens is controlled by one setting, `extra_sources`, with three values: `auto` (the default), `always` and `never`.
+**`search` is federated: it queries the primary catalog — Library Genesis — first and, by default, stops there.** When the catalog returns nothing or fails outright, the search escalates to Anna's Archive and eight further providers — six open-access repositories and catalogs plus the bibliographic indexes dblp and PubMed, so a miss is never reported as a dead end without having looked further. Which of the two happens is controlled by one setting, `extra_sources`, with three values: `auto` (the default), `always` and `never`.
 
 This page explains that flow: what a search does by default, when and why it reaches beyond the catalog, and what comes back and how to act on it.
 
@@ -93,6 +93,7 @@ Sometimes the catalog genuinely does not have what you are looking for — the i
 
 - [Anna's Archive](https://annas-archive.org/) — a shadow-library search engine that indexes collections the catalog reaches nowhere else (Z-Library, Nexus/STC, DuXiu, Internet Archive, and more). Its hits are keyed by file digest (an md5), so they behave just like catalog results.
 - [arXiv](https://arxiv.org/), [Crossref](https://www.crossref.org/), [OpenLibrary](https://openlibrary.org/), and [Project Gutenberg](https://www.gutenberg.org/) (through the third-party [Gutendex](https://gutendex.com/) API) — open-access providers. Their hits are not md5-keyed, so they land in their own list, each carrying one actionable identifier: a DOI from Crossref, a direct `pdf_url` from arXiv, an `isbn` from OpenLibrary (pass it to `download` for an openly licensed copy, or use it to refine a catalog search), and a `full_text_url` from Gutenberg — the ebook file itself, since a Gutenberg text has no DOI, ISBN or md5 to download it by. Only records Gutenberg states are out of copyright are surfaced; the ones it hosts with the rightsholder's permission are dropped.
+- [OpenAlex](https://openalex.org/) — the open scholarly catalog built on the open-access index Unpaywall publishes. Its hits carry a DOI, a venue and OpenAlex's own verdict on whether a free copy exists, plus a `pdf_url` when that copy is a direct PDF. OpenAlex meters every caller by address — a keyless search costs ten of the thousand credits a day — so without `LIBGEN_MCP_OPENALEX_KEY` it steps aside once the day's credits run down to the reserve kept for the one-credit filtered lookups `get_details` makes, and comes back when the allowance resets at midnight UTC.
 - [dblp](https://dblp.org/) and [PubMed](https://pubmed.ncbi.nlm.nih.gov/) — bibliographic indexes, for computer science and biomedicine respectively. They answer _what the paper is_ (venue, year, full author list, DOI) without claiming it is free to read, which is exactly why they are worth asking: PubMed in particular covers the literature that has no open-access copy at all. Their hits land in the same list, never marked open access.
 - [ERIC](https://eric.ed.gov/) — the US Institute of Education Sciences' index of education research, and the only source here that reaches **grey literature**: technical reports, dissertations, conference papers and government/agency documents that carry no DOI and so appear in none of the providers above. A record ERIC hosts an authorized full text for carries a directly-fetchable `pdf_url` and is marked open access — the documents are publicly funded and served without a login. A record it merely indexes carries neither, and is a bibliographic entry like a dblp or PubMed one.
 
@@ -129,6 +130,7 @@ Every result is labeled with an **`origin`** that says which searcher produced i
 
 - **`libgen`** and **`annas`** — the result carries an md5, plus the file's format and size, so the two can be compared. Download it with `download`'s `md5` argument.
 - **`crossref`** — the result carries a DOI. Download it with `download`'s `doi` argument. It may also carry a `pdf_url`: that is the link the _publisher_ deposited with Crossref, and it is unverified — most large commercial publishers serve it only to subscribers or refuse automated clients outright — so hand the DOI to `download`/`read`, which probes that same link as part of the chain, rather than offering the URL as the full text. `open_access: true` here means the work carries a Creative Commons license, not that the file can be fetched.
+- **`openalex`** — the result carries a DOI (most do), and `open_access: true` is OpenAlex's own finding that a free copy exists somewhere. A `pdf_url` is that copy's direct link as OpenAlex indexed it, not fetched by the search: hand the DOI to `download`/`read`, whose chain asks the same index and fails over when the link refuses.
 - **`arxiv`** — the result carries a direct `pdf_url`. Fetch that URL; `download` takes no arXiv identifier.
 - **`openlibrary`** — the result carries an `isbn` and a title. OpenLibrary is mainly a catalog, not a repository, so use those to run a better-targeted `search` — unless the book is publicly readable, in which case it also carries an `archive_url` you can read directly on the Internet Archive.
 - **`dblp`** and **`pubmed`** — the result carries a DOI and a `venue`, and nothing is claimed about availability. Cite it, or try `download`'s `doi` argument knowing it may find no free copy.
@@ -140,6 +142,7 @@ flowchart LR
     O -->|libgen| M[has an md5<br/>→ download by md5]
     O -->|annas| M
     O -->|crossref| P[has a DOI<br/>→ download by doi]
+    O -->|openalex| P
     O -->|arxiv| U[has a pdf_url<br/>→ fetch it directly]
     O -->|openlibrary| S[has an isbn<br/>→ download by isbn,<br/>or refine the search]
     O -->|eric| U
@@ -147,13 +150,13 @@ flowchart LR
     O -->|dblp / pubmed| C[has a DOI + venue<br/>→ cite it, or try download by doi]
 ```
 
-In prose: what to do with a result follows from its `origin`. A `libgen` or `annas` hit carries an md5 — download by md5. A `crossref` hit carries a DOI — download by doi. An `arxiv` or `eric` hit carries a `pdf_url` you fetch directly. An `openlibrary` hit carries an ISBN — download by isbn, or use it to refine the search. A `gutenberg` hit carries a `full_text_url` for the ebook itself. A `dblp` or `pubmed` hit is a bibliographic record with a DOI and a venue: cite it, or try a download by doi.
+In prose: what to do with a result follows from its `origin`. A `libgen` or `annas` hit carries an md5 — download by md5. A `crossref` or `openalex` hit carries a DOI — download by doi. An `arxiv` or `eric` hit carries a `pdf_url` you fetch directly. An `openlibrary` hit carries an ISBN — download by isbn, or use it to refine the search. A `gutenberg` hit carries a `full_text_url` for the ebook itself. A `dblp` or `pubmed` hit is a bibliographic record with a DOI and a venue: cite it, or try a download by doi.
 
 An Anna's hit also works with `get_details`: the catalog has no record for it, so the tool falls back to Anna's own metadata and labels the record `origin: "annas"`. That record is thinner than a catalog one, and most Anna's items publish no IPFS address — so a keyless download may still not be possible even when the metadata is.
 
 This split is why Anna's hits merge into the main results list alongside the catalog hits, while the open-access hits appear in a separate list: the two groups are keyed differently, and `download` reads the key to know where to fetch from. Treat the `origin` as the instruction for the next step — it tells you exactly which argument to pass.
 
-One distinction worth stating plainly: **Anna's Archive is not an open-access source.** It is a shadow library, not a publisher of freely-licensed material, so it is listed separately from the open-access providers (arXiv, Crossref, OpenLibrary). Nor are the bibliographic indexes (dblp, PubMed) open-access sources: they index papers regardless of licensing and say nothing about it, so their hits are never marked open access. ERIC is both at once — it hosts some of what it indexes and merely lists the rest — which is why its hits are marked open access one by one rather than as a group. Do not infer anything about a result's licensing from the fact that a search found it.
+One distinction worth stating plainly: **Anna's Archive is not an open-access source.** It is a shadow library, not a publisher of freely-licensed material, so it is listed separately from the open-access providers (arXiv, OpenAlex, Crossref, OpenLibrary). Nor are the bibliographic indexes (dblp, PubMed) open-access sources: they index papers regardless of licensing and say nothing about it, so their hits are never marked open access. ERIC is both at once — it hosts some of what it indexes and merely lists the rest — which is why its hits are marked open access one by one rather than as a group. Do not infer anything about a result's licensing from the fact that a search found it.
 
 ## Why it works this way
 
@@ -172,7 +175,7 @@ Under the default `auto` policy, only when the catalog returns nothing or fails 
 
 ### Which sources does a search consult beyond the catalog?
 
-Eight: Anna's Archive, and the seven open-access and bibliographic providers arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed and ERIC. Anna's hits are keyed by md5 and merge into the main results list alongside catalog hits; the others are keyed by DOI, ISBN or a direct file URL and land in their own list. Every result carries an `origin` label naming the searcher that produced it, which is what tells you which identifier to pass to `download`.
+Nine: Anna's Archive, and the eight open-access and bibliographic providers arXiv, OpenAlex, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed and ERIC. Anna's hits are keyed by md5 and merge into the main results list alongside catalog hits; the others are keyed by DOI, ISBN or a direct file URL and land in their own list. Every result carries an `origin` label naming the searcher that produced it, which is what tells you which identifier to pass to `download`.
 
 ### How are duplicate results handled?
 

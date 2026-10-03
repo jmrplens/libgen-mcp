@@ -8,12 +8,15 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
+
+	"github.com/jmrplens/libgen-mcp/v2/internal/openalex"
 )
 
 // openAlexAPIBase is the default OpenAlex works endpoint used to look up the
 // open-access locations of a DOI. It is stored as a field on openalexSource so
 // tests can point the source at an httptest server instead of the live API.
-const openAlexAPIBase = "https://api.openalex.org/works"
+const openAlexAPIBase = openalex.APIBase + "/works"
 
 // openAlexMaxBody bounds how many bytes of an OpenAlex JSON response are read,
 // guarding against an unexpectedly large or hostile body.
@@ -49,6 +52,15 @@ type openalexSource struct {
 	// baseURL overrides the API endpoint (defaults to openAlexAPIBase); tests set it
 	// to a local httptest server.
 	baseURL string
+	// key is the optional OpenAlex API key (LIBGEN_MCP_OPENALEX_KEY). The lookup
+	// this source makes costs no credits either way, so the key changes nothing
+	// here but which allowance the request is counted against, and it is sent for
+	// that reason: one deployment, one identity on every OpenAlex request.
+	key string
+	// budget receives the rate-limit headers of every response, so the search
+	// provider in internal/discovery, which spends from the same allowance, sees
+	// what this source saw. Nil means the process-wide openalex.Shared budget.
+	budget *openalex.Budget
 }
 
 // Compile-time assertion that openalexSource satisfies the DownloadSource contract.
@@ -113,6 +125,15 @@ func (w openAlexWork) pdfURL() string {
 	return fallback
 }
 
+// budgetOrShared returns the budget this source reports to: its own when a test
+// set one, otherwise the process-wide one.
+func (s openalexSource) budgetOrShared() *openalex.Budget {
+	if s.budget != nil {
+		return s.budget
+	}
+	return openalex.Shared()
+}
+
 // Name identifies the OpenAlex source.
 func (s openalexSource) Name() string { return "openalex" }
 
@@ -161,18 +182,18 @@ func (s openalexSource) lookup(ctx context.Context, doi string) (openAlexWork, e
 	endpoint := strings.TrimRight(base, "/") + "/doi:" + escapeDOIPath(doi) +
 		"?" + url.Values{"select": {openAlexSelect}}.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, http.NoBody)
+	req, err := openalex.NewRequest(ctx, endpoint, s.key)
 	if err != nil {
 		return openAlexWork{}, fmt.Errorf("openalex: building request: %w", err)
 	}
-	req.Header.Set("User-Agent", userAgent())
-	req.Header.Set("Accept", "application/json")
 
 	resp, err := httpClientOr(s.http).Do(req)
 	if err != nil {
 		return openAlexWork{}, unavailable(fmt.Errorf("openalex: requesting %q: %w", doi, err))
 	}
 	defer func() { _ = resp.Body.Close() }()
+	s.budgetOrShared().Observe(resp.StatusCode, resp.Header, time.Now())
+	openalex.NoteKeyRejected(resp.StatusCode, s.key)
 	if resp.StatusCode != http.StatusOK {
 		return openAlexWork{}, missOrUnavailableStatus(resp.StatusCode,
 			fmt.Errorf("openalex: %q returned HTTP %d", doi, resp.StatusCode))

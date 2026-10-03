@@ -42,13 +42,13 @@ func TestHeldCallsFor_SizesTheCeilingFromTheDescriptorLimit(t *testing.T) {
 		descriptors uint64
 		want        int64
 	}{
-		{name: "a hard limit of 1024", descriptors: 1024, want: 83},
-		{name: "a hard limit of 4096", descriptors: 4096, want: 352},
-		{name: "a default systemd service", descriptors: 524288, want: 45868},
-		{name: "a container's inherited limit", descriptors: 1048576, want: 91744},
+		{name: "a hard limit of 1024", descriptors: 1024, want: 75},
+		{name: "a hard limit of 4096", descriptors: 4096, want: 320},
+		{name: "a default systemd service", descriptors: 524288, want: 41698},
+		{name: "a container's inherited limit", descriptors: 1048576, want: 83403},
 		{name: "a limit smaller than the reservation", descriptors: 64, want: 1},
 		{name: "no descriptors at all", descriptors: 0, want: 1},
-		{name: "the largest limit there is", descriptors: math.MaxUint64, want: 1614090106449585760},
+		{name: "the largest limit there is", descriptors: math.MaxUint64, want: 1467354642226896145},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := heldCallsFor(tc.descriptors)
@@ -69,27 +69,27 @@ func TestNewProcessCeilings_FallsBackWhereThePlatformSaysNothing(t *testing.T) {
 	if c.measured || c.descriptors != fallbackDescriptorLimit {
 		t.Errorf("descriptors = %d (measured %t), want the fallback %d", c.descriptors, c.measured, fallbackDescriptorLimit)
 	}
-	if c.held.limit != 83 || c.sessions.limit != 41 {
-		t.Errorf("ceilings = %d held, %d sessions; want 83 and 41", c.held.limit, c.sessions.limit)
+	if c.held.limit != 75 || c.sessions.limit != 37 {
+		t.Errorf("ceilings = %d held, %d sessions; want 75 and 37", c.held.limit, c.sessions.limit)
 	}
 
 	measured := newProcessCeilings(func() (uint64, bool) { return 4096, true })
-	if !measured.measured || measured.held.limit != 352 || measured.sessions.limit != 176 {
-		t.Errorf("under 4096: %d held, %d sessions (measured %t); want 352 and 176", measured.held.limit, measured.sessions.limit, measured.measured)
+	if !measured.measured || measured.held.limit != 320 || measured.sessions.limit != 160 {
+		t.Errorf("under 4096: %d held, %d sessions (measured %t); want 320 and 160", measured.held.limit, measured.sessions.limit, measured.measured)
 	}
 }
 
 // TestHeldCallDescriptors_IsTheWidestFanOut ties a held call's cost to the
 // provider list: the caller's connection, the catalog request, and one per
-// searcher an escalated search runs at once. The pinned 10 is what the figures
+// searcher an escalated search runs at once. The pinned 11 is what the figures
 // in the tests above and the operator pages were computed with, so a provider
 // added to the list fails here first, pointing at every figure to redo.
 func TestHeldCallDescriptors_IsTheWidestFanOut(t *testing.T) {
-	if want := uint64(2 + len(discovery.ExtraProviders("", nil))); heldCallDescriptors != want {
+	if want := uint64(2 + len(discovery.ExtraProviders(discovery.Settings{}))); heldCallDescriptors != want {
 		t.Errorf("heldCallDescriptors = %d, want 2 + the %d extra searchers = %d", heldCallDescriptors, want-2, want)
 	}
-	if heldCallDescriptors != 10 {
-		t.Errorf("heldCallDescriptors = %d; the documented figures assume 10, so recompute them", heldCallDescriptors)
+	if heldCallDescriptors != 11 {
+		t.Errorf("heldCallDescriptors = %d; the documented figures assume 11, so recompute them", heldCallDescriptors)
 	}
 }
 
@@ -566,14 +566,14 @@ func TestAnnounceProcessCeilings_NamesWhatThisListenerHolds(t *testing.T) {
 			name:     "stateless names no session ceiling",
 			ceilings: newProcessCeilings(func() (uint64, bool) { return 1024, true }),
 			opts:     transport.DefaultOptions(),
-			want:     []string{`"held_calls_per_process":83`, `"descriptor_limit":1024`, `"RLIMIT_NOFILE"`},
+			want:     []string{`"held_calls_per_process":75`, `"descriptor_limit":1024`, `"RLIMIT_NOFILE"`},
 			unwanted: []string{"stateful_sessions_per_process"},
 		},
 		{
 			name:     "stateful names the session ceiling",
 			ceilings: newProcessCeilings(func() (uint64, bool) { return 0, false }),
 			opts:     transport.Options{SessionTimeout: time.Minute},
-			want:     []string{`"stateful_sessions_per_process":41`, "fallback"},
+			want:     []string{`"stateful_sessions_per_process":37`, "fallback"},
 			unwanted: []string{"never closes an idle session"},
 		},
 		{
