@@ -17,7 +17,7 @@ removal steps. For the shortest path to a working client, see
 | Channel                             | Run it without installing                               | Install it                                                       | Needs                              | Platforms                                |
 | ----------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------- | ---------------------------------------- |
 | [npm](npm.md)                       | `npx -y @jmrp.io/libgen-mcp`                            | `npm install -g @jmrp.io/libgen-mcp`                             | Node 18 or newer                   | Linux, macOS, Windows; x64 and arm64     |
-| [PyPI](pypi.md)                     | `uvx libgen-mcp`                                        | `pipx install libgen-mcp`                                        | Python 3.9 or newer                | Linux, macOS 11+, Windows; x64 and arm64 |
+| [PyPI](pypi.md)                     | `uvx libgen-mcp`                                        | `pipx install libgen-mcp`                                        | Python 3.9 or newer                | Linux, macOS 13+, Windows; x64 and arm64 |
 | [NuGet](nuget.md)                   | `dnx libgen-mcp`                                        | `dotnet tool install -g libgen-mcp`                              | .NET 10 SDK                        | Linux, macOS, Windows; x64 and arm64     |
 | [Homebrew](homebrew.md)             | —                                                       | `brew install jmrplens/tap/libgen-mcp`                           | Homebrew                           | macOS and Linux; x64 and arm64           |
 | [Docker](docker.md)                 | `docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` | —                                                                | Docker or an OCI runtime           | `linux/amd64`, `linux/arm64` images      |
@@ -84,6 +84,26 @@ and, in HTTP mode, the listener the new one wants. `libgen-mcp --shutdown` asks
 every other instance of this binary on the machine to exit and kills what is
 left after five seconds, so the upgrade sequence is: install, `--shutdown`, let
 the client start it again.
+
+## From an MCP registry
+
+`libgen-mcp` is listed in the MCP registries under the identifier
+`io.github.jmrplens/libgen-mcp`. A client that installs servers from one of them can add it
+from there instead of a configuration written by hand:
+
+| MCP registry          | Listing                                                                                                                     |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Official MCP Registry | [`io.github.jmrplens/libgen-mcp`](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.jmrplens/libgen-mcp) |
+| mcp.so                | [mcp.so/servers/libgen-mcp-d62341](https://mcp.so/servers/libgen-mcp-d62341)                                                |
+| LobeHub               | [lobehub.com/mcp/jmrplens-libgen-mcp](https://lobehub.com/mcp/jmrplens-libgen-mcp)                                          |
+
+The registry entry declares the six install packages and, as `remotes`, the
+[hosted endpoint](../hosted.md) and the self-hosted `--http` form, so a registry-aware client
+can offer either without you copying a URL. [Docker Hub](https://hub.docker.com/r/jmrplens/libgen-mcp)
+and [pkg.go.dev](https://pkg.go.dev/github.com/jmrplens/libgen-mcp/v2) carry the image and the
+Go module, but they are distribution channels rather than MCP listings. A listing can lag
+behind a release; the version these pages describe is always the one in
+[`VERSION`](../../VERSION).
 
 ## Verifying what you install
 

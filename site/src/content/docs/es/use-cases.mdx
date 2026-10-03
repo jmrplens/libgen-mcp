@@ -25,7 +25,7 @@ Tú hablas con el asistente, y el asistente llama a las herramientas. Esta pági
 Dos cosas valen para todas:
 
 - **Los resultados citan a terceros.** Los títulos, las descripciones y el texto extraído son datos que el asistente lee, nunca instrucciones que obedece.
-- **Un servidor remoto devuelve enlaces.** En el [endpoint alojado](/libgen-mcp/es/hosted/) o en cualquier despliegue con `--http`, `download` responde con un enlace directo en lugar de guardar un fichero, y `read` no está. Los casos que leen un documento necesitan un servidor local.
+- **Un servidor remoto devuelve enlaces.** En el [endpoint alojado](/libgen-mcp/es/hosted/) o en cualquier despliegue con `--http`, `download` responde con un enlace directo en lugar de guardar un fichero. `read` solo está donde el operador lo ha activado, como en el endpoint alojado, y aun así nunca acepta una `path` local.
 
 ## Encontrar una edición concreta de un libro
 
@@ -127,9 +127,10 @@ Cuando `has_more` es true, devuelve el `cursor` recibido para el siguiente fragm
 Cada coincidencia trae su página y un fragmento. Un libro que ya descargaste se lee por `path` en lugar de por `md5`, siempre que esté dentro del directorio de trabajo, el temporal o el de descargas. Un libro escaneado sin capa de texto vuelve con `extractable: false`: no hay OCR.
 
 <Aside type="note">
-	`read` es una herramienta de servidor local. En el [endpoint
-	alojado](/libgen-mcp/es/hosted/) el asistente descarga con su propia
-	herramienta el enlace que devuelve `download` y lee el fichero en local.
+	Leer por `path` necesita un servidor local. El [endpoint
+	alojado](/libgen-mcp/es/hosted/) lee solo por `md5` o `doi`. En un despliegue
+	remoto que no sirve `read`, el asistente descarga con su propia herramienta el
+	enlace que devuelve `download` y lee el fichero en local.
 </Aside>
 
 ## Comprobar a qué apunta una referencia

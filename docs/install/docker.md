@@ -76,7 +76,9 @@ The default command is `--transport auto`, which reads what standard input is:
 > is the whole command line, not an addition to it. Repeat the default when you
 > want both: `docker run image --transport auto --http 0.0.0.0:8080 --log-level debug`.
 > Settings that have an environment variable are simpler passed with `-e`, which
-> leaves the command alone.
+> leaves the command alone, except the listener: the default command types `--http`, which
+> wins over `LIBGEN_MCP_HTTP_ADDR`
+> ([Containers](../deploy/containers.md#configuring-through-the-environment)).
 
 ### Downloads and the volume
 
@@ -189,7 +191,7 @@ Remove each tag you pulled. A mounted download directory is yours and is left as
 ## Platform notes
 
 - **Apple Silicon and arm64 Linux** pull the `linux/arm64` image natively.
-- **A unix socket instead of a port.** `--http /run/mcp/libgen.sock` binds a socket in a mounted directory and publishes nothing, the shape for a reverse proxy on the same host. The socket is created `0660`, so the proxy's workers must be in group `10001`. [Reverse proxy](../deploy/reverse-proxy.md) has the whole recipe.
+- **A unix socket instead of a port.** `--http /run/mcp/libgen.sock` binds a socket in a mounted directory and publishes nothing, the shape for a reverse proxy on the same host. The socket is created `0660`, so the proxy needs the socket's group; between two containers the simpler way is to run the server with the proxy's group, as [Containers](../deploy/containers.md#nginx-in-front-over-a-shared-unix-socket) does.
 - **`LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES` with the default command is refused at startup**, because the default listener binds `0.0.0.0` and that combination is exactly what the refusal is about. [Troubleshooting](../troubleshooting.md#the-server-will-not-start-the-private-address-hatch-on-an-open-listener) explains it.
 - **Compose and Kubernetes** are on [Containers](../deploy/containers.md): a service definition, the health check, volumes and the resources the server needs.
 

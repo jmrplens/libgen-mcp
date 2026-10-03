@@ -559,10 +559,10 @@ default because a socket is reached through the filesystem, so the alternative t
 
 In nginx that means the *worker* processes: nginx calls `initgroups()` when it drops privileges,
 so on a host it picks up a group its user was added to in `/etc/group`, and in a container it
-discards a container-level `group_add`. The group argument of nginx's `user` directive is a
-name, so `user nginx 10001;` fails at startup with `getgrnam("10001") failed` unless the proxy's
-image has a group of that name; in a container it is simpler to run the server with the proxy's
-group, as [Containers](deploy/containers.md#nginx-in-front-over-a-shared-unix-socket) does. The blunter alternative is `--http-socket-mode 0666`,
+discards a container-level `group_add`, so in a container it is simpler to run the server with
+the proxy's group, as [Containers](deploy/containers.md#nginx-in-front-over-a-shared-unix-socket)
+does. [Behind a reverse proxy](deploy/reverse-proxy.md#unix-socket-upstream) has the host
+recipe and the `user` directive mistake to avoid. The blunter alternative is `--http-socket-mode 0666`,
 reasonable only when the socket's own directory is already restricted, since traversal
 permission on the directory gates access before the socket's mode is consulted.
 

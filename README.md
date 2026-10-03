@@ -38,48 +38,32 @@ You talk to your AI assistant; it does the searching and fetching. You don't nee
 
 ## Quick start
 
-The lowest-friction paths are **`npx` and Docker — no install, no Go, nothing to manage**. If you already have Node 18 or newer, [`npx @jmrp.io/libgen-mcp`](#run-it-with-npx-no-install) is a single command. Otherwise use a one-click button below: each one registers the published image `ghcr.io/jmrplens/libgen-mcp:latest` (auto-pulled on first run — you only need [Docker](https://www.docker.com/) installed). Prefer a native binary? See [Install a native binary](#install-a-native-binary).
-
-Then just ask your assistant: _"Search for the Rust book."_
-
-### Run it with `npx` (no install)
-
-The server is published to npm as [`@jmrp.io/libgen-mcp`](https://www.npmjs.com/package/@jmrp.io/libgen-mcp) and needs Node 18 or newer. The package is a thin launcher over the same prebuilt binaries the releases page serves: npm downloads only the platform package matching your OS and CPU, nothing is compiled, and no script runs at install time.
+If you already have Node 18 or newer, nothing needs installing: your client starts the server through `npx`, which fetches a thin launcher over the prebuilt binary for your platform.
 
 ```bash
-npx @jmrp.io/libgen-mcp              # run it, no install
-npm install -g @jmrp.io/libgen-mcp   # or install it globally
-pnpm add -g @jmrp.io/libgen-mcp      # …with pnpm
+claude mcp add libgen -- npx -y @jmrp.io/libgen-mcp
 ```
 
-Most MCP clients can launch it this way directly:
+Then just ask your assistant: _"Search for the Rust book."_ The [Getting started](docs/getting-started.md) tutorial walks through installing, connecting a client, a first search and a first `read`.
 
-```json
-{
-  "mcpServers": {
-    "libgen": { "command": "npx", "args": ["-y", "@jmrp.io/libgen-mcp"] }
-  }
-}
-```
+**Try it without installing anything.** A public instance runs at **`https://mcp.jmrp.io/libgen`**, with no account and no key; point any HTTP-capable MCP client at it (`{"type": "http", "url": "https://mcp.jmrp.io/libgen"}`). A local server is still the better way to keep using it: your queries never leave your computer, and `download` saves the file instead of returning a link. [Hosted endpoint](docs/hosted.md) says what it serves, limits and logs.
 
-### Try it without installing anything
+## Install
 
-A public instance is hosted at **`https://mcp.jmrp.io/libgen`** — no account, no key, nothing to install. Point any HTTP-capable MCP client at it:
+Every channel delivers the same static binary; nothing is compiled and no script runs at install time.
 
-```json
-{
-  "mcpServers": {
-    "libgen": { "type": "http", "url": "https://mcp.jmrp.io/libgen" }
-  }
-}
-```
+| Channel                      | Command                                                                                                    | Guide                                                    |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| npm                          | `npx -y @jmrp.io/libgen-mcp`, or `npm install -g @jmrp.io/libgen-mcp`                                      | [install/npm](docs/install/npm.md)                       |
+| PyPI                         | `uvx libgen-mcp`, or `pipx install libgen-mcp`                                                             | [install/pypi](docs/install/pypi.md)                     |
+| NuGet                        | `dnx libgen-mcp`, or `dotnet tool install -g libgen-mcp`                                                   | [install/nuget](docs/install/nuget.md)                   |
+| Homebrew                     | `brew install jmrplens/tap/libgen-mcp`                                                                     | [install/homebrew](docs/install/homebrew.md)             |
+| Docker                       | `docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest`                                                    | [install/docker](docs/install/docker.md)                 |
+| Release binary, `go install` | [`libgen-mcp-<os>-<arch>`](https://github.com/jmrplens/libgen-mcp/releases/latest), signed `checksums.txt` | [install/binary](docs/install/binary.md)                 |
+| Claude Desktop               | the one-click `.mcpb` bundle                                                                               | [install/claude-desktop](docs/install/claude-desktop.md) |
+| Agent plugin                 | your host's plugin installer                                                                               | [install/agent-plugin](docs/install/agent-plugin.md)     |
 
-It is the fastest way to try the server, and the right way to keep using it is still **locally** (Docker or a binary, above) — for two concrete reasons, not as a disclaimer:
-
-- **Your queries go through someone else's machine.** Running it locally means what you search for never leaves your computer.
-- **`download` cannot write to your disk from a remote server**, so it returns a link instead of a file. That is inherent to remote MCP, not a limitation of this endpoint — see [Where the file goes](docs/tools.md#where-the-file-goes-local-vs-remote).
-
-The endpoint is **stateless streamable HTTP**: `POST` is the transport, `GET` on the endpoint itself answers `405` by design (any path the server does not serve answers `404`), and `https://mcp.jmrp.io/libgen/health` answers `{"status":"ok","version":"…","commit":"…","started_at":"…","uptime_seconds":…}`. It is one of the servers listed at **[mcp.jmrp.io](https://mcp.jmrp.io/)**, a directory of the MCP servers I maintain, each reachable at its own endpoint; `https://mcp.jmrp.io/servers.json` is the same list for automated clients.
+[Installation](docs/install/overview.md) compares the channels, lists what each one writes on your machine and says how to verify what you installed.
 
 ## Add to your MCP client
 
@@ -116,67 +100,7 @@ Most other clients take the same entry in an `mcpServers` object:
 }
 ```
 
-**[Connect a client](https://jmrp.io/docs/libgen-mcp/clients/)** has the complete entry for each client — Claude Desktop, VS Code, Cursor, Windsurf, Zed, JetBrains, Kiro, OpenCode, Cline, Continue, LM Studio, Gemini CLI, Codex and Goose — in its local form and its remote one, with the file path on each operating system and where optional keys go ([`docs/clients.md`](docs/clients.md) in this repository).
-
-## Run with Docker
-
-Run the container directly (for a shell, a hosted deployment, or to try flags). The image **decides its transport from what standard input is**: `docker run -i` connects a pipe and gets stdio — the correct mode for MCP clients — while a run without `-i` serves streamable HTTP on port 8080. The `-e` flags combine freely (full list in the [configuration reference](https://jmrp.io/docs/libgen-mcp/configuration/)).
-
-```bash
-# Plain (stdio, zero config)
-docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest
-
-# Enable open-access articles via Unpaywall
-docker run -i --rm -e LIBGEN_MCP_UNPAYWALL_EMAIL=you@example.com ghcr.io/jmrplens/libgen-mcp:latest
-
-# Consult the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) on every search
-docker run -i --rm -e LIBGEN_MCP_EXTRA_SOURCES=always ghcr.io/jmrplens/libgen-mcp:latest
-
-# Save downloads to a host folder (mount a volume, point the download dir at it)
-docker run -i --rm -e LIBGEN_MCP_DOWNLOAD_DIR=/downloads -v "$HOME/Downloads:/downloads" ghcr.io/jmrplens/libgen-mcp:latest
-
-# Serve streamable HTTP instead of stdio (no -i, so no flag needed either)
-docker run --rm -p 8080:8080 ghcr.io/jmrplens/libgen-mcp:latest
-```
-
-## Install a native binary
-
-Prefer no container? Download the **prebuilt static binary** for your platform from the [latest release](https://github.com/jmrplens/libgen-mcp/releases/latest) — no Docker, no Go, no dependencies:
-
-```bash
-# Example: Linux amd64 (macOS, Windows and arm64 builds are on the releases page)
-curl -L -o libgen-mcp \
-  https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp-linux-amd64
-chmod +x libgen-mcp && sudo mv libgen-mcp /usr/local/bin/
-```
-
-The binary is fully static (`CGO_ENABLED=0`, no `-buildmode=pie`), so it names no dynamic loader and runs anywhere for that OS/arch with nothing else installed — glibc, musl, or a `scratch` container. Then register `libgen-mcp` with your client: use the absolute path of the binary as the `command` in any entry from [Connect a client](docs/clients.md). **No token or account is required** — Library Genesis needs no credentials.
-
-Every release also ships a `checksums.txt` **and a Sigstore bundle signing it**, so you can check the bytes came from this project's release workflow rather than only that they match a hash published beside them:
-
-```bash
-cosign verify-blob --bundle checksums.txt.sigstore.json \
-  --certificate-identity-regexp '^https://github.com/jmrplens/libgen-mcp/' \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  checksums.txt
-sha256sum --ignore-missing -c checksums.txt
-```
-
-The first command is the one usually skipped and the one that matters: a `checksums.txt` fetched from the same page as the binary proves only that the two agree with each other. Full recipe, plus SLSA build provenance, on the [release binaries page](docs/install/binary.md#verify-what-you-installed); what each other channel gives you is compared in the [installation guide](docs/install/overview.md#verifying-what-you-install).
-
-## Other install channels
-
-The same binary is published to the package manager you already use. Each one installs the native executable rather than a wrapper around it, and none of them compiles anything or runs a script at install time.
-
-```bash
-uvx libgen-mcp                            # PyPI, without installing
-pipx install libgen-mcp                   # PyPI
-brew install jmrplens/tap/libgen-mcp      # Homebrew
-dnx libgen-mcp                            # NuGet, without installing
-dotnet tool install -g libgen-mcp         # NuGet
-```
-
-Two things worth knowing: the PyPI Linux wheels carry both `manylinux` and `musllinux` tags, so the same file installs on Debian and on Alpine; and under `dnx` the server's own arguments go after `--`, because everything before it belongs to `dnx` (`dnx libgen-mcp -- --http :8080`). Each channel has a page of its own — install, verify, upgrade, pin, uninstall — linked from the [installation guide](docs/install/overview.md).
+**[Connect a client](docs/clients.md)** has the complete entry for each client — Claude Desktop, VS Code, Cursor, Windsurf, Zed, JetBrains, Kiro, OpenCode, Cline, Continue, LM Studio, Gemini CLI, Codex and Goose — in its local form and its remote one, with the file path on each operating system and where optional keys go.
 
 ## Tools
 
@@ -302,7 +226,7 @@ See the [tools reference](docs/tools.md#prompts) for full argument tables.
 
 Every other setting — download location, mirror pinning, source allow-list, rate limits, retry/stall schedules, Sci-Hub hosts, `read` limits, cache sizing, the enrichment kill-switch, whether downloads ask before saving — is a tuning knob with a sensible default. See the full **[configuration reference](https://jmrp.io/docs/libgen-mcp/configuration/)** (also in [docs/configuration.md](docs/configuration.md)).
 
-**Where settings come from.** The process environment (what your client passed) wins, then the file `LIBGEN_MCP_ENV_FILE` names, then `~/.libgen-mcp.env`. **A `.env` in the working directory is never loaded** — the server names it at startup and carries on without it, because a stdio server's working directory is whatever workspace the client opened, so that file arrives with a cloned repository rather than from you. To have one configure the server, name it: `--env-file /abs/path/.env`.
+**Where settings come from.** A non-blank value in the process environment (what your client passed) wins, then the file `LIBGEN_MCP_ENV_FILE` names, then `~/.libgen-mcp.env`; a variable passed blank is filled from the files. **A `.env` in the working directory is never loaded** — the server names it at startup and carries on without it, because a stdio server's working directory is whatever workspace the client opened, so that file arrives with a cloned repository rather than from you. To have one configure the server, name it: `--env-file /abs/path/.env`.
 
 A few settings also have flags, written into their variables only when you type them: `--log-level`, `--download-dir`, `--mirror`, `--sources`, `--allow-private-addresses`, `--pprof-addr`, `--env-file`. The three credential-shaped ones above deliberately have none — a secret on a command line is visible through `ps` and lands in your shell history.
 
@@ -359,7 +283,7 @@ You can restrict which sources participate with `LIBGEN_MCP_SOURCES`; the chain 
 
 ## Documentation
 
-- Guides live in [`docs/`](docs/): getting started, configuration, tools reference, architecture, and troubleshooting.
+- Every page lives in [`docs/`](docs/README.md), indexed by kind: the getting-started tutorial, one page per install channel, client set-up, deployment recipes, and the tools, configuration, flag and source references.
 - Full documentation site (bilingual EN/ES): <https://jmrp.io/docs/libgen-mcp/>
 - Changing the code? [`docs/development/`](docs/development/) has the gate record and the testing reference.
 
@@ -414,17 +338,19 @@ make lint          # golangci-lint + govulncheck
 make format-md-tables  # normalize Markdown pipe tables
 ```
 
-By default the server speaks MCP over **stdio**. To serve **streamable HTTP** instead, pass `--http` with an address (`libgen-mcp --http :8080`) or with a unix socket path (`libgen-mcp --http /run/mcp-libgen.sock` — a value containing `/` is a path, a bare `mcp.sock` is read as a host); HTTP mode also exposes a `GET /health` readiness endpoint that returns `200` while serving. Because an HTTP server answers clients whose disk it cannot write to, in this mode `download` automatically returns a link (see the `download` tool above) rather than saving a file — a unix socket included, since it is served through a proxy to clients that are not on this machine. Print the version with `--version`.
+## Deploying over HTTP
 
-The HTTP transport is **stateless by default** (MCP protocol `2026-07-28`, SEP-2567): no `Mcp-Session-Id`, every POST a complete request, `GET`/`DELETE` on the MCP endpoint answering `405` (`/health` is unaffected) — so replicas need no sticky routing. `--json-response` returns `application/json` instead of SSE, `--max-request-body-bytes` tightens the 4 MiB body cap, and `--stateless=false` restores the legacy session transport for a client that still needs it. **Every HTTP flag also has a variable** — `LIBGEN_MCP_` plus the flag in upper case with underscores, except `--http`, which is `LIBGEN_MCP_HTTP_ADDR` — so a compose file, a systemd unit or a ConfigMap can configure the whole listener with no `command:` at all; a flag you type still wins, and a value that does not parse fails startup instead of falling back. See [Architecture → Stateless mode](docs/architecture.md#stateless-mode) and [Configuration → HTTP listener](docs/configuration.md#http-listener).
+By default the server speaks MCP over **stdio**. `libgen-mcp --http :8080` (or a unix socket path) serves stateless streamable HTTP instead, with `GET /health` beside it; there `download` returns a link rather than saving a file, and `read` is off unless the operator turns it on. A deployment other people reach needs two more flags than you would guess — `--public-url` or `--trusted-proxies` for the name clients use, and `--trusted-proxies` with `--trusted-proxy-header` so each caller is charged as itself rather than as the proxy:
 
-For a reverse proxy on the **same machine**, prefer a unix socket over TLS: it does not encrypt the hop, it removes it — no bridge to read, no `docker-proxy` hop, no certificate to issue or rotate. The socket is created `0660` (owner and group), so the proxy reaches it by group membership; `--http-socket-mode` changes that, and is refused for a TCP address or on a platform with no file permission modes. When the proxy is on **another** host, `--tls-cert`/`--tls-key` make this process terminate TLS instead — both or neither, loaded at startup so a bad file fails there rather than at a handshake, with a TLS 1.2 floor and HTTP/2 negotiated. A renewal written to the same paths is picked up on the next handshake, so certbot or a remounted secret is not a restart. See [HTTP server mode → Where the server listens](docs/http-server-mode.md#where-the-server-listens).
-
-The MCP endpoint, `/health` and the server card are the whole HTTP surface: **every other path answers `404`** with `{"error":"not found","mcp_endpoint":"…"}`, rather than the misleading `405` a catch-all used to return. `--http-path=/libgen` mounts all of those routes under a prefix — for a reverse proxy that forwards its prefix instead of stripping it — making the endpoint `POST /libgen` and the probe `GET /libgen/health`. Every response, the `404` and the `405` included, carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` and `Cache-Control: no-store` (the card overrides the last with a lifetime of its own). `Strict-Transport-Security: max-age=31536000; includeSubDomains` is sent **only** when this process terminates TLS itself; behind a proxy that terminates it, that proxy is the layer that can honestly claim it.
-
-In HTTP mode the server publishes **two server cards**, one per location, because the two specifications that reserve those paths describe different documents. `GET /server-card`, served as `application/mcp-server-card+json`, is the **discovery card** SEP-2127 describes: identity only — the registry name `io.github.jmrplens/libgen-mcp`, the running version, description, website and repository — plus, when `--public-url` names one, a `remotes` entry giving that URL, the `streamable-http` type and the protocol versions this deployment negotiates. It lists no tools, because what a server exposes can vary per session. `GET /.well-known/mcp/server-card.json`, served as `application/json`, is the **enumerating card** of the earlier SEP-1649 draft, kept because scanners already fetch it there: `serverInfo`, the negotiated `capabilities`, an `authentication` block (this server takes none) and the full `tools` and `prompts` listings, so a directory can read the whole surface — the four prompts included — without opening an MCP session. Both are served unauthenticated, answer CORS preflight with `Access-Control-Allow-Origin: *`, are unaffected by stateless mode's `405` on the MCP endpoint, and carry a strong `ETag` derived from the document's own bytes — so revalidating after the hour costs a `304`, and two replicas behind one balancer publish the same validator.
-
-**Deploying it behind a proxy takes two more flags than you would guess.** A proxy forwards the client's `Host` and connects over loopback, so without `--public-url` or `--trusted-proxies` the endpoint refuses the request as a DNS-rebinding attempt; and without `--trusted-proxies` plus `--trusted-proxy-header` every caller arrives as the proxy, which turns the per-caller rate limit and the per-caller in-flight ceiling into one budget for the whole deployment. That, the drain delay, the configuration digest, the TLS renewal path, `--healthcheck` and the full list of what the server refuses to start with are in **[HTTP server mode](docs/http-server-mode.md)**.
+| For                                                                | See                                                       |
+| ------------------------------------------------------------------ | --------------------------------------------------------- |
+| How the transport behaves, flag by flag, and what it refuses       | [HTTP server mode](docs/http-server-mode.md)              |
+| nginx, Caddy, Traefik, Apache httpd, HAProxy and Cloudflare Tunnel | [Behind a reverse proxy](docs/deploy/reverse-proxy.md)    |
+| systemd units for a port or a socket, launchd, Windows             | [Run as a service](docs/deploy/service.md)                |
+| Compose and Kubernetes                                             | [Containers and orchestration](docs/deploy/containers.md) |
+| What bounds one process, and when more replicas help               | [Scaling and capacity](docs/deploy/scaling.md)            |
+| What the server trusts and refuses                                 | [Security model](docs/security.md)                        |
+| Every flag                                                         | [Command-line flags](docs/cli.md)                         |
 
 ## Maintenance
 

@@ -29,7 +29,7 @@ This page compares the channels and holds what they have in common. Each channel
 | Channel                                               | Run it without installing                               | Install it                                                       | Needs                              | Platforms                                |
 | ----------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------- | ---------------------------------------- |
 | [npm](/libgen-mcp/install/npm/)                       | `npx -y @jmrp.io/libgen-mcp`                            | `npm install -g @jmrp.io/libgen-mcp`                             | Node 18 or newer                   | Linux, macOS, Windows; x64 and arm64     |
-| [PyPI](/libgen-mcp/install/pypi/)                     | `uvx libgen-mcp`                                        | `pipx install libgen-mcp`                                        | Python 3.9 or newer                | Linux, macOS 11+, Windows; x64 and arm64 |
+| [PyPI](/libgen-mcp/install/pypi/)                     | `uvx libgen-mcp`                                        | `pipx install libgen-mcp`                                        | Python 3.9 or newer                | Linux, macOS 13+, Windows; x64 and arm64 |
 | [NuGet](/libgen-mcp/install/nuget/)                   | `dnx libgen-mcp`                                        | `dotnet tool install -g libgen-mcp`                              | .NET 10 SDK                        | Linux, macOS, Windows; x64 and arm64     |
 | [Homebrew](/libgen-mcp/install/homebrew/)             | —                                                       | `brew install jmrplens/tap/libgen-mcp`                           | Homebrew                           | macOS and Linux; x64 and arm64           |
 | [Docker](/libgen-mcp/install/docker/)                 | `docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` | —                                                                | Docker or an OCI runtime           | `linux/amd64`, `linux/arm64` images      |
@@ -65,6 +65,18 @@ If you have no preference: **`npx` if you already have Node 18 or newer, Docker 
 The cache directory is `~/.cache` on Linux, `~/Library/Caches` on macOS and `%LocalAppData%` on Windows. Deleting any of it only forces a fresh fetch. Uninstalling through any channel leaves all of it in place.
 
 **Upgrading a server a client is already running.** Replacing the binary under a running process leaves the old one holding a download slot, a temp-cache entry and, in HTTP mode, the listener the new one wants. `libgen-mcp --shutdown` asks every other instance of this binary on the machine to exit and kills what is left after five seconds, so the upgrade sequence is: install, `--shutdown`, let the client start it again.
+
+## From an MCP registry
+
+`libgen-mcp` is listed in the MCP registries under the identifier `io.github.jmrplens/libgen-mcp`. A client that installs servers from one of them can add it from there instead of a configuration written by hand:
+
+| MCP registry          | Listing                                                                                                                     |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Official MCP Registry | [`io.github.jmrplens/libgen-mcp`](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.jmrplens/libgen-mcp) |
+| mcp.so                | [mcp.so/servers/libgen-mcp-d62341](https://mcp.so/servers/libgen-mcp-d62341)                                                |
+| LobeHub               | [lobehub.com/mcp/jmrplens-libgen-mcp](https://lobehub.com/mcp/jmrplens-libgen-mcp)                                          |
+
+The registry entry declares the six install packages and, as `remotes`, the [hosted endpoint](/libgen-mcp/hosted/) and the self-hosted `--http` form, so a registry-aware client can offer either without you copying a URL. [Docker Hub](https://hub.docker.com/r/jmrplens/libgen-mcp) and [pkg.go.dev](https://pkg.go.dev/github.com/jmrplens/libgen-mcp/v2) carry the image and the Go module, but they are distribution channels rather than MCP listings. A listing can lag behind a release; the version these pages describe is always the one in [`VERSION`](https://github.com/jmrplens/libgen-mcp/blob/main/VERSION).
 
 ## Verifying what you install
 

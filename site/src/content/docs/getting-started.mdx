@@ -36,7 +36,7 @@ head:
             "@type": "HowToStep",
             "position": 1,
             "name": "Install the server",
-            "text": "Use whichever package manager you already have: npx @jmrp.io/libgen-mcp on npm, uvx libgen-mcp on PyPI, brew install jmrplens/tap/libgen-mcp on Homebrew, or dnx libgen-mcp on NuGet. Otherwise download the prebuilt static binary for your platform from the GitHub releases page, mark it executable and put it on your PATH: it is a single fully static executable with nothing else to install. You can also pull the multi-arch Docker image ghcr.io/jmrplens/libgen-mcp:latest, or build from source with go install if you have Go 1.27 or newer.",
+            "text": "Use whichever package manager you already have: npx @jmrp.io/libgen-mcp on npm, uvx libgen-mcp on PyPI, brew install jmrplens/tap/libgen-mcp on Homebrew, or dnx libgen-mcp on NuGet. Otherwise download the prebuilt static binary for your platform from the GitHub releases page, mark it executable and put it on your PATH: it is a single fully static executable with nothing else to install. You can also pull the multi-arch Docker image ghcr.io/jmrplens/libgen-mcp:latest, or build from source with go install if you have Go 1.27.1 or newer.",
             "url": "https://jmrplens.github.io/libgen-mcp/getting-started/#install"
           },
           {
@@ -79,7 +79,7 @@ head:
             "name": "How do I install libgen-mcp?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "With the package manager you already have (npm, PyPI, Homebrew or NuGet), or by downloading the prebuilt binary from the GitHub releases page. Every channel installs the same single static executable, with nothing else to install and no account to create. The commands are: npm (npx @jmrp.io/libgen-mcp or npm install -g @jmrp.io/libgen-mcp), PyPI (uvx libgen-mcp or pipx install libgen-mcp), Homebrew (brew install jmrplens/tap/libgen-mcp) or NuGet (dnx libgen-mcp or dotnet tool install -g libgen-mcp). Otherwise use the prebuilt binary: download the asset for your platform from the GitHub releases page (named libgen-mcp-<os>-<arch>, covering Linux, macOS, and Windows on amd64 and arm64), mark it executable, and put it on your PATH. It is a single fully static executable with nothing else to install. As alternatives, you can pull the multi-arch Docker image ghcr.io/jmrplens/libgen-mcp:latest, or build from source with go install github.com/jmrplens/libgen-mcp/v2/cmd/server@latest if you have Go 1.27 or newer."
+              "text": "With the package manager you already have (npm, PyPI, Homebrew or NuGet), or by downloading the prebuilt binary from the GitHub releases page. Every channel installs the same single static executable, with nothing else to install and no account to create. The commands are: npm (npx @jmrp.io/libgen-mcp or npm install -g @jmrp.io/libgen-mcp), PyPI (uvx libgen-mcp or pipx install libgen-mcp), Homebrew (brew install jmrplens/tap/libgen-mcp) or NuGet (dnx libgen-mcp or dotnet tool install -g libgen-mcp). Otherwise use the prebuilt binary: download the asset for your platform from the GitHub releases page (named libgen-mcp-<os>-<arch>, covering Linux, macOS, and Windows on amd64 and arm64), mark it executable, and put it on your PATH. It is a single fully static executable with nothing else to install. As alternatives, you can pull the multi-arch Docker image ghcr.io/jmrplens/libgen-mcp:latest, or build from source with go install github.com/jmrplens/libgen-mcp/v2/cmd/server@latest if you have Go 1.27.1 or newer."
             }
           },
           {
@@ -87,7 +87,7 @@ head:
             "name": "Which install method should I use for libgen-mcp?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Whichever package manager is already on the machine, since they all deliver the same binary: npm if you have Node, PyPI if you have uv or pipx, Homebrew on macOS or Linux, NuGet if you have the .NET SDK. Any of them can also run the server without installing it — npx, uvx and dnx each do. Use the prebuilt binary if you have none of them: it is a single static executable that needs no Go toolchain, no Docker, and no runtime. Choose Docker if you prefer containers or want a zero-install command your client pulls on first run. Choose go install only if you already have Go 1.27 or newer and want to build from source. On Claude Desktop, the one-click .mcpb extension from the latest release is the easiest option."
+              "text": "Whichever package manager is already on the machine, since they all deliver the same binary: npm if you have Node, PyPI if you have uv or pipx, Homebrew on macOS or Linux, NuGet if you have the .NET SDK. Any of them can also run the server without installing it — npx, uvx and dnx each do. Use the prebuilt binary if you have none of them: it is a single static executable that needs no Go toolchain, no Docker, and no runtime. Choose Docker if you prefer containers or want a zero-install command your client pulls on first run. Choose go install only if you already have Go 1.27.1 or newer and want to build from source. On Claude Desktop, the one-click .mcpb extension from the latest release is the easiest option."
             }
           },
           {
@@ -115,198 +115,74 @@ import LegalNotice from "../../components/docs/LegalNotice.astro";
 
 import { Tabs, TabItem, LinkCard, Aside } from "@astrojs/starlight/components";
 
-`libgen-mcp` is published to most of the places you already get software from: npm as [`@jmrp.io/libgen-mcp`](https://www.npmjs.com/package/@jmrp.io/libgen-mcp), PyPI as [`libgen-mcp`](https://pypi.org/project/libgen-mcp/), NuGet as a .NET tool, this project's Homebrew tap, a prebuilt static binary on the GitHub releases page, a Docker image (`ghcr.io/jmrplens/libgen-mcp`), or `go install`. It needs no account, API key or token. Once it is registered with an MCP client — Claude Code, Claude Desktop, Cursor or VS Code — its four tools (`search`, `get_details`, `download`, `read`) are available immediately.
+This tutorial takes you from nothing to an assistant that can search, cite and read through `libgen-mcp`, in four steps: install the server, register it with a client, run a search, and read a result. No step needs an account, an API key or a token. Each step links to the page that covers its subject in full, so you can stop here and come back for the detail.
 
 ## Install
 
-Every channel below ends in the same single static binary: nothing is compiled, nothing runs at install time. If you already have Node 18 or newer, **npm** is the shortest path — one command, and your MCP client can launch the server through `npx` without installing anything. Otherwise pick whichever package manager you already use, or take the **prebuilt binary**, which needs no runtime of any kind.
+Pick one channel. Every one of them delivers the same single static binary: nothing is compiled and nothing runs at install time. If you already have Node 18 or newer, **npm** is the shortest path, because your client can then start the server through `npx` and there is nothing to install at all. [Installation](/libgen-mcp/install/overview/) compares every channel, including the Claude Desktop extension and the agent plugin, and says how to verify what you installed.
 
-What follows is one command per channel. **[Installation](/libgen-mcp/install/overview/)** is the long form: a section per channel with what you get, how to verify it is what this project published, how to upgrade it and how to remove it.
+<Tabs syncKey="install">
+	<TabItem label="npm">
+		```bash
+		npx -y @jmrp.io/libgen-mcp --version
+		```
 
-<Tabs>
-	<TabItem label="npm / npx">
-		The server is published to npm as [`@jmrp.io/libgen-mcp`](https://www.npmjs.com/package/@jmrp.io/libgen-mcp). It needs Node 18 or newer. The package is a thin launcher over the same prebuilt binaries the releases page serves: the executable rides inside a per-platform package that npm unpacks only when its `os` and `cpu` match, so nothing is compiled and no script runs at install time. Because the executable travels inside the package npm downloads anyway, `npx` and `npm ci --ignore-scripts` both work, and so does an install served from a private registry mirror — or from the local cache with `--offline`, once the tarballs are in it.
-
-    	<Tabs syncKey="pkg">
-    		<TabItem label="npx">
-    			```bash
-    			npx @jmrp.io/libgen-mcp
-    			```
-
-    			Nothing is installed permanently. Most MCP clients can launch the server this way, which is the lowest-friction configuration there is:
-
-    			```json
-    			{
-    			  "mcpServers": {
-    			    "libgen": { "command": "npx", "args": ["-y", "@jmrp.io/libgen-mcp"] }
-    			  }
-    			}
-    			```
-    		</TabItem>
-    		<TabItem label="npm">
-    			```bash
-    			npm install -g @jmrp.io/libgen-mcp
-    			libgen-mcp --help
-    			```
-    		</TabItem>
-    		<TabItem label="pnpm">
-    			```bash
-    			pnpm add -g @jmrp.io/libgen-mcp
-    			libgen-mcp --help
-    			```
-    		</TabItem>
-    	</Tabs>
-
-    	A global install puts `libgen-mcp` in your package manager's global binary directory. If the command is not found afterwards, that directory is not on your `PATH` — `npm config get prefix` shows npm's, and pnpm's is set up by `pnpm setup`.
-
-    	Prebuilt binaries exist for Linux, macOS and Windows on x64 and arm64. On any other platform the launcher exits with a message pointing at the release binaries and the option to build from source.
+    	That fetches the launcher and prints the version. Nothing stays installed: your client will start the server the same way. [Install with npm](/libgen-mcp/install/npm/) covers a global install, upgrades and removal.
     </TabItem>
-    <TabItem label="Binary">
-    	Download a prebuilt binary for your platform from the [GitHub releases](https://github.com/jmrplens/libgen-mcp/releases) page. Assets are named `libgen-mcp-<os>-<arch>` (for example `libgen-mcp-linux-amd64` or `libgen-mcp-darwin-arm64`), covering Linux, macOS, and Windows on both amd64 and arm64.
-
+    <TabItem label="PyPI">
     	```bash
-    	# Example: Linux amd64
-    	curl -L -o libgen-mcp \
-    	  https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp-linux-amd64
-    	chmod +x libgen-mcp
-    	sudo mv libgen-mcp /usr/local/bin/
+    	uvx libgen-mcp --version
     	```
 
-    	The binary is fully static (built with `CGO_ENABLED=0` and no `-buildmode=pie`), so it names no dynamic loader, depends on nothing on the host and runs straight away — on glibc, on musl, and in a distroless or `scratch` container.
+    	`uvx` runs it without installing; `pipx install libgen-mcp` installs it. [Install with PyPI](/libgen-mcp/install/pypi/) has the rest.
+    </TabItem>
+    <TabItem label="Homebrew">
+    	```bash
+    	brew install jmrplens/tap/libgen-mcp
+    	libgen-mcp --version
+    	```
 
-    	Every release also ships a `checksums.txt` **and a Sigstore bundle signing it**, so you can check the bytes came from this project's release workflow rather than only that they match a hash published beside them. The recipe is two commands, and the first — the signature over the manifest — is the one that matters and the one usually skipped: [Release binaries → Verify what you installed](/libgen-mcp/install/binary/#verify-what-you-installed).
+    	[Install with Homebrew](/libgen-mcp/install/homebrew/) has the rest.
+    </TabItem>
+    <TabItem label="NuGet">
+    	```bash
+    	dnx libgen-mcp -- --version
+    	```
+
+    	The server's own arguments go after `--`; everything before it belongs to `dnx`. [Install with NuGet](/libgen-mcp/install/nuget/) has the rest.
     </TabItem>
     <TabItem label="Docker">
-    	Prefer containers, or want a zero-install command your client pulls on first run? A multi-arch image is published to the GitHub Container Registry:
-
     	```bash
     	docker pull ghcr.io/jmrplens/libgen-mcp:latest
     	```
 
-    	The image **decides its transport from what standard input is**, so `docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` (as the one-click buttons and `claude mcp add` use it) connects a pipe and gets the stdio server, which is the correct mode for an MCP client, and works out of the box. A run without `-i` — a Compose service with no `stdin_open`, a Kubernetes pod, anything an orchestrator starts — connects `/dev/null` and gets the streamable HTTP listener on port 8080 instead. Mount a writable volume for downloads and point `LIBGEN_MCP_DOWNLOAD_DIR` at it; the container runs as a non-root user, so the host directory must be writable by UID `10001`:
-
-    	```bash
-    	docker run -i --rm \
-    	  -v "$HOME/Downloads:/downloads" \
-    	  -e LIBGEN_MCP_DOWNLOAD_DIR=/downloads \
-    	  ghcr.io/jmrplens/libgen-mcp:latest
-    	```
-
-    	Pass behavior-changing flags the same way — they combine freely. Enable open-access articles via Unpaywall, or consult the extra searchers (Anna's Archive, arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) on every search (see the [configuration reference](/libgen-mcp/configuration/) for the full list):
-
-    	```bash
-    	docker run -i --rm \
-    	  -e LIBGEN_MCP_UNPAYWALL_EMAIL=you@example.com \
-    	  -e LIBGEN_MCP_EXTRA_SOURCES=always \
-    	  ghcr.io/jmrplens/libgen-mcp:latest
-    	```
-
-    	For the streamable HTTP transport instead, drop the `-i` and publish the port — the image's default command is `--transport auto --http 0.0.0.0:8080`, so there is nothing to pass. HTTP mode also exposes a `GET /health` readiness endpoint:
-
-    	```bash
-    	docker run --rm -p 8080:8080 \
-    	  -v "$HOME/Downloads:/downloads" \
-    	  -e LIBGEN_MCP_DOWNLOAD_DIR=/downloads \
-    	  ghcr.io/jmrplens/libgen-mcp:latest
-    	```
-
-    	Naming a listener yourself still works — `docker run --rm -p 9000:9000 ghcr.io/jmrplens/libgen-mcp:latest --http 0.0.0.0:9000` — with one thing to know: **an argument replaces the default command wholesale**, `--transport auto` included. That is harmless here, because naming a listener is deciding the transport, but it means a flag you add is the _whole_ command line rather than an addition to it.
-
-    	Two settings that meet in a container and surprise people apart:
-
-    	- A container binding `0.0.0.0` **with `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES` set is refused at startup**, and the default command above is exactly that listener. The refusal is deliberate — that variable lets a caller steer the server at addresses only this host can reach, which is not a power to hand to whoever finds the published port — so pass `--http 127.0.0.1:8080` and put a proxy in front, or leave the variable unset.
-    	- A container on the **host's** network namespace (`--network host`) behind a proxy on that same host is reached over loopback, so it looks to the server like a local client. On a bridge network — the default — it is not, and the proxy's address is what arrives. See [The caller's address](/libgen-mcp/deploy/reverse-proxy/#the-callers-address) for which flags each shape needs.
+    	A client starts it with `docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest`; the `-i` is what makes it a stdio server. [Run with Docker](/libgen-mcp/install/docker/) covers the download volume and the HTTP form.
     </TabItem>
-    <TabItem label="go install">
-    	If you already have Go 1.27 or newer and prefer building from source:
-
-    	```bash
-    	go install github.com/jmrplens/libgen-mcp/v2/cmd/server@latest
-    	```
-
-    	This produces a binary named `server` in `$(go env GOPATH)/bin`. If you prefer to invoke it as `libgen-mcp`, build it with an explicit name instead:
-
-    	```bash
-    	git clone https://github.com/jmrplens/libgen-mcp
-    	cd libgen-mcp
-    	go build -o libgen-mcp ./cmd/server
-    	```
-
-    	Make sure the resulting binary is on your `PATH`.
-    </TabItem>
-    <TabItem label="PyPI">
-    	The server is published to PyPI as [`libgen-mcp`](https://pypi.org/project/libgen-mcp/). The wheel carries the native binary and the installer puts it on the scripts path, so `libgen-mcp` afterwards **is** that binary — no Python runs when you use it.
-
-    	```bash
-    	uvx libgen-mcp            # run it without installing
-    	pipx install libgen-mcp   # or: pip install libgen-mcp
-    	```
-
-    	The Linux wheels carry both `manylinux` and `musllinux` tags, so the same file installs on Debian and on Alpine: the binary needs no C library at all.
-    </TabItem>
-    <TabItem label="Homebrew">
-    	From this project's tap:
-
-    	```bash
-    	brew install jmrplens/tap/libgen-mcp
-    	```
-
-    	The formula pins each platform's release asset by SHA256 — the hashes come from the release's cosign-signed `checksums.txt` — and `brew upgrade` follows new releases.
-    </TabItem>
-    <TabItem label="NuGet">
-    	A .NET tool whose entry point is the native binary, so nothing in the package is .NET code:
-
-    	```bash
-    	dnx libgen-mcp                      # run it without installing
-    	dotnet tool install -g libgen-mcp   # or install it
-    	```
-
-    	One thing to know: the server's own arguments go **after `--`**, because everything before it belongs to `dnx` — `dnx libgen-mcp -- --http :8080`.
+    <TabItem label="Binary">
+    	Download `libgen-mcp-<os>-<arch>` for your platform from the [releases page](https://github.com/jmrplens/libgen-mcp/releases), make it executable and put it on your `PATH`. It needs no runtime of any kind. [Release binaries and go install](/libgen-mcp/install/binary/) has the commands, checking the signature over `checksums.txt`, and building from source.
     </TabItem>
 
 </Tabs>
 
-### Install from a registry
-
-`libgen-mcp` is published to the MCP registries under the identifier
-`io.github.jmrplens/libgen-mcp`. If your client installs servers from one of
-them, you can add it from there instead of writing the configuration by hand:
-
-| MCP registry          | Listing                                                                                                                     |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Official MCP Registry | [`io.github.jmrplens/libgen-mcp`](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.jmrplens/libgen-mcp) |
-| mcp.so                | [mcp.so/servers/libgen-mcp-d62341](https://mcp.so/servers/libgen-mcp-d62341)                                                |
-| LobeHub               | [lobehub.com/mcp/jmrplens-libgen-mcp](https://lobehub.com/mcp/jmrplens-libgen-mcp)                                          |
-
-The image and the Go module are published too, but they are distribution
-channels rather than MCP listings — install them the ways described above:
-[Docker Hub](https://hub.docker.com/r/jmrplens/libgen-mcp) and
-[pkg.go.dev](https://pkg.go.dev/github.com/jmrplens/libgen-mcp/v2).
-
-The registry entry also declares the [hosted endpoint](#hosted-endpoint-no-install) and the self-hosted `--http` form as `remotes`, alongside the six install packages, so a registry-aware client can offer either without you copying a URL out of this page.
-
-A registry listing can lag behind a release; the version this documentation
-describes is always the one in [`VERSION`](https://github.com/jmrplens/libgen-mcp/blob/main/VERSION).
-
 ## Configure an MCP client
 
-Point your client at the binary. The command is `libgen-mcp` (or the absolute path to the `server` binary if you kept the default `go install` name). Over stdio no extra arguments are needed.
+Point your client at the command your channel gave you. Over stdio the server needs no arguments. Claude Code is the example here, with the `npx` command from the npm tab:
 
-Claude Code is the example here. **[Connect a client](/libgen-mcp/clients/)** has the complete entry for every other client — Claude Desktop, VS Code, Cursor, Windsurf, Zed, JetBrains, Kiro, OpenCode, Cline, Continue, LM Studio, Gemini CLI, Codex and Goose — in both its local and its remote form, the one-click install buttons, and where optional keys go.
+```bash
+claude mcp add libgen -- npx -y @jmrp.io/libgen-mcp
+```
 
-### Claude Code
-
-Run `claude mcp add libgen -- libgen-mcp`, or add the server to your project's `.mcp.json`:
+or the same entry in your project's `.mcp.json`:
 
 ```json
 {
 	"mcpServers": {
-		"libgen": {
-			"command": "libgen-mcp"
-		}
+		"libgen": { "command": "npx", "args": ["-y", "@jmrp.io/libgen-mcp"] }
 	}
 }
 ```
+
+With another channel, the command is `libgen-mcp` (Homebrew, a global npm or pipx install, the binary), `uvx libgen-mcp`, `dnx libgen-mcp` or the `docker run` line above. **[Connect a client](/libgen-mcp/clients/)** has the complete entry for every other client, in its local and its remote form, the one-click install buttons, and where optional keys go.
 
 <Aside type="caution">
 	On Claude Desktop the one-click [`.mcpb`
@@ -317,7 +193,7 @@ Run `claude mcp add libgen -- libgen-mcp`, or add the server to your project's `
 
 ### Hosted endpoint (no install)
 
-A public instance runs at **`https://mcp.jmrp.io/libgen`**. It needs no account, no key and no local process — point any HTTP-capable MCP client at it:
+To try the server before installing anything, point an HTTP-capable client at the public instance, **`https://mcp.jmrp.io/libgen`**:
 
 ```json
 {
@@ -327,24 +203,7 @@ A public instance runs at **`https://mcp.jmrp.io/libgen`**. It needs no account,
 }
 ```
 
-It is the fastest way to try the server; running it locally remains the better way to keep using it, because your queries then never leave your computer and `download` saves the file instead of returning a link. [Hosted endpoint](/libgen-mcp/hosted/) says what the public instance serves, what it limits and logs, and how to run the same setup yourself.
-
-### Remote (streamable HTTP)
-
-To run the server centrally and connect HTTP-capable clients to it instead of starting one process per client, give it a listener:
-
-```bash
-libgen-mcp --http 127.0.0.1:8080
-```
-
-The endpoint is the mount itself, `POST /`, with `POST /mcp` as an alias, and `GET /health` answers while the server runs. The transport is stateless, so any number of replicas can sit behind one balancer. Over HTTP the server's disk and connection are not the client's: `download` returns a link instead of saving a file, and `read` is not registered unless `LIBGEN_MCP_SERVER_FETCH` turns it back on (see [Where the file goes](/libgen-mcp/tools/#where-the-file-goes-local-vs-remote)).
-
-A deployment other people reach needs more than that one flag: a proxy that forwards the name clients use and passes the stream through unbuffered, the server told that name and which peer is the proxy, and a supervisor that lets it drain when it stops. Each has its own page, with configurations that were run as written:
-
-- [Behind a reverse proxy](/libgen-mcp/deploy/reverse-proxy/): what every proxy has to do, and complete configurations for nginx, Caddy, Traefik, Apache httpd, HAProxy and Cloudflare Tunnel, over TCP, a unix socket or TLS.
-- [Run as a service](/libgen-mcp/deploy/service/): systemd units for a port and a socket, the environment file, the descriptor limit, stopping and upgrading, launchd and Windows.
-- [Containers and orchestration](/libgen-mcp/deploy/containers/): Compose files, on their own and behind nginx over a shared socket, and a Kubernetes Deployment with its probes and Ingress.
-- [HTTP server mode](/libgen-mcp/http-server-mode/): how the transport behaves, flag by flag, and what the server refuses to start with.
+A local server remains the better way to keep using it: your queries never leave your computer, and `download` saves the file instead of returning a link. [Hosted endpoint](/libgen-mcp/hosted/) says what the public instance serves, limits and logs.
 
 ## Your first search
 
@@ -364,7 +223,7 @@ drives the `search` tool with roughly these arguments:
 }
 ```
 
-Each result carries an `md5` (for books) or a `doi` (for articles). Feed an `md5` to `get_details` for full metadata, then to `download` to fetch the file — or feed a `doi` straight to `download` for an article. `get_details` also returns a `citations` field (`bibtex`/`ris`) you can paste straight into a reference manager, and accepts an opt-in `enrich: true` to add best-effort Crossref/OpenLibrary metadata. See [Tools](/libgen-mcp/tools/) for the full input and output shapes.
+Each result carries an `md5` (for books) or a `doi` (for articles). Feed an `md5` to `get_details` for full metadata, then to `download` to fetch the file — or feed a `doi` straight to `download` for an article. `get_details` also returns a `citations` field (`bibtex`/`ris`) you can paste straight into a reference manager, and accepts an opt-in `enrich: true` to add best-effort Crossref/OpenLibrary metadata. See [Tools](/libgen-mcp/tools/) for the full input and output shapes, and [Download a paper by DOI](/libgen-mcp/download-a-paper/) for what a download does step by step.
 
 ## Read and summarize
 
@@ -419,18 +278,17 @@ Its answer, from the 4,566 characters `read` returned:
 
 > The paper presents an updated framework of six core biological capabilities that cancer cells acquire during tumor development—including sustaining proliferative signaling, evading growth suppressors, resisting cell death, enabling replicative immortality, inducing angiogenesis, and activating invasion and metastasis. The authors also introduce two emerging hallmarks (reprogramming of energy metabolism and evading immune destruction) and emphasize that tumors are complex tissues containing recruited normal cells that form the "tumor microenvironment," which actively contribute to cancer development rather than being passive bystanders.
 
-## Prompts
+## Where to go next
 
-Besides the four tools, the server registers four MCP **prompts** your client can offer as quick actions — each one turns a common request into a ready-to-run plan of tool calls, without downloading anything itself:
+Besides the four tools, the server registers four MCP prompts (`acquire_book`, `research_topic`, `get_paper` and `download_troubleshoot`) that a client can offer as quick actions; [Tools → Prompts](/libgen-mcp/tools/#prompts) has their arguments.
 
-| Prompt                  | Arguments                                                       | What it does                                                                              |
-| ----------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `acquire_book`          | `title` (required), `author`, `format`, `language`              | Find and confirm the best-matching edition of a book, then download it.                   |
-| `research_topic`        | `topic` (required), `kind` (`articles`/`books`/`both`), `limit` | Build a reading list of papers and/or books on a topic, then download and summarize each. |
-| `get_paper`             | one of `doi` or `citation`                                      | Fetch a specific paper directly by DOI, or find it by a free-text citation.               |
-| `download_troubleshoot` | `md5`, `doi`, `error` (all optional)                            | Get a decision tree to diagnose and recover from a failed download.                       |
-
-See [Tools](/libgen-mcp/tools/#prompts) for each prompt's full argument table and behavior.
+| For                                                 | See                                                                                                                 |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Worked requests, from a reading list to a citation  | [Use cases](/libgen-mcp/use-cases/)                                                                                 |
+| Every setting, with its default and range           | [Configuration](/libgen-mcp/configuration/)                                                                         |
+| Serving it over HTTP to other people                | [HTTP server mode](/libgen-mcp/http-server-mode/), then [Behind a reverse proxy](/libgen-mcp/deploy/reverse-proxy/) |
+| Running it as a system service or in a container    | [Run as a service](/libgen-mcp/deploy/service/), [Containers and orchestration](/libgen-mcp/deploy/containers/)     |
+| A step above that did not go the way this page says | [Troubleshooting](/libgen-mcp/troubleshooting/)                                                                     |
 
 <LinkCard
 	title="Next: Configuration"
@@ -444,13 +302,13 @@ See [Tools](/libgen-mcp/tools/#prompts) for each prompt's full argument table an
 
 With the package manager you already have (npm, PyPI, Homebrew or NuGet), or by downloading the prebuilt binary from the GitHub releases page. Every channel installs the same single static executable, with nothing else to install and no account to create.
 
-The commands are: npm (`npx @jmrp.io/libgen-mcp` or `npm install -g @jmrp.io/libgen-mcp`), PyPI (`uvx libgen-mcp` or `pipx install libgen-mcp`), Homebrew (`brew install jmrplens/tap/libgen-mcp`) or NuGet (`dnx libgen-mcp` or `dotnet tool install -g libgen-mcp`). Otherwise use the prebuilt binary: download the asset for your platform from the [GitHub releases](https://github.com/jmrplens/libgen-mcp/releases) page (named `libgen-mcp-<os>-<arch>`, covering Linux, macOS, and Windows on amd64 and arm64), mark it executable, and put it on your `PATH`. It is a single fully static executable with nothing else to install. As alternatives, you can pull the multi-arch Docker image `ghcr.io/jmrplens/libgen-mcp:latest`, or build from source with `go install github.com/jmrplens/libgen-mcp/v2/cmd/server@latest` if you have Go 1.27 or newer.
+The commands are: npm (`npx @jmrp.io/libgen-mcp` or `npm install -g @jmrp.io/libgen-mcp`), PyPI (`uvx libgen-mcp` or `pipx install libgen-mcp`), Homebrew (`brew install jmrplens/tap/libgen-mcp`) or NuGet (`dnx libgen-mcp` or `dotnet tool install -g libgen-mcp`). Otherwise use the prebuilt binary: download the asset for your platform from the [GitHub releases](https://github.com/jmrplens/libgen-mcp/releases) page (named `libgen-mcp-<os>-<arch>`, covering Linux, macOS, and Windows on amd64 and arm64), mark it executable, and put it on your `PATH`. It is a single fully static executable with nothing else to install. As alternatives, you can pull the multi-arch Docker image `ghcr.io/jmrplens/libgen-mcp:latest`, or build from source with `go install github.com/jmrplens/libgen-mcp/v2/cmd/server@latest` if you have Go 1.27.1 or newer.
 
 ### Which install method should I use for libgen-mcp?
 
 Whichever package manager is already on the machine, since they all deliver the same binary: npm if you have Node, PyPI if you have `uv` or `pipx`, Homebrew on macOS or Linux, NuGet if you have the .NET SDK.
 
-Any of them can also run the server without installing it — `npx`, `uvx` and `dnx` each do. Use the prebuilt binary if you have none of them: it is a single static executable that needs no Go toolchain, no Docker, and no runtime. Choose Docker if you prefer containers or want a zero-install command your client pulls on first run. Choose `go install` only if you already have Go 1.27 or newer and want to build from source. On Claude Desktop, the one-click `.mcpb` extension from the latest release is the easiest option.
+Any of them can also run the server without installing it — `npx`, `uvx` and `dnx` each do. Use the prebuilt binary if you have none of them: it is a single static executable that needs no Go toolchain, no Docker, and no runtime. Choose Docker if you prefer containers or want a zero-install command your client pulls on first run. Choose `go install` only if you already have Go 1.27.1 or newer and want to build from source. On Claude Desktop, the one-click `.mcpb` extension from the latest release is the easiest option.
 
 ### How do I connect libgen-mcp to Claude or VS Code?
 

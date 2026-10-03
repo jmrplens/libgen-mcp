@@ -33,6 +33,8 @@ explanation is read to understand why.
 | [Claude Desktop extension](install/claude-desktop.md)    | How-to      | The one-click `.mcpb` bundle: install, set up, upgrade, remove.                                                                                      |
 | [Agent plugin](install/agent-plugin.md)                  | How-to      | The Open Plugins and Agent Plugins manifests and the tools that read them.                                                                           |
 | [Install with winget](install/winget.md)                 | How-to      | The Windows Package Manager manifest, pending review.                                                                                                |
+| [Download a paper by DOI](download-a-paper.md)           | How-to      | Asking for a paper by DOI: what to set up, the call the model makes, and what to do on a miss.                                                       |
+| [Citations](citations.md)                                | How-to      | A ready-to-paste BibTeX entry or RIS record from `get_details`, and why its DOI appears only once Crossref confirms it.                              |
 | [Use cases](use-cases.md)                                | How-to      | Worked requests: what to ask, which tools are called in what order, and what comes back.                                                             |
 | [HTTP server mode](http-server-mode.md)                  | How-to      | Deploying the server over streamable HTTP: the declared host, trusted proxies and what identity a deployment has, the limits, TLS, drain and probes. |
 | [Behind a reverse proxy](deploy/reverse-proxy.md)        | How-to      | Complete reverse-proxy configurations: trusted proxies, the public URL, unbuffered streaming and TLS.                                                |
@@ -51,6 +53,9 @@ explanation is read to understand why.
 | [Architecture](architecture.md)                          | Explanation | The HTTP client (mirror discovery, failover, retry/cooldown), the download pipeline, the multi-source chain, and the transports.                     |
 | [How search works](how-search-works.md)                  | Explanation | A conceptual walk through what a search queries, when it escalates beyond the catalog, and how each result's origin guides the download.             |
 | [Scaling and capacity](deploy/scaling.md)                | Explanation | What bounds one process, how the per-caller limits and the outbound budget interact, and when more replicas help.                                    |
+| [Known limitations](limitations.md)                      | Explanation | What the server does not do or does only in part, from OCR and hash checks to Anna's Archive and remote reads, each with its reason.                 |
+| [Comparison with other MCP servers](comparison.md)       | Explanation | How it compares with other servers that search and download papers and books, as read from each project's repository.                                |
+| [Responsible use](responsible-use.md)                    | Explanation | What it does to prefer legally free sources, what it refuses to serve, and how to raise a concern.                                                   |
 | [Security model](security.md)                            | Explanation | What the server trusts and what it refuses: local paths, outbound destinations, untrusted text, HTTP hardening and per-call keys.                    |
 
 The kinds are a label on the rows rather than four directories on disk. The two

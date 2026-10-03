@@ -151,7 +151,7 @@ Tres ajustes tienen que cuadrar para que una réplica se vaya sin hacer fallar u
 
 ## Detectar deriva de configuración
 
-Las réplicas detrás de un balanceador tienen que servir el mismo catálogo, o un cliente ve herramientas distintas según a cuál llegue y nada más lo avisa. `GET /health` lleva `config_digest`, doce caracteres hexadecimales sobre los ajustes que deciden la superficie servida: las fuentes habilitadas, `extra_sources`, `server_fetch`, `remote_downloads`, `enrich`, `confirm_downloads`, la ruta base, el modo sin estado y los tres límites que cambian lo que devuelve una llamada idéntica. No depende del orden donde el ajuste es un conjunto, y es una huella, no un secreto. Compáralo, junto con `build`, en toda la flota:
+Las réplicas detrás de un balanceador tienen que servir el mismo catálogo, o un cliente ve herramientas distintas según a cuál llegue y nada más lo avisa. `GET /health` lleva `config_digest`, doce caracteres hexadecimales sobre los ajustes que deciden la superficie servida; qué ajustes cubre está en [Modo servidor HTTP → El digest de configuración](/libgen-mcp/es/http-server-mode/#el-digest-de-configuración). Es una huella, no un secreto. Compáralo, junto con `build`, en toda la flota:
 
 ```bash
 for replica in 10.0.0.11:8080 10.0.0.12:8080 10.0.0.13:8080; do

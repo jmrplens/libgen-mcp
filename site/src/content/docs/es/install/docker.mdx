@@ -105,7 +105,9 @@ La orden por defecto es `--transport auto`, que mira qué es la entrada estánda
 	Repite la orden por defecto cuando quieras las dos cosas: `docker run image
 	--transport auto --http 0.0.0.0:8080 --log-level debug`. Los ajustes que
 	tienen variable de entorno son más sencillos de pasar con `-e`, que deja la
-	orden en paz.
+	orden en paz, salvo el listener: la orden por defecto escribe `--http`, que
+	gana a `LIBGEN_MCP_HTTP_ADDR`
+	([Contenedores](/libgen-mcp/es/deploy/containers/#configurar-mediante-el-entorno)).
 </Aside>
 
 ### Las descargas y el volumen
@@ -223,7 +225,7 @@ Quita cada etiqueta que descargaste. Un directorio de descargas montado es tuyo 
 ## Notas por plataforma
 
 - **Apple Silicon y Linux arm64** descargan la imagen `linux/arm64` nativa.
-- **Un socket unix en lugar de un puerto.** `--http /run/mcp/libgen.sock` crea un socket en un directorio montado y no publica nada, la forma para un proxy inverso en el mismo host. El socket se crea `0660`, así que los workers del proxy deben estar en el grupo `10001`. [Proxy inverso](/libgen-mcp/es/deploy/reverse-proxy/) tiene la receta completa.
+- **Un socket unix en lugar de un puerto.** `--http /run/mcp/libgen.sock` crea un socket en un directorio montado y no publica nada, la forma para un proxy inverso en el mismo host. El socket se crea `0660`, así que el proxy necesita el grupo del socket; entre dos contenedores lo más sencillo es ejecutar el servidor con el grupo del proxy, como hace [Contenedores](/libgen-mcp/es/deploy/containers/#nginx-delante-con-un-socket-unix-compartido).
 - **`LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES` con la orden por defecto se rechaza al arrancar**, porque el listener por defecto escucha en `0.0.0.0` y esa combinación es justo de lo que trata el rechazo. [Solución de problemas](/libgen-mcp/es/troubleshooting/#el-servidor-no-arranca-la-escotilla-de-direcciones-privadas-en-un-listener-abierto) lo explica.
 - **Compose y Kubernetes** están en [Contenedores](/libgen-mcp/es/deploy/containers/): una definición de servicio, el health check, los volúmenes y los recursos que necesita el servidor.
 

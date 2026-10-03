@@ -240,6 +240,6 @@ func writeTerminalGuidance(out io.Writer, version string) {
 It is waiting for JSON-RPC on standard input, which is what an MCP client sends;
 started from a terminal it will simply sit here. To serve over HTTP instead, pass
 --http (for example --http 127.0.0.1:8080). Setup for each client is at
-https://jmrp.io/docs/libgen-mcp/getting-started/
+https://jmrp.io/docs/libgen-mcp/clients/
 `, version)
 }

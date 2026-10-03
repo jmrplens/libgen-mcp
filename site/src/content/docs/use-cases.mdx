@@ -25,7 +25,7 @@ You talk to the assistant, and the assistant calls the tools. This page walks th
 Two things hold for all of them:
 
 - **Results quote third parties.** Titles, descriptions and extracted text are data the assistant reads, never instructions it follows.
-- **A remote server returns links.** On the [hosted endpoint](/libgen-mcp/hosted/) or any `--http` deployment, `download` answers with a direct link instead of saving a file, and `read` is not there. The workflows that read a document need a local server.
+- **A remote server returns links.** On the [hosted endpoint](/libgen-mcp/hosted/) or any `--http` deployment, `download` answers with a direct link instead of saving a file. `read` is there only where the operator turned it on, as the hosted endpoint has, and even then it never takes a local `path`.
 
 ## Find a specific edition of a book
 
@@ -127,9 +127,10 @@ When `has_more` is true it passes back the returned `cursor` for the next chunk.
 Each match comes with its page and a snippet. A book you already downloaded is read by `path` instead of `md5`, as long as it is inside the working, temp or download directory. A scanned book with no text layer comes back `extractable: false`: there is no OCR.
 
 <Aside type="note">
-	`read` is a local-server tool. On the [hosted endpoint](/libgen-mcp/hosted/)
-	the assistant downloads the link `download` returns with its own fetch tool
-	and reads the file locally instead.
+	Reading by `path` needs a local server. The [hosted
+	endpoint](/libgen-mcp/hosted/) reads by `md5` or `doi` only. On a remote
+	deployment that does not serve `read` at all, the assistant downloads the link
+	`download` returns with its own fetch tool and reads the file locally instead.
 </Aside>
 
 ## Check what a reference points to

@@ -1,8 +1,8 @@
 [
   {
     "slug": "getting-started/",
-    "en": { "title": "Getting started", "description": "Installation and first-run guide" },
-    "es": { "title": "Primeros pasos", "description": "Guía de instalación y primera ejecución" }
+    "en": { "title": "Getting started", "description": "A short tutorial: install the server one way, connect a client, run a first search and read a result" },
+    "es": { "title": "Primeros pasos", "description": "Un tutorial breve: instalar el servidor de una forma, conectar un cliente, hacer una primera búsqueda y leer un resultado" }
   },
   {
     "slug": "clients/",
