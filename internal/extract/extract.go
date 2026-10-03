@@ -102,16 +102,11 @@ func UnrecognizedReason(ext string) string {
 	return "unsupported file extension " + ext + " and its bytes match no supported format (unrecognized)"
 }
 
-// sniffFormat reports the format of a file from its leading bytes, or "" when it
-// matches nothing supported.
-func sniffFormat(path string) string {
-	f, err := os.Open(path)
-	if err != nil {
-		return ""
-	}
-	defer func() { _ = f.Close() }()
+// sniffFormat reports the format of a document from its leading bytes, or ""
+// when it matches nothing supported.
+func sniffFormat(d document) string {
 	head := make([]byte, sniffLen)
-	n, _ := io.ReadFull(f, head)
+	n, _ := io.ReadFull(d.prefix(sniffLen), head)
 	head = head[:n]
 	switch {
 	case bytes.HasPrefix(head, []byte("%PDF-")):
@@ -136,10 +131,13 @@ func appendNote(reason, note string) string {
 	return reason + "; " + note
 }
 
-// Extract reads path and returns a paginated Chunk of its text. It dispatches
-// on the lowercased file extension: PDF, EPUB and TXT are extracted; DjVu,
-// comic archives and proprietary e-book formats are reported as unsupported.
-// A canceled ctx yields the context error.
+// Extract reads the open file f and returns a paginated Chunk of its text. It
+// dispatches on the lowercased extension of f's name: PDF, EPUB and TXT are
+// extracted; DjVu, comic archives and proprietary e-book formats are reported
+// as unsupported. A canceled ctx yields the context error.
+//
+// It reads f and never reopens the file by name, so what it reads is the file
+// the caller opened and checked. The caller keeps ownership of f and closes it.
 //
 // An extracted chunk is also checked for the one failure the rest of the
 // pipeline cannot see: a file whose fonts carry no usable character map extracts
@@ -149,12 +147,16 @@ func appendNote(reason, note string) string {
 // The whole read runs behind the time budget in guard.go, so a document no
 // parser can finish yields a not-extractable Chunk rather than a call that never
 // returns.
-func Extract(ctx context.Context, path string, r Req) (Chunk, error) {
+func Extract(ctx context.Context, f *os.File, r Req) (Chunk, error) {
+	d, err := newDocument(f)
+	if err != nil {
+		return Chunk{}, err
+	}
 	chunk, reason, err := guardedRead(ctx, func(ctx context.Context) (Chunk, error) {
-		return extractChecked(ctx, path, r)
+		return extractChecked(ctx, d, r)
 	})
 	if reason != "" {
-		return Chunk{Format: formatHint(path), Reason: reason}, nil
+		return Chunk{Format: formatHint(d), Reason: reason}, nil
 	}
 	return chunk, err
 }
@@ -162,8 +164,8 @@ func Extract(ctx context.Context, path string, r Req) (Chunk, error) {
 // extractChecked is Extract's work: dispatch on format, then judge the quality
 // of whatever text came back. It is separate so the watchdog has a single
 // function to run.
-func extractChecked(ctx context.Context, path string, r Req) (Chunk, error) {
-	chunk, err := extractByFormat(ctx, path, r)
+func extractChecked(ctx context.Context, d document, r Req) (Chunk, error) {
+	chunk, err := extractByFormat(ctx, d, r)
 	if err != nil || !chunk.Extractable {
 		return chunk, err
 	}
@@ -171,20 +173,20 @@ func extractChecked(ctx context.Context, path string, r Req) (Chunk, error) {
 	return chunk, nil
 }
 
-// extractByFormat is Extract's dispatcher: it routes path to the extractor for
-// its format, identifying an extensionless file by its bytes.
-func extractByFormat(ctx context.Context, path string, r Req) (Chunk, error) {
+// extractByFormat is Extract's dispatcher: it routes d to the extractor for its
+// format, identifying an extensionless file by its bytes.
+func extractByFormat(ctx context.Context, d document, r Req) (Chunk, error) {
 	if err := ctx.Err(); err != nil {
 		return Chunk{}, err
 	}
-	ext := strings.ToLower(filepath.Ext(path))
+	ext := strings.ToLower(filepath.Ext(d.name))
 	switch ext {
 	case ".pdf":
-		return extractPDF(ctx, path, r)
+		return extractPDF(ctx, d, r)
 	case ".epub":
-		return extractEPUB(ctx, path, r)
+		return extractEPUB(ctx, d, r)
 	case ".txt":
-		return extractTXT(ctx, path, r)
+		return extractTXT(ctx, d, r)
 	case ".djvu", ".cbr", ".cbz", ".mobi", ".azw", ".azw3":
 		return Chunk{
 			Format: strings.TrimPrefix(ext, "."),
@@ -194,11 +196,11 @@ func extractByFormat(ctx context.Context, path string, r Req) (Chunk, error) {
 		// The name did not identify the file, so its bytes must: anything fetched by
 		// content address, or from a CDN that announces no filename, arrives with no
 		// extension, and a real book would otherwise be reported as unsupported.
-		switch sniffFormat(path) {
+		switch sniffFormat(d) {
 		case "pdf":
-			return extractPDF(ctx, path, r)
+			return extractPDF(ctx, d, r)
 		case "epub":
-			return extractEPUB(ctx, path, r)
+			return extractEPUB(ctx, d, r)
 		}
 		return Chunk{Reason: UnrecognizedReason(ext)}, nil
 	}

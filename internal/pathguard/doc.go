@@ -16,7 +16,9 @@
 // message naming the variable that would widen it, because a containment that
 // cannot be widened on purpose gets switched off by whoever hits it.
 //
-// Resolution happens through symlinks and the refusal is re-checked on the open
-// file descriptor, because the interesting attack is not a path that names a
-// secret — it is a path that named something harmless when it was checked.
+// Resolution happens through symlinks, the file a reader gets is opened relative
+// to the root it was found under so the open itself cannot leave that root, and
+// the file conditions are re-checked on the open descriptor, because the
+// interesting attack is not a path that names a secret — it is a path that named
+// something harmless when it was checked.
 package pathguard

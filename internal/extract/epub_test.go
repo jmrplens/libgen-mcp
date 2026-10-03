@@ -142,7 +142,7 @@ func TestExtract_MalformedEPUB(t *testing.T) {
 		t.Fatalf("close file: %v", err)
 	}
 
-	c, err := Extract(context.Background(), path, Req{})
+	c, err := Extract(context.Background(), openFile(t, path), Req{})
 	if err != nil {
 		t.Fatalf("expected nil error for malformed EPUB, got %v", err)
 	}
@@ -190,21 +190,21 @@ func TestExtractEPUB_ContextCancelledDirect(t *testing.T) {
 	path := buildEPUB(t, t.TempDir())
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := extractEPUB(ctx, path, Req{}); err == nil {
+	if _, err := extractEPUB(ctx, docFor(t, path), Req{}); err == nil {
 		t.Fatal("expected a context error, got nil")
 	}
 }
 
 // TestExtractEPUB_NotAZip verifies that a .epub whose bytes are not a valid ZIP
 // archive is reported as not extractable with a reason noting the archive could
-// not be opened, exercising extractEPUB's zip.OpenReader failure branch (which
+// not be opened, exercising extractEPUB's zip.NewReader failure branch (which
 // TestExtract_MalformedEPUB, using a valid ZIP, does not reach).
 func TestExtractEPUB_NotAZip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "notazip.epub")
 	if err := os.WriteFile(path, []byte("this is not a zip archive"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	c, err := Extract(context.Background(), path, Req{})
+	c, err := Extract(context.Background(), openFile(t, path), Req{})
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -222,7 +222,7 @@ func TestExtractEPUB_NotAZip(t *testing.T) {
 // and extractEPUB returns it rather than a chunk.
 func TestExtractEPUB_ContextCancelledMidSpine(t *testing.T) {
 	path := buildEPUB(t, t.TempDir())
-	if _, err := extractEPUB(passErr(1), path, Req{}); err == nil {
+	if _, err := extractEPUB(passErr(1), docFor(t, path), Req{}); err == nil {
 		t.Fatal("expected a context error propagated from the spine walk, got nil")
 	}
 }
@@ -252,7 +252,7 @@ func TestExtractEPUB_MissingChapterFile(t *testing.T) {
 		// chapter1.xhtml is deliberately absent from the archive.
 	}
 	path := writeEPUB(t, t.TempDir(), "missing-chapter.epub", files)
-	c, err := Extract(context.Background(), path, Req{})
+	c, err := Extract(context.Background(), openFile(t, path), Req{})
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -272,7 +272,7 @@ func TestExtractEPUB_MalformedContainerXML(t *testing.T) {
 		"META-INF/container.xml": `<?xml version="1.0"?><container><rootfiles><rootfile`,
 	}
 	path := writeEPUB(t, t.TempDir(), "bad-container.epub", files)
-	c, err := Extract(context.Background(), path, Req{})
+	c, err := Extract(context.Background(), openFile(t, path), Req{})
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -298,7 +298,7 @@ func TestExtractEPUB_MissingOPFFile(t *testing.T) {
 		// OEBPS/content.opf is deliberately absent.
 	}
 	path := writeEPUB(t, t.TempDir(), "missing-opf.epub", files)
-	c, err := Extract(context.Background(), path, Req{})
+	c, err := Extract(context.Background(), openFile(t, path), Req{})
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -322,7 +322,7 @@ func TestReadZipEntry_ChecksumError(t *testing.T) {
 		t.Fatalf("open zip: %v", err)
 	}
 	defer func() { _ = zr.Close() }()
-	if _, _, err = readZipEntry(zr, "OEBPS/c1.xhtml"); err == nil {
+	if _, _, err = readZipEntry(&zr.Reader, "OEBPS/c1.xhtml"); err == nil {
 		t.Fatal("expected a checksum error, got nil")
 	}
 }
@@ -339,7 +339,7 @@ func TestReadZipEntry_OpenError(t *testing.T) {
 		t.Fatalf("open zip: %v", err)
 	}
 	defer func() { _ = zr.Close() }()
-	if _, _, err = readZipEntry(zr, "OEBPS/c1.xhtml"); err == nil {
+	if _, _, err = readZipEntry(&zr.Reader, "OEBPS/c1.xhtml"); err == nil {
 		t.Fatal("expected an open/decompress error, got nil")
 	}
 }
@@ -348,7 +348,7 @@ func TestReadZipEntry_OpenError(t *testing.T) {
 // spine order, reporting the epub format.
 func TestExtract_EPUB(t *testing.T) {
 	path := buildEPUB(t, t.TempDir())
-	c, err := Extract(context.Background(), path, Req{Offset: 0, MaxChars: 500})
+	c, err := Extract(context.Background(), openFile(t, path), Req{Offset: 0, MaxChars: 500})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -368,7 +368,7 @@ func TestExtract_EPUB(t *testing.T) {
 // call at that offset continues the document.
 func TestExtract_EPUBPagination(t *testing.T) {
 	path := buildEPUB(t, t.TempDir())
-	c, err := Extract(context.Background(), path, Req{Offset: 0, MaxChars: 20})
+	c, err := Extract(context.Background(), openFile(t, path), Req{Offset: 0, MaxChars: 20})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -378,7 +378,7 @@ func TestExtract_EPUBPagination(t *testing.T) {
 	if !c.HasMore || c.NextCursor.Char != 20 {
 		t.Fatalf("want HasMore and NextCursor.Char==20, got %+v", c)
 	}
-	c2, err := Extract(context.Background(), path, Req{Offset: c.NextCursor.Char, MaxChars: 20})
+	c2, err := Extract(context.Background(), openFile(t, path), Req{Offset: c.NextCursor.Char, MaxChars: 20})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -398,7 +398,7 @@ func TestExtract_EPUBNoRootfile(t *testing.T) {
 </container>`,
 	}
 	path := writeEPUB(t, t.TempDir(), "no-rootfile.epub", files)
-	c, err := Extract(context.Background(), path, Req{})
+	c, err := Extract(context.Background(), openFile(t, path), Req{})
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -424,7 +424,7 @@ func TestExtract_EPUBMalformedOPF(t *testing.T) {
 		"OEBPS/content.opf": `<?xml version="1.0"?><package><manifest><item`,
 	}
 	path := writeEPUB(t, t.TempDir(), "bad-opf.epub", files)
-	c, err := Extract(context.Background(), path, Req{})
+	c, err := Extract(context.Background(), openFile(t, path), Req{})
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -461,7 +461,7 @@ func TestExtract_EPUBMissingSpineItem(t *testing.T) {
 		"OEBPS/chapter1.xhtml": `<html><body><p>Only valid chapter present.</p></body></html>`,
 	}
 	path := writeEPUB(t, t.TempDir(), "missing-spine-item.epub", files)
-	c, err := Extract(context.Background(), path, Req{MaxChars: 500})
+	c, err := Extract(context.Background(), openFile(t, path), Req{MaxChars: 500})
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -494,7 +494,7 @@ func TestExtract_EPUBNoExtractableText(t *testing.T) {
 </package>`,
 	}
 	path := writeEPUB(t, t.TempDir(), "empty-spine.epub", files)
-	c, err := Extract(context.Background(), path, Req{})
+	c, err := Extract(context.Background(), openFile(t, path), Req{})
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -532,7 +532,7 @@ func TestExtract_EPUBOverCapTruncated(t *testing.T) {
 		"OEBPS/chapter1.xhtml": big,
 	}
 	path := writeEPUB(t, t.TempDir(), "oversized.epub", files)
-	c, err := Extract(context.Background(), path, Req{MaxChars: 100})
+	c, err := Extract(context.Background(), openFile(t, path), Req{MaxChars: 100})
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}

@@ -58,15 +58,14 @@ func notReadableEPUBReason(err error) string {
 // extractEPUB reads an EPUB as a ZIP archive, concatenates the text of its
 // spine documents in reading order and returns a character-paginated Chunk. A
 // malformed archive yields a not-extractable Chunk.
-func extractEPUB(ctx context.Context, filePath string, r Req) (Chunk, error) {
+func extractEPUB(ctx context.Context, d document, r Req) (Chunk, error) {
 	if err := ctx.Err(); err != nil {
 		return Chunk{}, err
 	}
-	zr, err := zip.OpenReader(filePath)
+	zr, err := zip.NewReader(d.r, d.size)
 	if err != nil {
 		return Chunk{Format: "epub", Reason: cannotOpenEPUBReason(err)}, nil
 	}
-	defer func() { _ = zr.Close() }()
 
 	full, truncated, err := readEPUBText(ctx, zr)
 	if err != nil {
@@ -90,7 +89,7 @@ func extractEPUB(ctx context.Context, filePath string, r Req) (Chunk, error) {
 // concatenated plain text of all chapter documents. The returned bool reports
 // whether any spine document was clipped at the per-entry maxTextFileBytes cap,
 // so its remaining text is unavailable.
-func readEPUBText(ctx context.Context, zr *zip.ReadCloser) (text string, truncated bool, err error) {
+func readEPUBText(ctx context.Context, zr *zip.Reader) (text string, truncated bool, err error) {
 	opf, err := opfPath(zr)
 	if err != nil {
 		return "", false, err
@@ -130,7 +129,7 @@ func readEPUBText(ctx context.Context, zr *zip.ReadCloser) (text string, truncat
 }
 
 // opfPath returns the OPF package path referenced by META-INF/container.xml.
-func opfPath(zr *zip.ReadCloser) (string, error) {
+func opfPath(zr *zip.Reader) (string, error) {
 	data, _, err := readZipEntry(zr, "META-INF/container.xml")
 	if err != nil {
 		return "", fmt.Errorf("read container.xml: %w", err)
@@ -146,7 +145,7 @@ func opfPath(zr *zip.ReadCloser) (string, error) {
 }
 
 // parseOPF reads and unmarshals the OPF package document at name.
-func parseOPF(zr *zip.ReadCloser, name string) (opfPackage, error) {
+func parseOPF(zr *zip.Reader, name string) (opfPackage, error) {
 	data, _, err := readZipEntry(zr, name)
 	if err != nil {
 		return opfPackage{}, fmt.Errorf("read OPF: %w", err)
@@ -162,7 +161,7 @@ func parseOPF(zr *zip.ReadCloser, name string) (opfPackage, error) {
 // avoid unbounded memory use on a malicious archive. The returned bool reports
 // whether the entry was clipped at maxTextFileBytes (its content is at least
 // that large), so remaining bytes were dropped.
-func readZipEntry(zr *zip.ReadCloser, name string) (data []byte, clipped bool, err error) {
+func readZipEntry(zr *zip.Reader, name string) (data []byte, clipped bool, err error) {
 	var entry *zip.File
 	for _, f := range zr.File {
 		if f.Name == name {

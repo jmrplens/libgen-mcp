@@ -17,6 +17,13 @@ import "syscall"
 // leaf between the two syscalls and redirect the read or the write.
 const noFollowFlag = syscall.O_NOFOLLOW
 
+// readOpenFlag is added to the flags of [OpenReadableFile]'s open. The checks
+// before the open refuse a fifo, but a fifo planted after them would block a
+// plain O_RDONLY open until some writer appeared; non-blocking, the open returns
+// at once and the Stat on the descriptor refuses it. A regular file reads the
+// same either way.
+const readOpenFlag = syscall.O_NONBLOCK
+
 // noFollowSupported reports whether this platform can refuse the leaf swap in
 // the open itself. It is what the tests assert against rather than naming an
 // operating system.

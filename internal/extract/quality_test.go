@@ -108,7 +108,7 @@ func TestExtract_ReportsADamagedTextLayer(t *testing.T) {
 	if err := os.WriteFile(broken, []byte(strings.Repeat("qwrtp lkjhg zxcvbnm ffgghh mnbvcxz ", 20)), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	c, err := Extract(context.Background(), broken, Req{})
+	c, err := Extract(context.Background(), openFile(t, broken), Req{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestExtract_ReportsADamagedTextLayer(t *testing.T) {
 	if werr := os.WriteFile(healthy, []byte(englishSample), 0o600); werr != nil {
 		t.Fatal(werr)
 	}
-	c, err = Extract(context.Background(), healthy, Req{})
+	c, err = Extract(context.Background(), openFile(t, healthy), Req{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -14,24 +14,25 @@ import (
 func TestPdfOutline_ContextCancelledDirect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := pdfOutline(ctx, "testdata/bookmarked.pdf"); err == nil {
+	if _, err := pdfOutline(ctx, docFor(t, "testdata/bookmarked.pdf")); err == nil {
 		t.Fatal("expected a context error, got nil")
 	}
 }
 
-// TestOutline_PDFMissingFile verifies pdfOutline's open-failure path: a
-// non-existent .pdf path is reported as not extractable, with the reason the
-// text path gives for the same path, rather than propagating a hard error.
-func TestOutline_PDFMissingFile(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "does-not-exist.pdf")
-	res, err := Outline(context.Background(), path)
+// TestOutline_PDFUnreadableFile verifies pdfOutline's read-failure path: a .pdf
+// that opens but cannot be read (a directory) is reported as not extractable,
+// with the reason the text path gives for the same file, rather than
+// propagating a hard error.
+func TestOutline_PDFUnreadableFile(t *testing.T) {
+	path := unreadableFixture(t, t.TempDir(), "unreadable.pdf")
+	res, err := Outline(context.Background(), openFile(t, path))
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 	if res.Extractable {
 		t.Fatalf("expected not extractable, got %+v", res)
 	}
-	chunk, err := Extract(context.Background(), path, Req{})
+	chunk, err := Extract(context.Background(), openFile(t, path), Req{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +47,7 @@ func TestOutline_PDFMissingFile(t *testing.T) {
 // Level 0 with their titles and 1-based page numbers, reported with Format
 // "pdf" and Extractable true.
 func TestOutline_PDFBookmarks(t *testing.T) {
-	res, err := Outline(context.Background(), "testdata/bookmarked.pdf")
+	res, err := Outline(context.Background(), openFile(t, "testdata/bookmarked.pdf"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +93,7 @@ func TestOutline_PDFLeavesNoConfigDirectory(t *testing.T) {
 	t.Setenv("HOME", dir)
 	t.Setenv("AppData", dir)
 
-	res, err := Outline(context.Background(), "testdata/bookmarked.pdf")
+	res, err := Outline(context.Background(), openFile(t, "testdata/bookmarked.pdf"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +115,7 @@ func TestOutline_PDFLeavesNoConfigDirectory(t *testing.T) {
 // with no entries, and its reason says so without borrowing the scanned/no-text
 // wording that belongs to a different failure.
 func TestOutline_PDFNoBookmarks(t *testing.T) {
-	res, err := Outline(context.Background(), "testdata/sample.pdf")
+	res, err := Outline(context.Background(), openFile(t, "testdata/sample.pdf"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +143,7 @@ func TestOutline_PDFNoBookmarks(t *testing.T) {
 // at all, so outline must report exactly what the text path reports, and report
 // it as not extractable.
 func TestOutline_PDFScannedNoBookmarks(t *testing.T) {
-	res, err := Outline(context.Background(), "testdata/scanned.pdf")
+	res, err := Outline(context.Background(), openFile(t, "testdata/scanned.pdf"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +153,7 @@ func TestOutline_PDFScannedNoBookmarks(t *testing.T) {
 	if len(res.Entries) != 0 {
 		t.Errorf("want no entries, got %+v", res.Entries)
 	}
-	chunk, err := Extract(context.Background(), "testdata/scanned.pdf", Req{})
+	chunk, err := Extract(context.Background(), openFile(t, "testdata/scanned.pdf"), Req{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +175,7 @@ func TestOutline_PDFGraphicsOnlyNoBookmarks(t *testing.T) {
 	if err := os.WriteFile(path, graphicsOnlyPDF(), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	res, err := Outline(context.Background(), path)
+	res, err := Outline(context.Background(), openFile(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +196,7 @@ func TestOutline_PDFMalformed(t *testing.T) {
 	if err := os.WriteFile(path, []byte("%PDF-1.7 definitely not a pdf"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	res, err := Outline(context.Background(), path)
+	res, err := Outline(context.Background(), openFile(t, path))
 	if err != nil {
 		t.Fatalf("expected nil error for a malformed PDF, got %v", err)
 	}
@@ -205,7 +206,7 @@ func TestOutline_PDFMalformed(t *testing.T) {
 	if len(res.Entries) != 0 {
 		t.Errorf("want no entries for a malformed PDF, got %+v", res.Entries)
 	}
-	chunk, err := Extract(context.Background(), path, Req{})
+	chunk, err := Extract(context.Background(), openFile(t, path), Req{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +220,7 @@ func TestOutline_PDFMalformed(t *testing.T) {
 // time the text-layer probe runs propagates out of pdfNoOutlineResult as an
 // error rather than being reported as a document without a table of contents.
 func TestPdfNoOutlineResult_CtxCancelled(t *testing.T) {
-	if _, err := pdfNoOutlineResult(passErr(0), "testdata/sample.pdf"); err == nil {
+	if _, err := pdfNoOutlineResult(passErr(0), docFor(t, "testdata/sample.pdf")); err == nil {
 		t.Fatal("expected the context error to propagate, got nil")
 	}
 }
@@ -233,7 +234,7 @@ func TestProbePDFTextLayer_Unreadable(t *testing.T) {
 	if err := os.WriteFile(path, []byte("not a pdf at all"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	state, reason, err := probePDFTextLayer(context.Background(), path)
+	state, reason, err := probePDFTextLayer(context.Background(), docFor(t, path))
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -287,7 +288,7 @@ func TestOutline_PDFTextAfterABlankFirstPage(t *testing.T) {
 	if err := os.WriteFile(path, blankThenTextPDF(), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	res, err := Outline(context.Background(), path)
+	res, err := Outline(context.Background(), openFile(t, path))
 	if err != nil {
 		t.Fatal(err)
 	}

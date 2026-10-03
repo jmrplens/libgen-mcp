@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -300,35 +301,46 @@ func notExtractableSteps(out ReadOutput) []string {
 	}
 }
 
-// resolveReadPath returns the file to extract from. In local mode it confines
-// the caller's path and uses it directly with a no-op release; otherwise it
-// fetches the item to a server-side temp file, returning the caller-owned
-// release func.
+// openReadFile returns the open file to extract from, and a release func the
+// caller defers, which closes it. In local mode it confines the caller's path
+// and opens it in the same step; otherwise it fetches the item to a server-side
+// temp file and opens that, and release also hands the temp file back.
 //
-// The containment happens here, once, rather than at the five places
-// internal/extract opens a file. A guard applied per opener is a guard the sixth
-// opener does not have, and a path that reached this function unconfined has
-// already been accepted by the time anything opens it.
-func resolveReadPath(ctx context.Context, mcpReq *mcp.CallToolRequest, c *libgen.Client, cfg *config.Config, in ReadInput) (path string, release func(), err error) {
-	noRelease := func() {
-		// Intentionally empty: nothing to release for a local path.
-	}
+// The containment happens here, once, and what it hands on is a descriptor,
+// never a path. internal/extract reads only the file it is given, so the file
+// read is the file the containment checked: a path passed on instead would be
+// reopened by name, and a local principal writing in an allowed root could swap
+// what that name resolves to after the check had passed.
+func openReadFile(ctx context.Context, mcpReq *mcp.CallToolRequest, c *libgen.Client, cfg *config.Config, in ReadInput) (*os.File, func(), error) {
 	if in.Path != "" {
-		// A caller-supplied local path owns no temp file, so its release is a no-op.
 		// No size bound here: which leg runs is decided later by the file's format,
 		// the text legs already cap themselves at 8 MiB inside internal/extract, and
 		// a PDF is read by seeking rather than loaded whole, so a byte cap would
 		// refuse large legitimate books without bounding the work.
-		canonical, cerr := pathguard.CanonicalReadableFile(in.Path, 0, readRoots(cfg))
-		if cerr != nil {
-			return "", noRelease, cerr
+		f, err := pathguard.OpenReadableFile(in.Path, 0, readRoots(cfg))
+		if err != nil {
+			return nil, nil, err
 		}
-		return canonical, noRelease, nil
+		return f, func() { _ = f.Close() }, nil
 	}
 	// read fetches the whole file before it can return a single page, so the
 	// transfer is reported the same way download reports its own.
-	return c.FetchToTemp(ctx, libgen.Item{MD5: in.MD5, DOI: in.DOI, Source: in.Source},
+	path, release, err := c.FetchToTemp(ctx, libgen.Item{MD5: in.MD5, DOI: in.DOI, Source: in.Source},
 		progressNotifier(ctx, mcpReq))
+	if err != nil {
+		return nil, nil, err
+	}
+	// The temp file is this server's own, under a directory it created, so its
+	// path names nothing a caller chose.
+	f, err := os.Open(path) //#nosec G304 -- a server-created temp file, not a caller-supplied path.
+	if err != nil {
+		release()
+		return nil, nil, fmt.Errorf("open fetched file: %w", err)
+	}
+	return f, func() {
+		_ = f.Close()
+		release()
+	}, nil
 }
 
 // readFind runs the find-mode branch: it decodes the incoming cursor to a
@@ -345,13 +357,13 @@ func readFind(ctx context.Context, mcpReq *mcp.CallToolRequest, c *libgen.Client
 		}
 		startMatch = cur.Match
 	}
-	path, release, err := resolveReadPath(ctx, mcpReq, c, cfg, in)
+	f, release, err := openReadFile(ctx, mcpReq, c, cfg, in)
 	if err != nil {
 		return ReadOutput{}, err
 	}
 	defer release()
 
-	res, err := extract.Search(ctx, path, in.Find, extract.SearchOpts{MaxMatches: in.MaxMatches, StartMatch: startMatch})
+	res, err := extract.Search(ctx, f, in.Find, extract.SearchOpts{MaxMatches: in.MaxMatches, StartMatch: startMatch})
 	if err != nil {
 		return ReadOutput{}, err
 	}
@@ -371,13 +383,13 @@ func readFind(ctx context.Context, mcpReq *mcp.CallToolRequest, c *libgen.Client
 // not-extractable file is a normal result (extractable=false with a reason), not
 // an error.
 func readOutline(ctx context.Context, mcpReq *mcp.CallToolRequest, c *libgen.Client, cfg *config.Config, in ReadInput) (ReadOutput, error) {
-	path, release, err := resolveReadPath(ctx, mcpReq, c, cfg, in)
+	f, release, err := openReadFile(ctx, mcpReq, c, cfg, in)
 	if err != nil {
 		return ReadOutput{}, err
 	}
 	defer release()
 
-	res, err := extract.Outline(ctx, path)
+	res, err := extract.Outline(ctx, f)
 	if err != nil {
 		return ReadOutput{}, err
 	}
@@ -417,13 +429,13 @@ func readSequential(ctx context.Context, mcpReq *mcp.CallToolRequest, c *libgen.
 	if err != nil {
 		return ReadOutput{}, err
 	}
-	path, release, err := resolveReadPath(ctx, mcpReq, c, cfg, in)
+	f, release, err := openReadFile(ctx, mcpReq, c, cfg, in)
 	if err != nil {
 		return ReadOutput{}, err
 	}
 	defer release()
 
-	chunk, err := extract.Extract(ctx, path, req)
+	chunk, err := extract.Extract(ctx, f, req)
 	if err != nil {
 		return ReadOutput{}, err
 	}

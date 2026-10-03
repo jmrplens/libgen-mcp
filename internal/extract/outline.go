@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/xml"
 	"errors"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -47,8 +48,10 @@ type ncxNavPoint struct {
 	Points []ncxNavPoint `xml:"navPoint"`
 }
 
-// Outline reads path and returns its table of contents. It dispatches on the
-// lowercased file extension: EPUB outlines are parsed natively; PDF outlines are
+// Outline reads the open file f and returns its table of contents. It reads f
+// and never reopens the file by name; the caller keeps ownership of f. It
+// dispatches on the lowercased extension of f's name: EPUB outlines are parsed
+// natively; PDF outlines are
 // read best-effort via pdfcpu bookmarks; TXT has no outline; DjVu, comic
 // archives and proprietary e-book formats are reported as unsupported. A
 // canceled ctx yields the context error.
@@ -56,30 +59,34 @@ type ncxNavPoint struct {
 // The whole read runs behind the time budget in guard.go, so a document no
 // parser can finish yields a not-extractable result rather than a call that
 // never returns.
-func Outline(ctx context.Context, filePath string) (OutlineResult, error) {
+func Outline(ctx context.Context, f *os.File) (OutlineResult, error) {
+	d, err := newDocument(f)
+	if err != nil {
+		return OutlineResult{}, err
+	}
 	res, reason, err := guardedRead(ctx, func(ctx context.Context) (OutlineResult, error) {
-		return outlineChecked(ctx, filePath)
+		return outlineChecked(ctx, d)
 	})
 	if reason != "" {
-		return OutlineResult{Format: formatHint(filePath), Reason: reason}, nil
+		return OutlineResult{Format: formatHint(d), Reason: reason}, nil
 	}
 	return res, err
 }
 
 // outlineChecked is Outline's work: dispatch on format. It is separate so the
 // watchdog has a single function to run.
-func outlineChecked(ctx context.Context, filePath string) (OutlineResult, error) {
+func outlineChecked(ctx context.Context, d document) (OutlineResult, error) {
 	if err := ctx.Err(); err != nil {
 		return OutlineResult{}, err
 	}
-	ext := strings.ToLower(filepath.Ext(filePath))
+	ext := strings.ToLower(filepath.Ext(d.name))
 	switch ext {
 	case ".epub":
-		return epubOutline(ctx, filePath)
+		return epubOutline(ctx, d)
 	case ".pdf":
-		return pdfOutline(ctx, filePath)
+		return pdfOutline(ctx, d)
 	case ".txt":
-		return txtOutline(filePath), nil
+		return txtOutline(d), nil
 	case ".djvu", ".cbr", ".cbz", ".mobi", ".azw", ".azw3":
 		return OutlineResult{
 			Format: strings.TrimPrefix(ext, "."),
@@ -87,11 +94,11 @@ func outlineChecked(ctx context.Context, filePath string) (OutlineResult, error)
 		}, nil
 	default:
 		// Same reasoning as Extract: an extensionless file is identified by content.
-		switch sniffFormat(filePath) {
+		switch sniffFormat(d) {
 		case "pdf":
-			return pdfOutline(ctx, filePath)
+			return pdfOutline(ctx, d)
 		case "epub":
-			return epubOutline(ctx, filePath)
+			return epubOutline(ctx, d)
 		}
 		return OutlineResult{Reason: UnrecognizedReason(ext)}, nil
 	}
@@ -110,15 +117,14 @@ const noTXTOutlineReason = "plain text carries no table of contents; read it seq
 // ctx yields the context error; a structurally broken archive is reported as
 // not extractable; an EPUB with no navigation is handed to epubNoOutlineResult,
 // which separates "readable but untitled" from "no text at all".
-func epubOutline(ctx context.Context, filePath string) (OutlineResult, error) {
+func epubOutline(ctx context.Context, d document) (OutlineResult, error) {
 	if err := ctx.Err(); err != nil {
 		return OutlineResult{}, err
 	}
-	zr, err := zip.OpenReader(filePath)
+	zr, err := zip.NewReader(d.r, d.size)
 	if err != nil {
 		return OutlineResult{Format: "epub", Reason: cannotOpenEPUBReason(err)}, nil
 	}
-	defer func() { _ = zr.Close() }()
 
 	entries, err := readEPUBOutline(ctx, zr)
 	if err != nil {
@@ -134,7 +140,7 @@ func epubOutline(ctx context.Context, filePath string) (OutlineResult, error) {
 // navigation entries, by asking the same question the text path asks: does the
 // spine yield any text? It keeps outline mode from telling the caller a
 // text-free EPUB is merely missing its table of contents.
-func epubNoOutlineResult(ctx context.Context, zr *zip.ReadCloser) (OutlineResult, error) {
+func epubNoOutlineResult(ctx context.Context, zr *zip.Reader) (OutlineResult, error) {
 	// The cap flag readEPUBText also returns is irrelevant here: this call only
 	// asks whether any text exists, not how much of it was kept.
 	full, _, err := readEPUBText(ctx, zr)
@@ -156,23 +162,21 @@ func epubOutlineFailure(err error) (OutlineResult, error) {
 	return OutlineResult{Format: "epub", Reason: notReadableEPUBReason(err)}, nil
 }
 
-// txtOutline reports a plain-text file's (necessarily absent) table of contents.
-// It still opens the file, so that an unreadable one is reported exactly as the
-// text path reports it rather than as a readable document that happens to have
-// no chapters.
-func txtOutline(filePath string) OutlineResult {
-	f, err := os.Open(filePath)
-	if err != nil {
-		return OutlineResult{Format: "txt", Reason: cannotOpenTextReason(err)}
+// txtOutline reports a plain-text document's (necessarily absent) table of
+// contents. It still reads from the document, so that an unreadable one is
+// reported exactly as the text path reports it rather than as a readable
+// document that happens to have no chapters.
+func txtOutline(d document) OutlineResult {
+	if _, err := d.r.ReadAt(make([]byte, 1), 0); err != nil && !errors.Is(err, io.EOF) {
+		return OutlineResult{Format: "txt", Reason: cannotReadTextReason(err)}
 	}
-	_ = f.Close()
 	return OutlineResult{Format: "txt", Extractable: true, Reason: noTXTOutlineReason}
 }
 
 // readEPUBOutline resolves the OPF, then returns the EPUB3 nav entries if
 // present, else the EPUB2 NCX entries, else nil (a valid EPUB with no TOC). A
 // non-nil error is either a structural OPF failure or ctx cancellation.
-func readEPUBOutline(ctx context.Context, zr *zip.ReadCloser) ([]OutlineEntry, error) {
+func readEPUBOutline(ctx context.Context, zr *zip.Reader) ([]OutlineEntry, error) {
 	opf, err := opfPath(zr)
 	if err != nil {
 		return nil, err
@@ -196,7 +200,7 @@ func readEPUBOutline(ctx context.Context, zr *zip.ReadCloser) ([]OutlineEntry, e
 // navEntries parses the EPUB3 navigation document (manifest item with the "nav"
 // property). A missing or malformed nav document yields nil entries; only ctx
 // cancellation yields a non-nil error.
-func navEntries(ctx context.Context, zr *zip.ReadCloser, pkg opfPackage, baseDir string) ([]OutlineEntry, error) {
+func navEntries(ctx context.Context, zr *zip.Reader, pkg opfPackage, baseDir string) ([]OutlineEntry, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -227,7 +231,7 @@ func navEntries(ctx context.Context, zr *zip.ReadCloser, pkg opfPackage, baseDir
 
 // entryBytes reads the named archive entry, returning nil when it is absent so
 // a missing navigation document reads as "no outline" rather than an error.
-func entryBytes(zr *zip.ReadCloser, name string) []byte {
+func entryBytes(zr *zip.Reader, name string) []byte {
 	data, _, err := readZipEntry(zr, name)
 	if err != nil {
 		return nil
@@ -370,7 +374,7 @@ func firstOL(n *html.Node) *html.Node {
 // ncxEntries parses the EPUB2 NCX navMap into a flat, in-order slice. A missing
 // or malformed NCX yields nil entries; only ctx cancellation yields a non-nil
 // error.
-func ncxEntries(ctx context.Context, zr *zip.ReadCloser, pkg opfPackage, baseDir string) ([]OutlineEntry, error) {
+func ncxEntries(ctx context.Context, zr *zip.Reader, pkg opfPackage, baseDir string) ([]OutlineEntry, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

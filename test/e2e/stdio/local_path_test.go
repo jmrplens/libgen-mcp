@@ -223,6 +223,19 @@ func TestLocalPath_HomeDirectoryIsNotAnImplicitRoot(t *testing.T) {
 func assertReadRefused(t *testing.T, s *session, body string, isError bool) {
 	t.Helper()
 
+	assertRefusalBody(t, body, isError)
+	// The narrowing is silent otherwise, and a working setup that stops working
+	// deserves the reason rather than a puzzle.
+	s.waitForStderr(t, "working directory is the home directory", 10*time.Second)
+}
+
+// assertRefusalBody checks what every containment refusal owes its caller,
+// whatever made the path fall outside the roots: that it happened, that it says
+// what it was and which variable widens the roots, and that the file's contents
+// are not in the answer anyway.
+func assertRefusalBody(t *testing.T, body string, isError bool) {
+	t.Helper()
+
 	if !isError {
 		t.Fatalf("a file in the home directory was read: %s", body)
 	}
@@ -238,9 +251,43 @@ func assertReadRefused(t *testing.T, s *session, body string, isError bool) {
 	if strings.Contains(body, "the-operators-own-key") {
 		t.Errorf("the refused read returned the file's contents anyway: %s", body)
 	}
-	// The narrowing is silent otherwise, and a working setup that stops working
-	// deserves the reason rather than a puzzle.
-	s.waitForStderr(t, "working directory is the home directory", 10*time.Second)
+}
+
+// TestLocalPath_SymlinkOutOfTheWorkspaceIsRefused starts the real binary in a
+// workspace and names a symlink inside it that points at a file in the home
+// directory above it.
+//
+// The path a caller passes is inside a root, and the file it reaches is not.
+// What decides that in the shipped binary is the resolution through symlinks
+// and the open relative to the root the path was found under, so this is the
+// case that fails if either is lost between internal/pathguard and the read
+// tool: a read that opened the caller's path as given would return the home
+// directory's file. The swap of a checked file for such a link, after the check,
+// is the same escape a moment later, and internal/pathguard's tests drive that
+// one deterministically, which a process boundary cannot.
+func TestLocalPath_SymlinkOutOfTheWorkspaceIsRefused(t *testing.T) {
+	m := startMirror(t)
+
+	home := t.TempDir()
+	serverTemp := t.TempDir()
+	secret := filepath.Join(home, localSecretFile)
+	writeLocalFile(t, secret, "LIBGEN_MCP_ANNAS_KEY=the-operators-own-key\n")
+
+	workspace := filepath.Join(home, "workspace")
+	if err := os.MkdirAll(workspace, 0o750); err != nil {
+		t.Fatalf("creating the workspace directory: %v", err)
+	}
+	link := filepath.Join(workspace, "notes.txt")
+	if err := os.Symlink(secret, link); err != nil {
+		t.Skipf("this platform cannot create a symlink here: %v", err)
+	}
+
+	s := startSessionInDir(t, workspace, localPathEnv(t, m, home, serverTemp))
+	if got := s.call(t, initializeRequest(1)); got["error"] != nil {
+		t.Fatalf("initialize failed: %v", got["error"])
+	}
+	body, isError := readPathCall(t, s, link)
+	assertRefusalBody(t, body, isError)
 }
 
 // assertReadAccepted checks that an allowed path was not merely tolerated but
