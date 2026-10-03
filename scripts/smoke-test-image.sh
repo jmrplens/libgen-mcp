@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # smoke-test-image.sh — start the container image on every platform it claims to
-# support and check it prints the expected version.
+# support, check it prints the expected version, and check its binary records
+# that version in its build information.
 #
 # Usage:
 #   scripts/smoke-test-image.sh <expected-version> <image>=<platform> [...]
@@ -28,6 +29,17 @@
 # --version is the whole check on purpose: it needs no network, no mirror and no
 # MCP client, and it exercises the one thing in doubt, which is whether the
 # kernel can exec the binary inside the image at all.
+#
+# The binary's build information has to carry -ldflags with
+# `-X main.version=<version>`, which is what syft reads to give the server a
+# versioned purl in the image SBOM: the build context has no .git, so the main
+# module line says (devel), and without that setting no advisory against this
+# module can be matched to the image. -trimpath drops -ldflags from the build
+# information while --version still answers with the right version, so the
+# version check above cannot tell, and the Dockerfile builds without it for
+# that reason. The binary is copied out with cat and the -ldflags line of its
+# build information read with grep -a, so the check needs no Go toolchain on
+# the runner.
 set -euo pipefail
 
 VERSION="${1:?Usage: $0 <expected-version> <image>=<platform> [...]}"
@@ -36,6 +48,12 @@ if [ "$#" -eq 0 ]; then
   echo "ERROR: name at least one <image>=<platform> pair" >&2
   exit 1
 fi
+
+BINARY=/usr/local/bin/libgen-mcp
+LDFLAGS_PREFIX=$'build\t-ldflags='
+
+workdir="$(mktemp -d)"
+trap 'rm -rf "$workdir"' EXIT
 
 failures=0
 for pair in "$@"; do
@@ -66,10 +84,27 @@ for pair in "$@"; do
   fi
 
   printf '    %s\n' "$output"
+
+  binfile="${workdir}/binary"
+  if ! docker run --rm --platform "$platform" --entrypoint /bin/cat "$image" "$BINARY" > "$binfile" 2> "${binfile}.err"; then
+    echo "FAIL: ${image} (${platform}) carries no ${BINARY} to read:" >&2
+    cat "${binfile}.err" >&2
+    failures=$((failures + 1))
+    continue
+  fi
+  ldflags=$(grep -a "^${LDFLAGS_PREFIX}" "$binfile" || true)
+  if [[ "$ldflags" != *"-X main.version=${VERSION}"[\ \"]* ]]; then
+    echo "FAIL: ${image} (${platform}) has a binary whose build information does not record -X main.version=${VERSION}" >&2
+    echo "      (a build with -trimpath leaves -ldflags out of it); its -ldflags line reads:" >&2
+    printf '      %s\n' "${ldflags:-(none)}" >&2
+    failures=$((failures + 1))
+    continue
+  fi
+  echo "    build information records -X main.version=${VERSION}"
 done
 
 if [ "$failures" -gt 0 ]; then
   echo "${failures} image(s) failed the smoke test" >&2
   exit 1
 fi
-echo "all images started and reported ${VERSION}"
+echo "all images started, reported ${VERSION} and record it in their build information"
