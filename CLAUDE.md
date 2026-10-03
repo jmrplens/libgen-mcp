@@ -1332,6 +1332,21 @@ and sets `additionalProperties: false` — it accepts neither of those two field
 Both are in `VERSION_MANIFESTS` and both are stamped on release; neither is
 generated from the other.
 
+**`mcp.json`, the server entry both of them lead to, is held to the Agent
+Plugins rules, which are stricter than any client's.** A conformant host
+expands exactly `${PLUGIN_ROOT}` and `${PLUGIN_DATA}` and passes every other
+`${...}` through as text, so a `${NAME:-default}` value reaches the server
+literally and the server refuses to start on it — a value that is set but
+unparseable is an error here. The file also needs `$schema` and a per-server
+`type`, or a strict host disables it. So the entry carries no `env` at all:
+settings come from `~/.libgen-mcp.env`. It starts `npx -y @jmrp.io/libgen-mcp`
+rather than the image, because a native process saves downloads on the host
+and `read` can open them, where a `--rm` container loses both.
+`scripts/agent_plugin_test.py` (run by `make check-manifests`) validates both
+root files against the schemas vendored under
+`scripts/testdata/agent-plugins/1.0.0`, offline, and checks the placeholder
+rule no schema can state.
+
 **Every trusted publisher names a blank environment, and no publishing step
 declares one.** npm matches a publisher on the repository, the workflow file
 **and** the environment; PyPI and NuGet match the same way. The publishes live in

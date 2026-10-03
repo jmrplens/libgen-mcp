@@ -566,7 +566,7 @@ VERSION_MANIFESTS := server.json mcpb/manifest.json lhm.plugin.json .plugin/plug
 # wrong release is a wrong citation.
 CITATION_FILE := CITATION.cff
 
-check-manifests: ## Verify every version-bearing manifest parses and matches the VERSION file
+check-manifests: ## Verify every version-bearing manifest matches the VERSION file, and the Agent Plugins files their schemas
 	@VF=$$(tr -d '[:space:]' < VERSION); \
 	for f in $(VERSION_MANIFESTS); do \
 		jq empty "$$f" || exit 1; \
@@ -581,6 +581,10 @@ check-manifests: ## Verify every version-bearing manifest parses and matches the
 		echo "FAIL: $(CITATION_FILE) version ($$CV) != VERSION ($$VF)"; exit 1; \
 	fi; \
 	echo "$(CITATION_FILE): version matches VERSION ($$VF)"
+	@# plugin.json and mcp.json against the Agent Plugins 1.0 schemas, vendored
+	@# under scripts/testdata so this stays offline, plus the rules a schema
+	@# cannot state: a host leaves every ${...} but two literal.
+	python3 -m unittest discover -s scripts -p 'agent_plugin_test.py'
 
 check-stamper: ## Exercise the release stamper (server.json) against a fixture manifest
 	bash scripts/update-server-json-sha_test.sh
