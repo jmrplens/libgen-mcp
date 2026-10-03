@@ -196,8 +196,8 @@ you whatever the inbound limit says.
 
 The extra searchers are paced the same way, each against its own upstream and each for the
 whole process: arXiv at one request every three seconds, PubMed at three per second, OpenLibrary
-at one per second (three with a contact address), Crossref and OpenAlex at one per second with a
-burst of two, and dblp, ERIC and Gutenberg at one per second. Concurrent searches share those
+at one per second (three with a contact address), Crossref, OpenAlex and Europe PMC at one per
+second with a burst of two, and dblp, ERIC and Gutenberg at one per second. Concurrent searches share those
 buckets rather than each starting with a full one, so a provider whose token cannot arrive
 within the search's six-second budget is skipped for that search, and the search requests to an
 upstream never exceed that provider's rate. Other paths keep buckets of their own and are not
