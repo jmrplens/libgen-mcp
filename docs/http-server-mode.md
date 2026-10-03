@@ -723,7 +723,7 @@ setting that appears to be in force and is not:
 | A `LIBGEN_MCP_*` value that does not parse                                    | Falling back to the default in silence is how a mismatched deployment survives          |
 | A non-socket file, or a live socket, at the `--http` path                     | Replacing it is not this program's call, and stealing a live endpoint is worse          |
 
-Every refusal exits with status 1, and the last record the server writes is the reason, at
+Every refusal of a configuration exits with status 1, and the last record the server writes is the reason, at
 `ERROR`, with nothing written to stdout. A command line the flag parser cannot read, such as an
 unknown flag or `--drain-delay 5` with no unit, is refused the same way after the parser prints
 its usage, and exits with the parser's own status, 2. Up to 2.0.1 every one of these records went
