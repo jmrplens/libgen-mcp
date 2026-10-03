@@ -283,6 +283,11 @@ A hit may also carry a `venue`: the publication venue exactly as the provider st
 	<Fragment slot="object">
 		Used with `id`: `edition` (default) or `file`.
 	</Fragment>
+	<Fragment slot="cite_as">
+		Extra citation styles beside BibTeX and RIS: any of `apa`, `mla`, `chicago`,
+		`harvard`, `vancouver`, `ieee`, `csl-json`. Off by default. See
+		[Citations](/libgen-mcp/citations/#other-citation-styles).
+	</Fragment>
 	<Fragment slot="enrich">
 		When `true`, augment the record with keyless metadata from Crossref (by DOI)
 		and OpenLibrary (by ISBN). Best-effort and off by default.
@@ -302,7 +307,7 @@ A hit may also carry a `venue`: the publication venue exactly as the provider st
 	<Fragment slot="citation_match">Present for a `citation` lookup: `status` `resolved` with the `doi` and `title` it matched, or `unresolved` with the `reason` and up to five `candidates` (title, authors, year, venue, DOI, Crossref score) and no `file` or `edition`.</Fragment>
 	<Fragment slot="file">The file record (present for an `md5` lookup, or an `id` lookup with `object: file`).</Fragment>
 	<Fragment slot="edition">The edition record (present for an `md5` lookup's related edition, or an `id` lookup with `object: edition`).</Fragment>
-	<Fragment slot="citations">`{"bibtex": ..., "ris": ..., "doi_status": ..., "provenance": ...}` — a ready-to-paste BibTeX and RIS export built from the record's metadata, with `doi_status` (`confirmed`, `unverified` or `mismatch` against Crossref, and only a confirmed DOI is written into the entries) and `provenance` (where each field came from, to relay with the citation). Omitted when the record has no title (the minimum needed for a usable citation). Empty metadata fields are dropped rather than emitted blank, and the export carries no ISBN field at all.</Fragment>
+	<Fragment slot="citations">`{"bibtex": ..., "ris": ..., "doi_status": ..., "provenance": ...}` — a ready-to-paste BibTeX and RIS export built from the record's metadata, with `doi_status` (`confirmed`, `unverified` or `mismatch` against Crossref, and only a confirmed DOI is written into the entries) and `provenance` (where each field came from, to relay with the citation). Omitted when the record has no title (the minimum needed for a usable citation). Empty metadata fields are dropped rather than emitted blank, and the export carries no ISBN field at all. With `cite_as`, `formatted` adds the requested styles (see [Citations](/libgen-mcp/citations/#other-citation-styles)).</Fragment>
 	<Fragment slot="enrichment">Best-effort external metadata (Crossref/OpenLibrary), present when `enrich` was requested and something was found — and on the Crossref fallback below, which returns it whether or not you asked. See [Metadata enrichment](#metadata-enrichment).</Fragment>
 </SchemaTable>
 
@@ -322,6 +327,8 @@ A [search that consulted the extra sources](/libgen-mcp/how-search-works/) retur
 That record is **thinner than a catalog record** and its fields vary by the collection the item came from. Every Anna's record observed carries `title`, `author`, `language`, `year`, `content_type`, `collection`, `filesize` and `filepath`; `isbn`/`isbn10` and `ipfs_cid` appear on a minority. Note in particular that most records have **no** `ipfs_cid`, so the keyless IPFS download route is unavailable for them — a member key or another source is needed to fetch those. `author` is Anna's own field and is occasionally a PDF producer string rather than a person.
 
 A **DOI** the catalog does not carry is handled the same way through a different route. When enrichment is enabled (`LIBGEN_MCP_ENRICH`, on by default), `get_details` falls back to Crossref and returns a synthetic record — `file.origin` is `crossref` and `file.doi` is the DOI you asked for — with the Crossref metadata in `enrichment`. That block is present here **even if you did not set `enrich`**, because the fallback has nothing else to return. Like the Anna's record, it is thinner than a catalog record: it carries no md5, so pass the DOI itself to `download`.
+
+A DOI Crossref does not know either, such as a DataCite dataset or a mEDRA article, falls back once more to the record its own registration agency serves through doi.org (CSL-JSON, keyless). That record has `file.origin` set to `doi.org` and carries the registry's title, authors, year, venue and publisher, so it gets BibTeX and RIS entries, with the DOI in them, since the fields and the DOI come from the same registry.
 
 Only when no index has the identifier does the tool return the catalog's own miss error.
 

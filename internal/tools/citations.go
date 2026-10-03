@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 	"github.com/jmrplens/libgen-mcp/v2/internal/libgen"
 )
 
@@ -22,6 +23,28 @@ type Citations struct {
 	// Provenance; it is empty when the record carries no DOI at all.
 	DOIStatus  string `json:"doi_status,omitempty" jsonschema:"Crossref check on the DOI: confirmed (same title, entries state it), unverified (not checked) or mismatch (other work). The last two omit the DOI"`
 	Provenance string `json:"provenance,omitempty" jsonschema:"field sources and what was verified. Relay it, and do not present the citation as authoritative"`
+	// Formatted holds the styles cite_as asked for, in the order asked, and is
+	// absent when it asked for none.
+	Formatted []FormattedCitation `json:"formatted,omitempty" jsonschema:"the styles requested in cite_as, each with the path that produced it"`
+
+	// fields is what the BibTeX and RIS entries were built from, kept so the
+	// requested styles are built from exactly the same fields and DOI.
+	fields *citeFields
+}
+
+// The values of FormattedCitation.Source.
+const (
+	formatSourceRegistry    = "doi.org"
+	formatSourceLocal       = "local"
+	formatSourceUnavailable = "unavailable"
+)
+
+// FormattedCitation is one requested citation style.
+type FormattedCitation struct {
+	Style  string `json:"style" jsonschema:"the cite_as value this answers"`
+	Text   string `json:"text,omitempty" jsonschema:"the reference in that style, or CSL-JSON for csl-json. Plain text, with no italics"`
+	Source string `json:"source" jsonschema:"doi.org (formatted by the DOI's registration agency), local (built here from the record's fields) or unavailable"`
+	Note   string `json:"note,omitempty" jsonschema:"why the registry was not used, or why nothing could be built"`
 }
 
 type citeFields struct {
@@ -63,7 +86,15 @@ func buildCitations(ctx context.Context, v doiVerifier, knownCrossrefTitle strin
 		return nil
 	}
 	claimedDOI := get("doi")
-	check := corroborateDOI(ctx, v, knownCrossrefTitle, claimedDOI, title)
+	fromRegistry := stringField(file, "origin") == originRegistry
+	var check libgen.DOICheck
+	if fromRegistry {
+		// The fields are the registry's own record of this DOI, fetched by it,
+		// so there is no third-party claim to corroborate.
+		check = libgen.DOICheck{Verdict: libgen.DOIConfirmed}
+	} else {
+		check = corroborateDOI(ctx, v, knownCrossrefTitle, claimedDOI, title)
+	}
 	f := citeFields{
 		author: get("author"), title: title, year: get("year"),
 		publisher: get("publisher"), address: get("city"),
@@ -77,13 +108,109 @@ func buildCitations(ctx context.Context, v doiVerifier, knownCrossrefTitle strin
 	// bare presence of a DOI: an uncorroborated DOI would otherwise re-typeset a
 	// 544-page Random House book as a journal article on the strength of the same
 	// bad field the citation must not repeat.
-	f.isArticle = get("type") == "a" || get("libgen_topic") == "a" || f.doi != ""
+	// A registry's own record states its type, and a dataset with a DOI is
+	// still a dataset, so there the DOI is no evidence of an article.
+	f.isArticle = get("type") == "a" || get("libgen_topic") == "a" || (f.doi != "" && !fromRegistry)
+	provenance := citationProvenance(fieldsProvenance(file), claimedDOI, check)
+	if fromRegistry {
+		provenance = registryProvenance
+	}
 	return &Citations{
 		BibTeX:     renderBibTeX(f),
 		RIS:        renderRIS(f),
 		DOIStatus:  doiStatus(claimedDOI, check),
-		Provenance: citationProvenance(fieldsProvenance(file), claimedDOI, check),
+		Provenance: provenance,
+		fields:     &f,
 	}
+}
+
+// originRegistry labels a record built from the DOI's own registration agency
+// through doi.org, for a DOI neither the catalog nor Crossref knows.
+const originRegistry = "doi.org"
+
+// registryProvenance is the caveat on a citation built from such a record.
+const registryProvenance = "Bibliographic fields come from the DOI's own registration agency, through doi.org. They are the registrant's metadata, so check them against the work before publishing this citation."
+
+// styleFormatter formats a DOI in the requested styles through doi.org. It is
+// an interface so the assembly below can be exercised offline, and so the
+// handler can pass nil for a server that sends nothing to doi.org.
+type styleFormatter interface {
+	FormatDOI(ctx context.Context, doi string, styles []string) map[string]string
+}
+
+// attachFormatted adds the styles cite_as asked for to the record's citations,
+// each through the best path it has: the DOI's registry when the record has a
+// DOI it may send there, and otherwise the record's own fields, built by the
+// same rules as the BibTeX entry. A style neither path can produce is listed
+// as unavailable with the reason, so a caller never mistakes silence for a
+// style it did not ask for.
+//
+// Only a DOI that names this work is sent: one Crossref confirmed, one whose
+// fields came from its own registry, or the DOI of a record that is nothing
+// but Crossref's answer for it. A catalog DOI that failed corroboration is
+// never sent, because the registry would format the work it really belongs to
+// and the reference would describe a different work under this record.
+func attachFormatted(ctx context.Context, fmtr styleFormatter, out *DetailsOutput, styles []string) {
+	if len(styles) == 0 {
+		return
+	}
+	doi := negotiableDOI(*out)
+	var registry map[string]string
+	var note string
+	switch {
+	case doi == "":
+		note = unsentDOINote(out.Citations)
+	case fmtr == nil:
+		note = "This server does not ask doi.org (" + config.EnvName("ENRICH") + "=false), so the style was built from the record's fields."
+	default:
+		registry = fmtr.FormatDOI(ctx, doi, styles)
+		note = "doi.org gave no usable answer for this style, so it was built from the record's fields."
+	}
+	formatted := make([]FormattedCitation, 0, len(styles))
+	for _, style := range styles {
+		formatted = append(formatted, formatOne(style, registry, out.Citations, note))
+	}
+	if out.Citations == nil {
+		out.Citations = &Citations{Provenance: "The record has no title of its own, so only the registry's formats are given."}
+	}
+	out.Citations.Formatted = formatted
+}
+
+// formatOne picks the path for one style: the registry's text, else the
+// record's fields, else unavailable.
+func formatOne(style string, registry map[string]string, c *Citations, note string) FormattedCitation {
+	if text := registry[style]; text != "" {
+		return FormattedCitation{Style: style, Text: text, Source: formatSourceRegistry}
+	}
+	if c != nil && c.fields != nil {
+		if text := formatLocal(style, *c.fields); text != "" {
+			return FormattedCitation{Style: style, Text: text, Source: formatSourceLocal, Note: note}
+		}
+	}
+	return FormattedCitation{
+		Style: style, Source: formatSourceUnavailable,
+		Note: "Neither doi.org nor the record's own fields could produce it: the record has no title.",
+	}
+}
+
+// negotiableDOI is the DOI the record may send to doi.org, or "".
+func negotiableDOI(out DetailsOutput) string {
+	if c := out.Citations; c != nil && c.fields != nil && c.fields.doi != "" {
+		return c.fields.doi
+	}
+	if stringField(out.File, "origin") == "crossref" {
+		return stringField(out.File, "doi")
+	}
+	return ""
+}
+
+// unsentDOINote says why a record's styles were built locally without asking
+// the registry.
+func unsentDOINote(c *Citations) string {
+	if c != nil && c.DOIStatus != "" && c.DOIStatus != string(libgen.DOIConfirmed) {
+		return "The record's DOI was not confirmed to name this work, so it was not sent to doi.org and the style was built from the record's fields."
+	}
+	return "The record has no DOI, so the style was built from its fields."
 }
 
 // fieldsProvenance names where a record's bibliographic fields came from. An md5
