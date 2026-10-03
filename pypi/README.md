@@ -39,6 +39,17 @@ Typical MCP client configuration (stdio):
 
 Linux, macOS and Windows, on x86-64 and arm64. The Linux wheels carry both `manylinux` and `musllinux` tags because the binary is fully static — it needs no C library, so the same file runs on Debian, on Alpine and in a distroless container.
 
+## Verify what you run
+
+The `libgen-mcp` command a wheel installs is the release binary byte for byte, so the build provenance GitHub holds for that release asset verifies it with the [GitHub CLI](https://cli.github.com/):
+
+```bash
+gh attestation verify "$(command -v libgen-mcp)" -R jmrplens/libgen-mcp \
+  --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
+```
+
+Under `uvx` the binary sits in uv's cache, and `uvx --from libgen-mcp python -c 'import libgen_mcp as m; print(m.find_binary())'` prints its path. The details are in the [installation guide](https://jmrp.io/docs/libgen-mcp/installation/#pypi).
+
 ## Configuration
 
 Everything is optional. `LIBGEN_MCP_DOWNLOAD_DIR` chooses where downloads land, `LIBGEN_MCP_UNPAYWALL_EMAIL` enables the Unpaywall source, `LIBGEN_MCP_EXTRA_SOURCES` decides when the open-access searchers are consulted. The full list is in the [configuration reference](https://jmrp.io/docs/libgen-mcp/configuration/).

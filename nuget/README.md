@@ -43,6 +43,17 @@ dnx libgen-mcp -- --http 127.0.0.1:8080
 
 `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`, `win-x64` and `win-arm64`. The Linux binary is fully static — it needs no C library — so the same package runs on Debian, on Alpine and in a distroless container.
 
+## Verify what you run
+
+The binary the SDK runs is the release asset byte for byte, so the build provenance GitHub holds for it verifies it with the [GitHub CLI](https://cli.github.com/), from the NuGet cache `dnx` runs it out of:
+
+```bash
+gh attestation verify ~/.nuget/packages/libgen-mcp.linux-x64/<version>/tools/any/linux-x64/libgen-mcp \
+  -R jmrplens/libgen-mcp --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
+```
+
+Releases after v2.0.1 also attest the packages themselves, as they were before nuget.org added its repository signature: remove `.signature.p7s` from a downloaded copy with `zip -d` and run the same `gh attestation verify` on what is left. The steps are in the [installation guide](https://jmrp.io/docs/libgen-mcp/installation/#nuget).
+
 ## Configuration
 
 Everything is optional. `LIBGEN_MCP_DOWNLOAD_DIR` chooses where downloads land, `LIBGEN_MCP_UNPAYWALL_EMAIL` enables the Unpaywall source, `LIBGEN_MCP_EXTRA_SOURCES` decides when the open-access searchers are consulted. The full list is in the [configuration reference](https://jmrp.io/docs/libgen-mcp/configuration/).

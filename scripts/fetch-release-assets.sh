@@ -130,12 +130,17 @@ echo "Verified ${verified} asset(s) against checksums.txt"
 # from the build-provenance attestation instead, and it counts towards the
 # "something was actually verified" floor below. A rehearsal attests nothing,
 # and the bundle it unpacked was built by a job of the same run.
+#
+# The attestation is held to the same signer as checksums.txt above: the
+# release workflow at this release's tag. --repo alone accepts an attestation
+# any workflow of the repository minted, at any ref, and this bundle is the one
+# whose hash goes into server.json.
 if [ -f "$DEST/libgen-mcp.mcpb" ]; then
 	if [ -n "$ARCHIVE" ]; then
 		echo "Rehearsal: the .mcpb came from this run's own build; its attestation is minted at release"
 	else
 		echo "Verifying the .mcpb build-provenance attestation"
-		gh attestation verify "$DEST/libgen-mcp.mcpb" --repo "$REPO"
+		gh attestation verify "$DEST/libgen-mcp.mcpb" --repo "$REPO" --cert-identity "$SIGNER_IDENTITY"
 	fi
 	verified=$((verified + 1))
 fi

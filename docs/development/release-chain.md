@@ -70,7 +70,12 @@ directory the validator examined is the one that goes out.
 **Nothing advertises what nobody checked.** `mcp-registry` and
 `commit-manifests` wait on `verify-published`, which compares what the three
 registries actually serve against that same signed manifest — from a job holding
-no publishing credential of its own.
+no publishing credential of its own. The NuGet packages are also held whole to
+the digests the `nuget` job attested before it pushed them (its `nupkg_sha256`
+output): nuget.org adds a repository signature to everything it serves, so the
+check removes that entry the way NuGet defines an unsigned package, which is the
+lookup a verifier makes, and a layout the signing rearranges fails there instead
+of leaving an attestation nobody can find.
 
 ## The digest, and why `release` waits for `docker`
 
@@ -141,8 +146,9 @@ a credential and spend nothing, and a policy that has drifted is exactly what a
 rehearsal should catch.
 
 **What is skipped is exactly what cannot be undone**, so those steps are the
-unexercised ones: the image push and its signatures and attestations, the four
-publishes, `mcp-publisher`, the release un-draft, and the commit back to `main`.
+unexercised ones: the image push and its signatures and attestations, the
+attestations over the release assets and the NuGet packages (an attestation in a
+rehearsal would name bytes that are never published), the four publishes, `mcp-publisher`, the release un-draft, and the commit back to `main`.
 Two job permissions ride along with them. `id-token: write` *is* proven, by the
 two mint-only exchanges.
 
