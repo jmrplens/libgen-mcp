@@ -77,7 +77,8 @@ The default command is `--transport auto`, which reads what standard input is:
 > want both: `docker run image --transport auto --http 0.0.0.0:8080 --log-level debug`.
 > Settings that have an environment variable are simpler passed with `-e`, which
 > leaves the command alone, except the listener: the default command types `--http`, which
-> wins over `LIBGEN_MCP_HTTP_ADDR`
+> wins over `LIBGEN_MCP_HTTP_ADDR`, and the server logs a `WARN` naming the variable and the
+> flag that overrode it
 > ([Containers](../deploy/containers.md#configuring-through-the-environment)).
 
 ### Downloads and the volume

@@ -144,9 +144,10 @@ type startPlan struct {
 // refuseStart, so a refusal added here later is reported like the rest.
 //
 // typed is the set of flags typed on the command line, asked before the
-// environment overlay set others through the same flag set.
-func planStart(f *serverFlags, typed map[string]bool) (startPlan, error) {
-	if err := readTheEnvironmentUnderTheFlags(); err != nil {
+// environment overlay set others through the same flag set, and shadowed the
+// variables a typed flag had already overwritten by then.
+func planStart(f *serverFlags, typed map[string]bool, shadowed []shadowedVariable) (startPlan, error) {
+	if err := readTheEnvironmentUnderTheFlags(shadowed); err != nil {
 		return startPlan{}, err
 	}
 	// A negative cap disables the SDK limit outright, which must not be reachable

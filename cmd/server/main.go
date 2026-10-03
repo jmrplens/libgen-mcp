@@ -274,7 +274,7 @@ func mainWithExit() int {
 	// Before anything reads configuration, and before the dotenv loader resolves
 	// LIBGEN_MCP_ENV_FILE — which it does once per process, so a write after
 	// that point would do nothing and say nothing.
-	applyEnvBackedFlags()
+	shadowed := applyEnvBackedFlags()
 
 	if code, handled := runUtility(utilityFlags{
 		version:     *f.showVersion,
@@ -285,7 +285,7 @@ func mainWithExit() int {
 		return code
 	}
 
-	plan, err := planStart(f, typed)
+	plan, err := planStart(f, typed, shadowed)
 	if err != nil {
 		return refuseStart(exitRefused, err)
 	}
@@ -365,9 +365,18 @@ func runUtility(f utilityFlags) (code int, handled bool) {
 // through the standard library's text handler, putting plain lines onto a stream
 // that is otherwise JSON. The announcement happens once per process, so run's
 // own config.Load finds it already done.
-func readTheEnvironmentUnderTheFlags() error {
+//
+// shadowed is what [applyEnvBackedFlags] found before logging was up. It is
+// named here, beside the HTTP variables a flag overrode, at WARN and at the
+// starting level for the reason the overlay's own record is: a deployment
+// surprised by its listener has nothing else to read.
+func readTheEnvironmentUnderTheFlags(shadowed []shadowedVariable) error {
 	logging.Setup(slog.LevelInfo)
 	config.LoadEnvFiles()
+
+	// Before the overlay writes into the flag set, after which a flag set from
+	// a variable and a flag typed beside one look the same.
+	warnShadowed(append(shadowed, overlayShadowedIn(flag.CommandLine)...))
 
 	overlaid, err := applyHTTPEnvOverlay()
 	if err != nil {

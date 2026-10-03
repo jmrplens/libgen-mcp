@@ -206,7 +206,7 @@ Cada opción HTTP tiene una variable `LIBGEN_MCP_*`, que es con lo que tiene que
 
 {/* libgen:allow-name LIBGEN_MCP_HTTP: se nombra arriba como la grafia que este servidor deliberadamente no usa */}
 
-**Una opción en la línea de órdenes gana a su variable, y la orden por defecto de la imagen es una línea de órdenes.** Escribe `--http 0.0.0.0:8080`, así que un `LIBGEN_MCP_HTTP_ADDR` puesto en un contenedor que conserva la orden por defecto se ignora, sin ningún aviso, y el servidor escucha en `0.0.0.0:8080` de todos modos. Sustituye la orden por defecto por una que no nombre ningún listener:
+**Una opción en la línea de órdenes gana a su variable, y la orden por defecto de la imagen es una línea de órdenes.** Escribe `--http 0.0.0.0:8080`, así que un `LIBGEN_MCP_HTTP_ADDR` puesto en un contenedor que conserva la orden por defecto se ignora, y el servidor escucha en `0.0.0.0:8080` de todos modos. Lo dice al arrancar, un `WARN` por cada variable que pierde, con el flag y los dos valores (`a flag on the command line overrides an environment variable, which has no effect`, consulta [De dónde sale un ajuste](/libgen-mcp/es/cli/#de-dónde-sale-un-ajuste)). Sustituye la orden por defecto por una que no nombre ningún listener:
 
 ```yaml
 services:

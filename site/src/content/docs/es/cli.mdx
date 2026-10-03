@@ -46,6 +46,14 @@ Dos familias de flags llegan a ese orden por extremos opuestos, con el mismo res
 - **Los ajustes del servidor** (`--log-level`, `--download-dir`, `--sources`, `--mirror`, `--allow-private-addresses`, `--pprof-addr`, `--env-file`) **escriben su variable** antes de que nada lea la configuración, y solo cuando los escribiste, así que una variable exportada sobrevive a un flag que no pasaste.
 - **Los ajustes HTTP** se **rellenan desde su variable** cuando no los escribiste, después de cargar los ficheros dotenv. Una variable fijada pero vacía cuenta como no fijada, y una que no se puede interpretar detiene el arranque con salida `1`, nombrando la variable y el flag que rellena.
 
+Un flag escrito que se impone a una variable fijada con otro valor queda en el registro una vez al arrancar, en `WARN`, una línea por variable, con la variable, el flag y los dos valores:
+
+```text
+{"level":"WARN","msg":"a flag on the command line overrides an environment variable, which has no effect","variable":"LIBGEN_MCP_HTTP_ADDR","variable_value":"127.0.0.1:9000","flag":"--http","flag_value":"0.0.0.0:8080",…}
+```
+
+El flag sigue ganando. La línea está para el caso en que la línea de órdenes no era tuya para leerla, que es el de la imagen de contenedor: su orden escribe `--http 0.0.0.0:8080`, así que `LIBGEN_MCP_HTTP_ADDR` fijada a su lado no cambia nada. El mismo ajuste escrito de dos maneras (`--stateless=true` y `LIBGEN_MCP_STATELESS=1`, `60s` y `1m`) no se informa, y tampoco `LIBGEN_MIRROR`. En los ajustes del servidor, la línea cubre una variable que fijó el entorno del proceso; la que habría fijado un fichero dotenv sencillamente no se carga.
+
 Para los rechazos de abajo, un valor tomado del entorno cuenta como pedido, exactamente igual que uno escrito: exportar `LIBGEN_MCP_RATE_LIMIT_RPS` en un listener de loopback se rechaza igual que `--rate-limit-rps`. La variable de un flag HTTP es `LIBGEN_MCP_` más el flag en mayúsculas con guiones bajos en lugar de guiones, salvo `--http`, cuya variable es `LIBGEN_MCP_HTTP_ADDR`.
 
 ## Transporte y listener

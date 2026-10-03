@@ -106,7 +106,8 @@ La orden por defecto es `--transport auto`, que mira qué es la entrada estánda
 	--transport auto --http 0.0.0.0:8080 --log-level debug`. Los ajustes que
 	tienen variable de entorno son más sencillos de pasar con `-e`, que deja la
 	orden en paz, salvo el listener: la orden por defecto escribe `--http`, que
-	gana a `LIBGEN_MCP_HTTP_ADDR`
+	gana a `LIBGEN_MCP_HTTP_ADDR`, y el servidor deja un `WARN` que nombra la
+	variable y el flag que se le impuso
 	([Contenedores](/libgen-mcp/es/deploy/containers/#configurar-mediante-el-entorno)).
 </Aside>
 
