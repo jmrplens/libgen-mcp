@@ -30,17 +30,27 @@ auditConfig:
     # puppeteer downloads from Google's own HTTPS endpoint on a developer's
     # machine. CI never runs that download (PUPPETEER_SKIP_DOWNLOAD), nothing
     # it unpacks is attacker-chosen, and none of it reaches the built site.
+    # Both retire with the basic-ftp exception below: @puppeteer/browsers 3,
+    # which every puppeteer 25 release depends on, no longer depends on
+    # extract-zip.
     - GHSA-jmr9-qjv8-65gv
     - GHSA-7pqw-9j4j-h8q3
     # basic-ftp <=6.2.0, quadratic CPU in Client.list() parsing an FTP directory
     # listing. The fix is 6.2.1 only, and get-uri, its one consumer here, still
     # declares ^5.3.1 in its latest release (8.0.1), so forcing 6.x would put the
     # package outside the range its own dependant declares. Its only path is
-    # pa11y-ci > puppeteer > @puppeteer/browsers > proxy-agent > pac-proxy-agent >
-    # get-uri, which reaches FTP only to fetch a PAC file from an ftp:// URL. The
-    # Chromium download that path serves goes over HTTPS on a developer's
-    # machine, CI never runs it (PUPPETEER_SKIP_DOWNLOAD), and nothing configures
-    # an FTP PAC file. Drop this once get-uri accepts basic-ftp 6.2.1.
+    # pa11y-ci > puppeteer 24 > @puppeteer/browsers 2 > proxy-agent 6 >
+    # pac-proxy-agent 7 > get-uri 6, which reaches FTP only to fetch a PAC file
+    # from an ftp:// URL. The Chromium download that path serves goes over HTTPS
+    # on a developer's machine, CI never runs it (PUPPETEER_SKIP_DOWNLOAD), and
+    # nothing configures an FTP PAC file. A get-uri release would not retire
+    # this: each pac-proxy-agent pins get-uri exactly, the chain above holds it
+    # on 6.0.5, and even the newest proxy-agent (8.0.2) still ends in get-uri
+    # 8.0.1. What retires it is puppeteer 25, whose @puppeteer/browsers 3 depends
+    # on neither proxy-agent nor extract-zip. pa11y 10 is already on it; drop
+    # this, and both extract-zip exceptions above, once a pa11y-ci release asks
+    # for pa11y 10 and puppeteer 25 (4.1.1 still asks for pa11y ^9.1.1 and
+    # puppeteer ^24.37.5).
     - GHSA-c475-qrg2-pj4r
     # http-cache-semantics <=4.2.0, a shared cache honouring max-stale can serve
     # one user's cached response to another, with no fixed release. Astro loads
