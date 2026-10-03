@@ -1,7 +1,12 @@
 package openalex
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
+	"net/http"
+	"strings"
+	"sync"
 	"testing"
 )
 
@@ -36,6 +41,32 @@ func TestNewRequest_SendsTheKeyAsABearerTokenAndNeverInTheURL(t *testing.T) {
 				t.Errorf("headers = %v, want a User-Agent and a JSON Accept", req.Header)
 			}
 		})
+	}
+}
+
+// TestNoteKeyRejected_WarnsOnceNamingTheVariable checks a refused key is reported
+// once per process, names the variable and never the key, and that a refusal
+// without a key, or a status that is not a refusal, says nothing.
+func TestNoteKeyRejected_WarnsOnceNamingTheVariable(t *testing.T) {
+	var buf bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(old); keyRejectedOnce = sync.Once{} })
+	keyRejectedOnce = sync.Once{}
+
+	NoteKeyRejected(http.StatusUnauthorized, "")
+	NoteKeyRejected(http.StatusTooManyRequests, "oa-secret")
+	if buf.Len() != 0 {
+		t.Fatalf("warned without a rejected key: %s", buf.String())
+	}
+	NoteKeyRejected(http.StatusUnauthorized, "oa-secret")
+	NoteKeyRejected(http.StatusForbidden, "oa-secret")
+	out := buf.String()
+	if strings.Count(out, "rejected the configured API key") != 1 {
+		t.Errorf("want exactly one warning, got: %s", out)
+	}
+	if !strings.Contains(out, "LIBGEN_MCP_OPENALEX_KEY") || strings.Contains(out, "oa-secret") {
+		t.Errorf("warning must name the variable and not the key: %s", out)
 	}
 }
 

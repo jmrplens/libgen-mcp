@@ -193,6 +193,7 @@ func (s openalexSource) lookup(ctx context.Context, doi string) (openAlexWork, e
 	}
 	defer func() { _ = resp.Body.Close() }()
 	s.budgetOrShared().Observe(resp.StatusCode, resp.Header, time.Now())
+	openalex.NoteKeyRejected(resp.StatusCode, s.key)
 	if resp.StatusCode != http.StatusOK {
 		return openAlexWork{}, missOrUnavailableStatus(resp.StatusCode,
 			fmt.Errorf("openalex: %q returned HTTP %d", doi, resp.StatusCode))

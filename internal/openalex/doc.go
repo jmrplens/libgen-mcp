@@ -7,8 +7,10 @@
 // (LIBGEN_MCP_OPENALEX_KEY) is attached by [NewRequest], in the Authorization
 // header and never in the URL, so no error, log line or trace can carry it. And
 // the daily credit budget is observed by [Budget], once per process, because
-// OpenAlex meters every caller by address and the download source and the search
-// provider draw on the same allowance: a keyless search costs ten credits of a
-// thousand a day, and a search provider that spent the last of them would leave
-// the download chain's lookups refused until midnight UTC.
+// OpenAlex meters every caller by address and every request this process makes
+// draws on the same allowance: a keyless search costs ten credits of a thousand a
+// day, and a search provider that spent the last of them would leave the
+// one-credit filtered lookups a record needs refused until midnight UTC. The
+// download source's single-entity lookup costs nothing and OpenAlex documents it
+// as unlimited, so it only reports what it sees.
 package openalex

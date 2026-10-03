@@ -45,9 +45,10 @@ const openAlexMaxAuthors = 20
 const openAlexSelect = "doi,display_name,publication_year,authorships,open_access,best_oa_location,primary_location"
 
 // OpenAlexProvider is a discovery source backed by the OpenAlex works search. It is
-// keyless by default and spends from the same metered allowance as the download
-// chain's openalex source, so it checks the process budget before every search and
-// steps aside when a keyless search would eat into the reserve those lookups need.
+// keyless by default and spends from the per-address allowance every OpenAlex
+// request of this process is metered against, so it checks the process budget
+// before every search and steps aside when a keyless search would eat into the
+// reserve kept for one-credit filtered lookups.
 type OpenAlexProvider struct {
 	client  *http.Client
 	limiter *rate.Limiter
@@ -84,19 +85,23 @@ func (p *OpenAlexProvider) Name() string { return "openalex" }
 //
 // Without a key, a search the budget cannot pay for while keeping
 // openalex.KeylessReserve credits back is not sent at all. That is the guard on
-// the shared allowance: the download chain's lookups are worth more than one more
-// search provider in a federated result, which has six others.
+// the shared allowance: a filtered lookup a record needs (get_details' citing and
+// cited works, one credit each) is worth more than one more search provider in a
+// federated result, which has several others. The download chain's single-entity
+// lookup is free and unlimited, so the guard is not what protects it.
 func (p *OpenAlexProvider) Search(ctx context.Context, query string, limit int) ([]DiscoveryResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 
-	if p.key == "" && !p.budget.Spend(openalex.SearchCost, openalex.KeylessReserve, p.now()) {
+	charged := p.key == ""
+	if charged && !p.budget.Spend(openalex.SearchCost, openalex.KeylessReserve, p.now()) {
 		return nil, nil
 	}
 	if err := p.limiter.Wait(ctx); err != nil {
+		p.refund(charged)
 		return nil, ctx.Err()
 	}
-	body, ok, err := p.get(ctx, p.searchURL(query, limit))
+	body, ok, err := p.get(ctx, p.searchURL(query, limit), charged)
 	if err != nil {
 		return nil, err
 	}
@@ -109,20 +114,24 @@ func (p *OpenAlexProvider) Search(ctx context.Context, query string, limit int) 
 // get performs the request through the shared OpenAlex helper, reports the
 // response's rate-limit headers to the budget, and returns the bounded body. ok is
 // false for any failure that degrades to empty, and err is set only when the
-// context ended.
-func (p *OpenAlexProvider) get(ctx context.Context, rawURL string) (body []byte, ok bool, err error) {
+// context ended. charged says the search was paid for in advance, and a request
+// that never got an answer gives that payment back.
+func (p *OpenAlexProvider) get(ctx context.Context, rawURL string, charged bool) (body []byte, ok bool, err error) {
 	req, err := openalex.NewRequest(ctx, rawURL, p.key)
 	if err != nil {
+		p.refund(charged)
 		return nil, false, nil
 	}
 	resp, err := p.client.Do(req)
 	if err != nil {
 		// The transport error itself is dropped, so its URL reaches no log. Nothing
 		// secret would be in it anyway: the key travels in a header.
+		p.refund(charged)
 		return nil, false, ctx.Err()
 	}
 	defer func() { _ = resp.Body.Close() }()
 	p.budget.Observe(resp.StatusCode, resp.Header, p.now())
+	openalex.NoteKeyRejected(resp.StatusCode, p.key)
 	if resp.StatusCode != http.StatusOK {
 		return nil, false, nil
 	}
@@ -131,6 +140,15 @@ func (p *OpenAlexProvider) get(ctx context.Context, rawURL string) (body []byte,
 		return nil, false, ctx.Err()
 	}
 	return body, true, nil
+}
+
+// refund gives a search's advance payment back to the budget when the search was
+// charged and its request never reached OpenAlex, so a canceled or undeliverable
+// search does not count against the day.
+func (p *OpenAlexProvider) refund(charged bool) {
+	if charged {
+		p.budget.Refund(openalex.SearchCost, p.now())
+	}
 }
 
 // searchURL assembles the works-search request URL. No contact address is sent:

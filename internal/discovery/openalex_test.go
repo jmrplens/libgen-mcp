@@ -194,7 +194,7 @@ func TestOpenAlexSearch_ReportsTheBudget(t *testing.T) {
 		wantResults   int
 	}{
 		{name: "success", stub: &openAlexStub{body: readFixture(t, "openalex_works.json"), remaining: "740", reset: "15000"}, wantRemaining: 740, wantResults: 5},
-		{name: "refusal", stub: &openAlexStub{status: http.StatusTooManyRequests, body: []byte(`{"error":"Rate limit exceeded"}`)}, wantRemaining: 0},
+		{name: "exhausted", stub: &openAlexStub{status: http.StatusTooManyRequests, body: []byte(`{"error":"Rate limit exceeded"}`), remaining: "0", reset: "15000"}, wantRemaining: 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -211,6 +211,29 @@ func TestOpenAlexSearch_ReportsTheBudget(t *testing.T) {
 				t.Errorf("budget = %d (known %v), want %d", credits, ok, tc.wantRemaining)
 			}
 		})
+	}
+}
+
+// TestOpenAlexSearch_BareRefusalClosesTheBudget checks a 429 with nothing but a
+// Retry-After keeps the next search from being sent, and only for that wait.
+func TestOpenAlexSearch_BareRefusalClosesTheBudget(t *testing.T) {
+	stub := &openAlexStub{status: http.StatusTooManyRequests, body: []byte(`{"error":"Too many requests"}`)}
+	p := startOpenAlex(t, stub, "")
+	if _, err := p.Search(context.Background(), "crispr", 5); err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if _, err := p.Search(context.Background(), "crispr", 5); err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if calls := stub.calls.Load(); calls != 1 {
+		t.Errorf("requests sent = %d, want the refused one only", calls)
+	}
+	p.now = func() time.Time { return openAlexClock.Add(2 * time.Minute) }
+	if _, err := p.Search(context.Background(), "crispr", 5); err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if calls := stub.calls.Load(); calls != 2 {
+		t.Errorf("requests sent = %d, want a second once the refusal's wait passed", calls)
 	}
 }
 
@@ -250,6 +273,39 @@ func TestOpenAlexSearch_DegradesToEmpty(t *testing.T) {
 			t.Errorf("Search() = %d results, %v; want none and no error", len(got), err)
 		}
 	})
+}
+
+// TestOpenAlexSearch_RefundsASearchNeverSent checks a keyless search that never
+// reached OpenAlex, because the caller went away or the host could not be
+// reached, gives its ten credits back.
+func TestOpenAlexSearch_RefundsASearchNeverSent(t *testing.T) {
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	cases := []struct {
+		name string
+		ctx  context.Context
+		base string
+	}{
+		{name: "canceled before the limiter", ctx: canceled},
+		{name: "unreachable", ctx: context.Background(), base: "http://127.0.0.1:1"},
+		{name: "malformed base", ctx: context.Background(), base: "http://[::1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := startOpenAlex(t, &openAlexStub{}, "")
+			if tc.base != "" {
+				openAlexBase = tc.base
+			}
+			p.budget.Observe(http.StatusOK, http.Header{
+				"X-Ratelimit-Remaining": {"500"},
+				"X-Ratelimit-Reset":     {"3600"},
+			}, openAlexClock)
+			_, _ = p.Search(tc.ctx, "q", 5)
+			if credits, _, _ := p.budget.Remaining(openAlexClock); credits != 500 {
+				t.Errorf("remaining = %d after a search never sent, want 500", credits)
+			}
+		})
+	}
 }
 
 // TestOpenAlexWorkToResult covers the mapping rules the fixture does not reach.

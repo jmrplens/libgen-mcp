@@ -138,8 +138,8 @@ Each hit carries at least one actionable identifier, depending on its `origin`:
 - **`pdf_url` (openalex)** — the direct link of an open-access copy OpenAlex's index located,
   set only when that copy is itself open access. It is not fetched by the search, so prefer
   the `doi`: the download chain's `openalex` source asks the same index and fails over when
-  the link refuses. When OpenAlex's daily allowance is down to the reserve kept for download
-  lookups, a keyless deployment returns no OpenAlex hits until it resets (see
+  the link refuses. When OpenAlex's daily allowance is down to the reserve kept for one-credit
+  filtered lookups, a keyless deployment returns no OpenAlex hits until it resets (see
   [`LIBGEN_MCP_OPENALEX_KEY`](configuration.md#libgen_mcp_openalex_key)).
 - **`pdf_url` (arxiv)** — arXiv's own hosted PDF, directly fetchable; fetch it yourself (it
   is not a Library Genesis download, so `download`/`read` do not resolve it by URL).

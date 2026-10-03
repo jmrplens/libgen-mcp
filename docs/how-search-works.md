@@ -45,10 +45,10 @@ call. Rather than hand back an empty result, the search can escalate and consult
 - [OpenAlex](https://openalex.org/) — the open scholarly catalog built on the open-access index
   Unpaywall publishes. Its hits carry a DOI, a venue and OpenAlex's own verdict on whether a
   free copy exists, plus a `pdf_url` when that copy is a direct PDF. OpenAlex meters every
-  caller by address — a keyless search costs ten of the thousand credits a day, the same
-  allowance the `openalex` download source draws on — so without `LIBGEN_MCP_OPENALEX_KEY` it
-  steps aside once the day's credits run down to the reserve kept for download lookups, and
-  comes back when the allowance resets at midnight UTC.
+  caller by address — a keyless search costs ten of the thousand credits a day — so without
+  `LIBGEN_MCP_OPENALEX_KEY` it steps aside once the day's credits run down to the reserve kept
+  for the one-credit filtered lookups `get_details` makes, and comes back when the allowance
+  resets at midnight UTC.
 - [dblp](https://dblp.org/) and [PubMed](https://pubmed.ncbi.nlm.nih.gov/) — bibliographic
   indexes, for computer science and biomedicine respectively. They answer *what the paper is*
   (venue, year, full author list, DOI) without claiming it is free to read, which is exactly

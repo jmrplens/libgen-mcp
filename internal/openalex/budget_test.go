@@ -44,10 +44,8 @@ func TestBudget_Observe(t *testing.T) {
 		{name: "remaining only", status: http.StatusOK, header: headers("968", "", "")},
 		{name: "a malformed count", status: http.StatusOK, header: headers("lots", "60", "")},
 		{name: "a negative count", status: http.StatusOK, header: headers("-1", "60", "")},
-		{name: "a refusal with its own headers", status: http.StatusTooManyRequests, header: headers("0", "300", "5"), wantKnown: true, wantReset: 300 * time.Second},
-		{name: "a bare refusal with Retry-After", status: http.StatusTooManyRequests, header: headers("", "", "42"), wantKnown: true, wantReset: 42 * time.Second},
-		{name: "a bare refusal", status: http.StatusTooManyRequests, header: headers("", "", ""), wantKnown: true, wantReset: refusedBackoff},
-		{name: "a bare refusal with a date Retry-After", status: http.StatusTooManyRequests, header: headers("", "", "Sat, 03 Oct 2026 20:00:00 GMT"), wantKnown: true, wantReset: refusedBackoff},
+		{name: "an exhausted allowance", status: http.StatusTooManyRequests, header: headers("0", "300", "5"), wantKnown: true, wantReset: 300 * time.Second},
+		{name: "a bare refusal leaves the window unknown", status: http.StatusTooManyRequests, header: headers("", "", "42")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -67,6 +65,70 @@ func TestBudget_Observe(t *testing.T) {
 				t.Errorf("reset in %v, want %v", got, tc.wantReset)
 			}
 		})
+	}
+}
+
+// TestBudget_RefusalClosesForItsOwnWait checks a 429 closes the budget for the
+// wait it states, and only that long: before the deadline nothing is granted,
+// after it spending resumes.
+func TestBudget_RefusalClosesForItsOwnWait(t *testing.T) {
+	cases := []struct {
+		name   string
+		header http.Header
+		wait   time.Duration
+	}{
+		{name: "Retry-After", header: headers("", "", "42"), wait: 42 * time.Second},
+		{name: "Retry-After wins over the reset", header: headers("0", "300", "5"), wait: 5 * time.Second},
+		{name: "the reset when no Retry-After", header: headers("", "90", ""), wait: 90 * time.Second},
+		{name: "nothing to go on", header: headers("", "", ""), wait: refusedBackoff},
+		{name: "a date Retry-After", header: headers("", "", "Sat, 03 Oct 2026 20:00:00 GMT"), wait: refusedBackoff},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var b Budget
+			b.Observe(http.StatusTooManyRequests, tc.header, t0)
+			if b.Spend(0, 0, t0.Add(tc.wait-time.Second)) {
+				t.Error("a spend before the refusal's deadline was granted")
+			}
+			if !b.Spend(0, 0, t0.Add(tc.wait)) {
+				t.Error("a spend at the refusal's deadline was refused")
+			}
+		})
+	}
+}
+
+// TestBudget_BurstRefusalDoesNotCloseTheDay reproduces the case a one-second 429
+// on a known budget used to turn into a refusal until midnight: the daily window
+// keeps its count, and five minutes later a search is granted from it.
+func TestBudget_BurstRefusalDoesNotCloseTheDay(t *testing.T) {
+	var b Budget
+	b.Observe(http.StatusOK, headers("800", "43200", ""), t0)
+	b.Observe(http.StatusTooManyRequests, headers("", "", "1"), t0.Add(time.Second))
+	if b.Spend(SearchCost, KeylessReserve, t0.Add(time.Second)) {
+		t.Error("a spend inside the refusal was granted")
+	}
+	later := t0.Add(5 * time.Minute)
+	if !b.Spend(SearchCost, KeylessReserve, later) {
+		t.Fatal("a burst refusal still closes the budget five minutes later")
+	}
+	if credits, _, _ := b.Remaining(later); credits != 800-SearchCost {
+		t.Errorf("remaining = %d, want the window's 800 less one search", credits)
+	}
+}
+
+// TestBudget_RefundGivesBackAnUnusedSpend checks a refund restores a granted
+// spend inside the window and does nothing once the window has ended.
+func TestBudget_RefundGivesBackAnUnusedSpend(t *testing.T) {
+	var b Budget
+	b.Observe(http.StatusOK, headers("500", "60", ""), t0)
+	b.Spend(SearchCost, KeylessReserve, t0)
+	b.Refund(SearchCost, t0)
+	if credits, _, _ := b.Remaining(t0); credits != 500 {
+		t.Errorf("remaining = %d after a refund, want 500", credits)
+	}
+	b.Refund(SearchCost, t0.Add(time.Hour))
+	if _, _, ok := b.Remaining(t0.Add(time.Hour)); ok {
+		t.Error("a refund after the window revived it")
 	}
 }
 

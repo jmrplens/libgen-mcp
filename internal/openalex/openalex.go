@@ -2,9 +2,12 @@ package openalex
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 	"github.com/jmrplens/libgen-mcp/v2/internal/version"
 )
 
@@ -34,4 +37,23 @@ func NewRequest(ctx context.Context, rawURL, key string) (*http.Request, error) 
 		req.Header.Set("Authorization", "Bearer "+k)
 	}
 	return req, nil
+}
+
+// keyRejectedOnce guards the one warning a rejected key earns per process.
+var keyRejectedOnce sync.Once
+
+// NoteKeyRejected warns, once per process, when OpenAlex refused a request sent
+// with a key. A key OpenAlex does not accept (mistyped, rotated, revoked) is
+// answered 401 or 403 on every request, which silently empties the search
+// provider and takes the download source out of every DOI it would have served,
+// so the operator is told which variable to fix. The warning names the variable,
+// never the key.
+func NoteKeyRejected(status int, key string) {
+	if strings.TrimSpace(key) == "" || (status != http.StatusUnauthorized && status != http.StatusForbidden) {
+		return
+	}
+	keyRejectedOnce.Do(func() {
+		slog.Warn("OpenAlex rejected the configured API key, so OpenAlex search and the openalex download source fail until it is fixed or unset",
+			"variable", config.EnvName("OPENALEX_KEY"), "status", status)
+	})
 }

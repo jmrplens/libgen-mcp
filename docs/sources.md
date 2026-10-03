@@ -105,9 +105,12 @@ index that backs Unpaywall — and reachable without a credential of any kind.
   `LIBGEN_MCP_OPENALEX_KEY` is sent on every OpenAlex request, as a bearer token and never in
   the URL, and buys this lookup nothing; it is there for the `openalex` search provider, which
   spends ten credits a search from the same per-address allowance. Every OpenAlex response
-  this source reads reports its `X-RateLimit-Remaining` to one budget per process, and a
-  keyless search provider stops searching while that budget is down to the reserve kept for
-  lookups like this one. OpenAlex's own announcement does say "you'll need an API key for all
+  this source reads reports its `X-RateLimit-Remaining` to that process's one budget. This
+  lookup needs no share of that budget: OpenAlex documents a single-entity lookup as free
+  and unlimited whatever is left ("Get a single entity: Unlimited", Example costs, read
+  2026-10-03). The keyless search provider's reserve of 100 credits is for the one-credit
+  filtered queries `get_details` makes. A key OpenAlex rejects (401 or 403) is logged once at
+  WARN, naming the variable. OpenAlex's own announcement does say "you'll need an API key for all
   requests" and calls keyless access demo-only, so this is worth stating plainly: no cutoff
   date has been published, the keyless lookup was verified working (HTTP 200, zero credits
   billed) on 2026-08-03, and the free tier without a key is $0.10/day against operations this
