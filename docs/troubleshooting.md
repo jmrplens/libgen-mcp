@@ -477,10 +477,14 @@ account can talk to the MCP endpoint.
 
 **Fixes.**
 
-- Put the proxy's **worker** processes in the socket's group. In nginx that is the second
-  argument of the `user` directive (`user nginx 10001;`), not a supplementary group on the
-  container: nginx calls `initgroups()` when it drops privileges, so a Docker `group_add` is
-  discarded before the first connect.
+- Put the proxy's **worker** processes in the socket's group. On a host, add the proxy's user
+  to the group and restart the proxy. In a container, run the server with the proxy's group
+  instead (`user: "10001:101"` for the official nginx images): nginx calls `initgroups()` when
+  it drops privileges, so a Docker `group_add` is discarded before the first connect, and the
+  group argument of its `user` directive is a name, so `user nginx 10001;` fails with
+  `getgrnam("10001") failed` where no group of that name exists. Both setups are in
+  [Run as a service](deploy/service.md#a-unix-socket-with-a-dedicated-user) and
+  [Containers](deploy/containers.md#nginx-in-front-over-a-shared-unix-socket).
 - Check the socket's own directory as well. A `0750` directory the proxy cannot traverse
   produces the same `permission denied` no matter what the socket's mode is.
 - Widen the mode only if you must: `--http-socket-mode 0666` makes it reachable by every

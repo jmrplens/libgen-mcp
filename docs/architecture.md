@@ -452,8 +452,9 @@ own address is misleading in both of these modes. A unix listener reports a bare
 nothing marking it as a socket, and a TLS listener reports the address of the plain listener it
 wraps, so an https endpoint would otherwise print as an unadorned `host:port`.
 
-The nginx and docker-compose recipes for both listener kinds are in
-[Getting started](getting-started.md#remote-streamable-http).
+Proxy configurations for both listener kinds are in
+[Behind a reverse proxy](deploy/reverse-proxy.md), and the Compose files in
+[Containers and orchestration](deploy/containers.md).
 
 ### Stateless mode
 

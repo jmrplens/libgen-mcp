@@ -1,6 +1,539 @@
 ---
 title: Detrás de un proxy inverso
 description: "Configuraciones completas de proxy inverso para el transporte HTTP de libgen-mcp: proxies de confianza, la URL pública, streaming sin búfer y TLS."
+datePublished: "2026-10-03"
+mentions:
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+  - name: "nginx"
+    wikidata: Q306144
+  - name: "Caddy"
+    wikidata: Q24008327
+  - name: "Traefik"
+    wikidata: Q96332968
+  - name: "Apache HTTP Server"
+    wikidata: Q11354
+  - name: "HAProxy"
+    wikidata: Q5628948
+chips:
+  - text: "Probado contra el binario real"
+  - text: "Seis proxies"
+  - text: "Modo servidor HTTP"
+    href: "/libgen-mcp/es/http-server-mode/"
 ---
 
-Esta página reunirá configuraciones completas de proxy inverso para el transporte HTTP: qué opciones le dicen al servidor que está detrás de un proxy y qué cabecera lleva la dirección del llamante, cómo declarar la URL pública, cómo evitar que se almacenen en búfer las respuestas en streaming y cómo terminar TLS en el proxy o en el servidor. El comportamiento en el que se apoyan esas configuraciones se describe en [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/).
+import { Tabs, TabItem, Aside } from "@astrojs/starlight/components";
+
+Un proxy inverso delante de `libgen-mcp --http` termina TLS, le da al endpoint un nombre público y lleva un registro. Esta página enumera lo que tiene que hacer el proxy para que el servidor funcione detrás de él, y después da una configuración completa para nginx, Caddy, Traefik, Apache httpd, HAProxy y Cloudflare Tunnel. Todas las configuraciones de aquí, salvo la de Cloudflare, se ejecutaron contra el binario real; cómo, está [al final](#cómo-se-probaron-estas-configuraciones).
+
+Qué hace cada opción del servidor, y por qué, está en [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/). Esta página dice lo que necesita un proxy y no lo repite.
+
+## Lo que tiene que hacer el proxy
+
+| Requisito                                                                                    | Sin él                                                                                                                                                                  | Del lado del servidor                                                                                           |
+| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Reenviar el `Host` del cliente y declararle ese nombre al servidor                           | `403` con un error JSON-RPC `-40300`: `the Host header names a host this deployment does not serve`                                                                     | `--public-url https://mcp.example.org`, o `--trusted-proxies` nombrando el proxy                                |
+| No almacenar la respuesta en búfer                                                           | Las notificaciones de progreso de una llamada larga llegan todas a la vez, al acabar la llamada                                                                         | Toda respuesta `text/event-stream` lleva `X-Accel-Buffering: no`                                                |
+| Un tiempo de lectura mayor que la llamada más larga                                          | El proxy corta una llamada que sigue en marcha, con un `504` o un reset                                                                                                 | Una llamada puede durar hasta `LIBGEN_MCP_ACTION_TIMEOUT` (`1h`)                                                |
+| HTTP/1.1 o HTTP/2 hacia el upstream                                                          | HTTP/1.0 no tiene codificación por trozos, así que un flujo no se puede reenviar según se escribe                                                                       | Acepta los dos                                                                                                  |
+| Poner la dirección del cliente en una cabecera y nombrar el proxy                            | A todos los llamantes se les carga como al proxy: un único cubo de límite de tasa, un único recuento en vuelo y un único `user.hash` para todos                         | `--trusted-proxies` y `--trusted-proxy-header`, los dos o ninguno                                               |
+| No añadir cabeceras CORS propias                                                             | Dos valores de `Access-Control-Allow-Origin`, que un navegador rechaza. Un proxy que responde él mismo a `OPTIONS` concede además preflights que el servidor rechazaría | Decide `--trusted-origins`, y el servidor responde al preflight                                                 |
+| Un límite de cuerpo igual o mayor que el del servidor                                        | El valor por defecto de nginx, 1 MiB, rechaza una petición que el servidor aceptaría                                                                                    | `--max-request-body-bytes`, 4 MiB por defecto, respondido con `413`                                             |
+| Reenviar un prefijo de ruta solo con `--http-path`                                           | `404` en todas las rutas                                                                                                                                                | `--http-path /libgen` monta bajo él el endpoint, `/mcp`, `/health` y las cards                                  |
+| Sondear `GET /health`                                                                        | Un balanceador que nunca pregunta no puede ver un drenaje                                                                                                               | `200` mientras sirve, `503` con `{"status":"draining"}` durante `--drain-delay`, con cualquier `Host` o ninguno |
+| Terminar TLS, o verificar el certificado del servidor cuando es el servidor quien lo termina | Texto en claro por la red, o un proxy que se fía de cualquier certificado                                                                                               | `--tls-cert` y `--tls-key` para terminarlo en el proceso                                                        |
+
+El resto de esta sección explica por qué se cumple cada fila. Las configuraciones vienen después.
+
+### El nombre que reenvía el proxy
+
+El servidor rechaza una cabecera `Host` de la que nunca se le habló, como defensa frente al DNS rebinding. Un proxy que reenvía el `Host` del cliente y conecta por loopback tiene justo la forma a la que apunta ese rechazo, así que la petición vuelve con un `403`:
+
+```json
+{
+	"jsonrpc": "2.0",
+	"id": 1,
+	"error": {
+		"code": -40300,
+		"message": "the Host header names a host this deployment does not serve. Behind a reverse proxy, pass --public-url with the origin clients use, or --trusted-proxies with the proxy's address."
+	}
+}
+```
+
+`--public-url` declara el nombre y además pone una entrada `remotes` en la card de descubrimiento, así que es la que conviene para un endpoint público. `--trusted-proxies` se cree el `Host` que reenvíe cualquier par de la lista. Solo se protege el endpoint MCP: `/health` y las server cards responden a cualquier `Host`, y una petición sin ningún `Host`, que es lo que envía por defecto el `option httpchk` de HAProxy, se sirve. Un listener de socket unix no nombra ningún host y queda exento. La regla completa está en [El nombre que usan los clientes](/libgen-mcp/es/http-server-mode/#el-nombre-que-usan-los-clientes-y-por-qué-sin-él-se-rechaza-una-petición-que-pasa-por-un-proxy).
+
+### Streaming y tiempos de espera
+
+Un `tools/call` responde con un flujo de server-sent events cuando el cliente lo acepta, y todos los clientes de HTTP en streaming lo aceptan. Dos propiedades de ese flujo deciden los ajustes del proxy:
+
+- **No se escribe nada hasta que la llamada tiene algo que decir.** La línea de estado y las cabeceras salen con el primer evento: una notificación de progreso en una transferencia, o el resultado. Una búsqueda en cola detrás del límite de tasa de salida, o esperando a un mirror lento, no envía ni un byte hasta que termina. Medido contra el servidor directamente, una búsqueda retenida 35 segundos por un mirror lento envió su primer byte a los 35,0 segundos, y llegó igual a través de todos los proxies probados más abajo. Por eso el tiempo de lectura del proxy tiene que cubrir la llamada entera, no un hueco entre eventos. Lo que termina una llamada es `LIBGEN_MCP_ACTION_TIMEOUT` (por defecto `1h`), así que un tiempo de espera de una hora en el proxy encaja con él.
+- **Una vez empezado, un flujo nunca está callado mucho tiempo.** El servidor escribe un comentario `: keep-alive` tras 25 segundos sin eventos, de modo que un flujo abierto nunca está inactivo lo bastante como para que lo cierre un tiempo de inactividad del camino.
+
+El búfer echa a perder el sentido del flujo: `download` y `read` informan del progreso mientras se mueven los bytes, y un proxy con búfer entrega todas las notificaciones a la vez, tras la transferencia. El servidor envía `X-Accel-Buffering: no` en cada flujo, que nginx respeta aunque `proxy_buffering` esté activo; los demás proxies de aquí o bien transmiten los flujos de eventos sin búfer por defecto, o bien se les indica más abajo. `--json-response` desactiva los flujos por completo, a costa de las notificaciones de progreso.
+
+### La dirección del llamante
+
+Tres cosas del servidor van por llamante: el límite de tasa de entrada, el techo de llamadas en vuelo de `download` y `read`, y el atributo de telemetría `user.hash`. Detrás de un proxy la conexión viene del proxy, así que las tres ven un único llamante hasta que al servidor se le dice qué cabecera lleva la dirección real y qué par puede ponerla:
+
+```bash
+--trusted-proxies 127.0.0.1/32 --trusted-proxy-header X-Real-IP
+```
+
+Las dos opciones o ninguna: cualquiera de ellas sola impide arrancar. La cabecera solo se lee de un par de la lista, y un `X-Forwarded-For` con varios valores se lee desde la derecha, parando en el primer salto que no sea a su vez un proxy de confianza, así que un llamante no puede elegir su propia dirección. En un socket unix el par es una ruta, y la entrada es el literal `unix`. Qué dirección poner depende de dónde corre el servidor, y **es la dirección desde la que el servidor acepta conexiones**, que detrás de un puerto de contenedor publicado es la pasarela del bridge y no `127.0.0.1`. La tabla para leerla de tu despliegue está en [Qué identidad tiene este despliegue](/libgen-mcp/es/http-server-mode/#qué-identidad-tiene-este-despliegue).
+
+### CORS es cosa del servidor
+
+Un cliente que corre en el navegador necesita que se responda al preflight y que se devuelva su origen. El servidor hace las dos cosas para los orígenes de `--trusted-origins`: responde a `OPTIONS` con `204`, devuelve el origen, las cabeceras pedidas y `Vary`, y rechaza con `403` un `POST` de origen cruzado de cualquier otro origen. Con la opción vacía, que es lo predeterminado, no se confía en ningún origen de navegador.
+
+Así que el proxy no añade nada. Dos cabeceras `Access-Control-Allow-Origin` en una misma respuesta, una por capa, es una respuesta que todos los navegadores rechazan mientras `curl` informa de un `200`, y así es como se descubrió en el despliegue hospedado. Un proxy que responde él mismo a `OPTIONS` es peor: devuelve `204` diga lo que diga el servidor, y el navegador envía después un `POST` que el servidor rechaza. El único documento para el que un proxy responde CORS es uno que sirve él mismo, como un [AI Catalog](/libgen-mcp/es/http-server-mode/#publicar-un-ai-catalog).
+
+### Rutas
+
+El servidor responde en su montaje (`/` por defecto), en el alias `/mcp`, en `/health` y en las rutas de las server cards, y con un `404` cuyo cuerpo JSON nombra el endpoint para todo lo demás. Un proxy puede publicar el servidor bajo un prefijo de dos maneras:
+
+- **Quitando el prefijo**, de modo que el servidor sigue viendo `/`. No hay nada que configurar en el servidor.
+- **Reenviando el prefijo**, y montando el servidor bajo él con `--http-path /libgen`. El endpoint pasa a ser `POST /libgen` (y `/libgen/mcp`), la sonda `GET /libgen/health`, y las cards `/libgen/server-card`, `/libgen/mcp/server-card` y `/libgen/.well-known/mcp/server-card.json`. Fija `--public-url https://mcp.example.org/libgen` a juego.
+
+Reenviar es la opción más sencilla cuando el proxy sirve también otras cosas en el mismo host, porque la URL `remotes` de la card y las rutas que un cliente deriva de ella siguen siendo coherentes sin reescribir nada.
+
+### TLS en el proxy o en el proceso
+
+Cuando el proxy corre en la misma máquina, termina TLS ahí y llega al servidor por loopback, o mejor por un socket unix. Cuando el proxy está en otro host, el salto entre ambos cruza una red: deja que el servidor termine TLS con `--tls-cert` y `--tls-key`, y haz que el proxy verifique ese certificado. El servidor relee una pareja renovada en el siguiente handshake y envía `Strict-Transport-Security` solo cuando termina TLS él mismo; detrás de un proxy que lo termina, lo envía el proxy. Consulta [Terminar TLS en este proceso](/libgen-mcp/es/http-server-mode/#terminar-tls-en-este-proceso).
+
+## El servidor detrás de cada configuración
+
+Todas las configuraciones de abajo hacen de proxy hacia una de estas dos órdenes:
+
+<Tabs syncKey="upstream">
+<TabItem label="TCP">
+
+```bash
+libgen-mcp --http 127.0.0.1:8080 \
+  --public-url https://mcp.example.org \
+  --trusted-proxies 127.0.0.1/32 \
+  --trusted-proxy-header X-Real-IP
+```
+
+</TabItem>
+<TabItem label="Socket unix">
+
+```bash
+libgen-mcp --http /run/libgen-mcp/libgen.sock \
+  --public-url https://mcp.example.org \
+  --trusted-proxies unix \
+  --trusted-proxy-header X-Real-IP
+```
+
+</TabItem>
+</Tabs>
+
+El socket se crea con `0660`, así que los procesos worker del proxy tienen que estar en el grupo del socket; [Ejecutarlo como servicio](/libgen-mcp/es/deploy/service/#un-socket-unix-con-un-usuario-propio) y [Contenedores](/libgen-mcp/es/deploy/containers/#nginx-delante-con-un-socket-unix-compartido) lo dejan preparado. Cada opción tiene además su variable `LIBGEN_MCP_*`, que están en [Configuración](/libgen-mcp/es/configuration/#listener-http).
+
+## nginx
+
+### Upstream TCP
+
+```nginx
+upstream libgen_mcp {
+    server 127.0.0.1:8080;
+    keepalive 16;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name mcp.example.org;
+
+    ssl_certificate     /etc/letsencrypt/live/mcp.example.org/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/mcp.example.org/privkey.pem;
+
+    # nginx rechaza por defecto los cuerpos de más de 1 MiB; mantén esto igual
+    # o por encima del --max-request-body-bytes del servidor (4 MiB).
+    client_max_body_size 4m;
+
+    location / {
+        proxy_pass         http://libgen_mcp;
+        proxy_http_version 1.1;
+        proxy_set_header   Connection "";
+
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+
+        proxy_buffering    off;
+        proxy_cache        off;
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+    }
+}
+```
+
+`proxy_http_version 1.1` con una cabecera `Connection` vacía es lo que permite a nginx mantener abiertas las conexiones al upstream (`keepalive 16`) y reenviar un flujo por trozos. `proxy_buffering off` es por partida doble: el `X-Accel-Buffering: no` del servidor ya desactiva el búfer en cada respuesta. nginx open source no tiene comprobación de salud activa; su `max_fails` solo se entera de las peticiones que fallan. Consulta [Actualizaciones progresivas](/libgen-mcp/es/deploy/scaling/#actualizaciones-progresivas) para lo que eso supone durante un despliegue.
+
+### Upstream por socket unix
+
+Cambia el upstream y nada más:
+
+```nginx
+upstream libgen_mcp {
+    server unix:/run/libgen-mcp/libgen.sock;
+    keepalive 16;
+}
+```
+
+Los workers de nginx tienen que poder abrir el socket `0660` y atravesar su directorio. En un host, añade el usuario de nginx al grupo del socket (`usermod -aG libgen-mcp www-data`) y reinicia nginx: los workers llaman a `initgroups()` al soltar privilegios, así que recogen el grupo de `/etc/group`. En un contenedor, ejecuta en cambio el servidor con el grupo de nginx, como hace [Contenedores](/libgen-mcp/es/deploy/containers/#nginx-delante-con-un-socket-unix-compartido).
+
+<Aside type="caution">
+	**El argumento de grupo de la directiva `user` de nginx es un nombre, no un
+	número.** `user nginx 10001;` falla al arrancar con `getgrnam("10001") failed`
+	salvo que exista un grupo con ese nombre en el propio `/etc/group` del proxy.
+</Aside>
+
+### TLS hacia el upstream
+
+Para un servidor en otro host que termina TLS él mismo (`--tls-cert /etc/libgen-mcp/tls.crt --tls-key /etc/libgen-mcp/tls.key`), haz de proxy hacia `https` y verifica su certificado:
+
+```nginx
+upstream libgen_mcp {
+    server 10.0.0.12:8443;
+    keepalive 16;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name mcp.example.org;
+
+    ssl_certificate     /etc/letsencrypt/live/mcp.example.org/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/mcp.example.org/privkey.pem;
+
+    client_max_body_size 4m;
+
+    location / {
+        proxy_pass         https://libgen_mcp;
+        proxy_http_version 1.1;
+        proxy_set_header   Connection "";
+
+        proxy_ssl_verify              on;
+        proxy_ssl_trusted_certificate /etc/nginx/libgen-ca.pem;
+        proxy_ssl_name                libgen.internal;
+        proxy_ssl_server_name         on;
+        proxy_ssl_session_reuse       on;
+
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+
+        proxy_buffering    off;
+        proxy_cache        off;
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+    }
+}
+```
+
+nginx no verifica el certificado de un upstream salvo que se le diga, así que sin `proxy_ssl_verify on` un certificado equivocado pasa desapercibido. Con él, `proxy_ssl_trusted_certificate` tiene que nombrar la CA que emitió el certificado del servidor, y `proxy_ssl_name` un nombre que figure en ese certificado, o fallan todas las peticiones. En el servidor, `--trusted-proxies` nombra la dirección de este nginx tal como la ve el servidor.
+
+### Bajo un prefijo de ruta
+
+Para reenviar `/libgen` sin tocarlo, arranca el servidor con `--http-path /libgen` y `--public-url https://mcp.example.org/libgen`, y no le des URI a `proxy_pass`, de modo que nginx pase la ruta tal como llegó:
+
+```nginx
+location /libgen {
+    proxy_pass         http://libgen_mcp;
+    proxy_http_version 1.1;
+    proxy_set_header   Connection "";
+    proxy_set_header   Host              $host;
+    proxy_set_header   X-Real-IP         $remote_addr;
+    proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header   X-Forwarded-Proto $scheme;
+    proxy_buffering    off;
+    proxy_cache        off;
+    proxy_read_timeout 1h;
+    proxy_send_timeout 1h;
+}
+```
+
+`POST /libgen`, `POST /libgen/mcp`, `GET /libgen/health` y las cards bajo `/libgen` responden todas a través de él, y `GET /health` sin el prefijo es un `404`.
+
+## Caddy
+
+```text
+mcp.example.org {
+    request_body {
+        max_size 4MB
+    }
+
+    reverse_proxy 127.0.0.1:8080 {
+        header_up X-Real-IP {remote_host}
+        flush_interval -1
+        transport http {
+            read_timeout 1h
+            write_timeout 1h
+        }
+    }
+}
+```
+
+Caddy obtiene el certificado por su cuenta, reenvía el `Host` del cliente y fija `X-Forwarded-For` por defecto. `header_up X-Real-IP {remote_host}` añade la cabecera de un solo valor que leen las órdenes del servidor de arriba; con `--trusted-proxy-header X-Forwarded-For` en su lugar, se puede quitar. Caddy ya vuelca las respuestas `text/event-stream` según llegan, y `flush_interval -1` lo hace incondicional.
+
+Para un socket unix, el upstream es `reverse_proxy unix//run/libgen-mcp/libgen.sock { … }` con el mismo bloque dentro.
+
+## Traefik
+
+Traefik reenvía el `Host` del cliente, fija tanto `X-Real-Ip` como `X-Forwarded-For` a la dirección del cliente, y transmite sin búfer las respuestas de flujo de eventos. Por defecto no aplica ningún tiempo de espera a la respuesta de un upstream (`responseHeaderTimeout` vale `0`), que es lo que necesita una llamada que no envía cabeceras durante minutos: déjalo así, o ponlo por encima de una hora. Estas configuraciones usan un upstream TCP.
+
+### Proveedor de ficheros
+
+<Tabs>
+<TabItem label="traefik.yml (estática)">
+
+```yaml
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: you@example.org
+      storage: /var/lib/traefik/acme.json
+      httpChallenge:
+        entryPoint: web
+
+providers:
+  file:
+    filename: /etc/traefik/dynamic.yml
+```
+
+</TabItem>
+<TabItem label="dynamic.yml">
+
+```yaml
+http:
+  routers:
+    libgen-mcp:
+      rule: "Host(`mcp.example.org`)"
+      entryPoints: [websecure]
+      service: libgen-mcp
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    libgen-mcp:
+      loadBalancer:
+        passHostHeader: true
+        servers:
+          - url: "http://127.0.0.1:8080"
+        healthCheck:
+          path: /health
+          interval: 10s
+          timeout: 3s
+```
+
+</TabItem>
+</Tabs>
+
+La comprobación de salud saca de la rotación una réplica en cuanto su `/health` pasa a `503` durante un drenaje, así que `--drain-delay 15s` cubre un intervalo y el tiempo de actuar en consecuencia.
+
+### Etiquetas de Docker
+
+Con Traefik y el servidor en un mismo proyecto de Compose, el router vive en las etiquetas del servidor. El servidor ve la dirección de Traefik en la red compartida, así que esa dirección tiene que ser fija para que `--trusted-proxies` pueda nombrarla:
+
+```yaml
+services:
+  traefik:
+    image: traefik:v3.6
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedByDefault=false
+      - --providers.docker.network=libgen_edge
+      - --entryPoints.web.address=:80
+      - --entryPoints.web.http.redirections.entryPoint.to=websecure
+      - --entryPoints.websecure.address=:443
+      - --certificatesResolvers.letsencrypt.acme.email=you@example.org
+      - --certificatesResolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --certificatesResolvers.letsencrypt.acme.httpChallenge.entryPoint=web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt:/letsencrypt
+    networks:
+      edge:
+        ipv4_address: 172.30.0.2
+    restart: unless-stopped
+
+  libgen-mcp:
+    image: ghcr.io/jmrplens/libgen-mcp:2.1.0
+    command:
+      - --http=0.0.0.0:8080
+      - --public-url=https://mcp.example.org
+      - --trusted-proxies=172.30.0.2/32
+      - --trusted-proxy-header=X-Real-IP
+      - --drain-delay=15s
+    stop_grace_period: 30s
+    networks: [edge]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.libgen-mcp.rule=Host(`mcp.example.org`)
+      - traefik.http.routers.libgen-mcp.entrypoints=websecure
+      - traefik.http.routers.libgen-mcp.tls.certresolver=letsencrypt
+      - traefik.http.services.libgen-mcp.loadbalancer.server.port=8080
+      - traefik.http.services.libgen-mcp.loadbalancer.healthcheck.path=/health
+      - traefik.http.services.libgen-mcp.loadbalancer.healthcheck.interval=10s
+    restart: unless-stopped
+
+networks:
+  edge:
+    name: libgen_edge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+          ip_range: 172.30.0.128/25
+
+volumes:
+  letsencrypt:
+```
+
+`ip_range` mantiene la asignación de direcciones propia de Docker en la mitad superior de la subred. Sin él, el contenedor que arranque primero puede quedarse con `172.30.0.2`, y Traefik no arranca con `Address already in use`. Elige una subred que no use ninguna otra red del host.
+
+<Aside type="caution">
+	Con Docker Engine 29 el proveedor de Docker necesita Traefik 3.6 o posterior:
+	la 3.5 no sabe hablar con la API del motor y registra `client version 1.24 is
+	too old`, así que nunca se crea ninguna ruta.
+</Aside>
+
+## Apache httpd
+
+```apache
+LoadModule headers_module       modules/mod_headers.so
+LoadModule proxy_module         modules/mod_proxy.so
+LoadModule proxy_http_module    modules/mod_proxy_http.so
+LoadModule ssl_module           modules/mod_ssl.so
+LoadModule socache_shmcb_module modules/mod_socache_shmcb.so
+
+Listen 443
+
+<VirtualHost *:443>
+    ServerName mcp.example.org
+
+    SSLEngine on
+    SSLCertificateFile    /etc/letsencrypt/live/mcp.example.org/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/mcp.example.org/privkey.pem
+
+    ProxyPreserveHost On
+    ProxyTimeout      3600
+    LimitRequestBody  4194304
+
+    RequestHeader set X-Real-IP "%{REMOTE_ADDR}s"
+    RequestHeader set X-Forwarded-Proto "https"
+
+    ProxyPass        "/" "http://127.0.0.1:8080/" flushpackets=on keepalive=On
+    ProxyPassReverse "/" "http://127.0.0.1:8080/"
+</VirtualHost>
+```
+
+`ProxyPreserveHost On` reenvía el `Host` del cliente, el nombre que declara `--public-url`, en lugar de la dirección del upstream. `flushpackets=on` reenvía cada trozo según llega, y `mod_proxy` añade `X-Forwarded-For` por su cuenta. En Debian los módulos se activan con `a2enmod proxy_http headers ssl` en lugar de con líneas `LoadModule`. Para un socket unix, el destino es `"unix:/run/libgen-mcp/libgen.sock|http://localhost/"` tanto en `ProxyPass` como en `ProxyPassReverse`, y el usuario de Apache (`www-data`) va en el grupo del socket.
+
+## HAProxy
+
+```text
+global
+    log stdout format raw local0 warning
+
+defaults
+    mode http
+    log global
+    option httplog
+    timeout connect      5s
+    timeout http-request 10s
+    timeout client       1h
+    timeout server       1h
+    timeout tunnel       1h
+
+frontend mcp
+    bind :443 ssl crt /etc/haproxy/certs/mcp.example.org.pem alpn h2,http/1.1
+    http-request set-header X-Real-IP %[src]
+    http-request set-header X-Forwarded-Proto https
+    default_backend libgen_mcp
+
+backend libgen_mcp
+    option httpchk
+    http-check send meth GET uri /health
+    http-check expect status 200
+    server mcp1 127.0.0.1:8080 check inter 10s
+```
+
+El `.pem` contiene la cadena de certificados seguida de la clave. HAProxy reenvía el `Host` del cliente sin cambios y no almacena las respuestas en búfer. `timeout server` es el que importa para una llamada larga. La comprobación de salud no envía `Host`, y el servidor la responde. Para un socket unix la línea del servidor es `server mcp1 unix@/run/libgen-mcp/libgen.sock check inter 10s`, con el usuario de HAProxy en el grupo del socket.
+
+## Cloudflare Tunnel
+
+`cloudflared` corre junto al servidor y se conecta hacia fuera con Cloudflare, así que nada escucha en una dirección pública. Su `config.yml`:
+
+```yaml
+tunnel: 6ff42ae2-765d-4adf-8112-31c55c1551ef
+credentials-file: /etc/cloudflared/6ff42ae2-765d-4adf-8112-31c55c1551ef.json
+
+ingress:
+  - hostname: mcp.example.org
+    service: http://127.0.0.1:8080
+    originRequest:
+      connectTimeout: 10s
+      keepAliveTimeout: 90s
+  - service: http_status:404
+```
+
+El ID del túnel y su fichero de credenciales salen de `cloudflared tunnel create`. Cloudflare pasa la dirección del cliente en `CF-Connecting-IP`, y `cloudflared` conecta con el servidor desde loopback, así que el servidor recibe:
+
+```bash
+libgen-mcp --http 127.0.0.1:8080 \
+  --public-url https://mcp.example.org \
+  --trusted-proxies 127.0.0.1/32 \
+  --trusted-proxy-header CF-Connecting-IP
+```
+
+<Aside type="caution" title="No se ha ejecutado de extremo a extremo">
+	Esta configuración se validó con `cloudflared tunnel ingress validate` y
+	`cloudflared tunnel ingress rule`, sin servirla a través del borde de
+	Cloudflare. Hay un límite que aquí pesa más que en ningún otro sitio:
+	Cloudflare documenta que una petición con proxy cuyo origen no ha empezado a
+	responder en 100 segundos falla con un `524` en los planes que no son
+	Enterprise. Como el servidor no envía nada hasta el primer evento de una
+	llamada, una llamada que espera más que eso, como una búsqueda en cola detrás
+	del límite de tasa de salida, falla en Cloudflare mientras el servidor sigue
+	trabajando en ella.
+</Aside>
+
+## Cómo se probaron estas configuraciones
+
+Cada configuración se ejecutó en la imagen oficial de su proxy, delante del binario `libgen-mcp` compilado desde este repositorio, con el proxy en la red del host y el servidor en loopback o en un socket unix. Las únicas diferencias con el texto de arriba fueron el puerto de escucha, el nombre de host (`mcp.test.example`), un certificado autofirmado en lugar de ACME y, en Caddy, un `auto_https disable_redirects` global porque el puerto 80 estaba ocupado. En cada una se comprobó:
+
+- `GET /health` a través del proxy respondiendo `200`.
+- Un `POST` de `tools/list`, al montaje y a `/mcp`, respondiendo `200` con `text/event-stream`.
+- Un flujo sin búfer: el flujo `GET` independiente de una sesión entregó el comentario `: keep-alive` del servidor 25 segundos después de abrirse, con el flujo todavía abierto, y una búsqueda de 35 segundos llegó entera en lugar de cortarse por un tiempo de espera.
+- Un preflight desde un origen de `--trusted-origins` respondido con `204` y ese origen devuelto, y un `POST` de origen cruzado desde otro origen rechazado con `403`.
+- El nombre público aceptado a través del proxy con `--public-url` puesto, y rechazado con `403` cuando el servidor arrancó sin él ni `--trusted-proxies`.
+- La dirección del llamante: con una ráfaga de dos, un tercer `prompts/get` desde una dirección de cliente se rechazó con `-42900` mientras una llamada desde una segunda dirección a través del mismo proxy se sirvió, cosa que solo ocurre cuando se cree la cabecera reenviada.
+
+| Proxy                          | Versión  | Upstreams ejecutados                                | Resultado                                                                                                                                                    |
+| ------------------------------ | -------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| nginx                          | 1.29.8   | TCP, socket unix, TLS (CA privada), prefijo de ruta | Pasan todas las comprobaciones                                                                                                                               |
+| Caddy                          | 2.10.2   | TCP, socket unix                                    | Pasan todas las comprobaciones                                                                                                                               |
+| Traefik, proveedor de ficheros | 3.6.25   | TCP                                                 | Pasan todas las comprobaciones                                                                                                                               |
+| Traefik, etiquetas de Docker   | 3.6.25   | TCP, sobre una red de Compose                       | Pasan la salud, `tools/list`, el preflight, el `Host` y las cards. Las comprobaciones del flujo y del llamante solo se hicieron con el proveedor de ficheros |
+| Apache httpd                   | 2.4.69   | TCP, socket unix                                    | Pasan todas las comprobaciones                                                                                                                               |
+| HAProxy                        | 3.2.25   | TCP, socket unix                                    | Pasan todas las comprobaciones, con la comprobación de salud `UP` sin `Host`                                                                                 |
+| Cloudflare Tunnel              | 2025.9.1 | Solo se validó la configuración                     | No se sirvió a través de Cloudflare                                                                                                                          |
+
+La comprobación del flujo usó `--stateless=false` para su `GET` independiente, ya que el transporte por defecto no lo tiene. Los mismos ajustes del proxy llevan un flujo de `POST`, cuyo comportamiento en el tiempo cubrió la comprobación de la búsqueda.

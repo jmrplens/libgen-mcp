@@ -1,6 +1,344 @@
 ---
 title: Ejecutarlo como servicio
 description: "Ejecutar el servidor HTTP de libgen-mcp como servicio del sistema: un fichero de unidad, un puerto TCP o un socket unix, el drenaje ordenado y la comprobación de salud."
+datePublished: "2026-10-03"
+mentions:
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+  - name: "systemd"
+    wikidata: Q286124
+chips:
+  - text: "Unidades de systemd endurecidas"
+  - text: "Drena al pararse"
+  - text: "Detrás de un proxy inverso"
+    href: "/libgen-mcp/es/deploy/reverse-proxy/"
 ---
 
-Esta página cubrirá cómo ejecutar el servidor como un servicio del sistema de larga duración: un fichero de unidad completo, la escucha en un puerto TCP o en un socket unix, el fichero de entorno, cómo una señal de parada drena las llamadas en curso y la comprobación de salud que puede lanzar un supervisor. El comportamiento que controla cada ajuste se describe en [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/).
+import { Aside } from "@astrojs/starlight/components";
+
+Esta página ejecuta `libgen-mcp --http` como un servicio del sistema de larga duración: una unidad de systemd para un puerto TCP y otra para un socket unix, el fichero de entorno, el límite de descriptores que dimensiona el proceso, cómo drena una parada, cómo actualizar, y los equivalentes con launchd en macOS y en Windows. Las unidades de systemd se ejecutaron tal como están escritas; cómo, está [al final de esa sección](#cómo-se-probaron-las-unidades).
+
+El binario sale de una [release](/libgen-mcp/es/install/binary/) o de `go install`; el proxy que va delante, de [Detrás de un proxy inverso](/libgen-mcp/es/deploy/reverse-proxy/). Qué hace cada opción del servidor está en [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/) y en la [referencia de opciones](/libgen-mcp/es/cli/).
+
+## systemd
+
+### Un listener TCP en loopback
+
+`/etc/systemd/system/libgen-mcp.service`:
+
+```ini
+[Unit]
+Description=libgen-mcp MCP server (streamable HTTP)
+Documentation=https://jmrp.io/docs/libgen-mcp/deploy/service/
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=exec
+ExecStart=/usr/local/bin/libgen-mcp \
+    --http 127.0.0.1:8080 \
+    --public-url https://mcp.example.org \
+    --trusted-proxies 127.0.0.1/32 \
+    --trusted-proxy-header X-Real-IP \
+    --drain-delay 10s
+EnvironmentFile=-/etc/libgen-mcp/libgen-mcp.env
+Restart=on-failure
+RestartSec=2s
+
+# Con qué cuenta corre, y los únicos sitios donde puede escribir.
+DynamicUser=yes
+StateDirectory=libgen-mcp
+CacheDirectory=libgen-mcp
+Environment=HOME=%S/libgen-mcp
+Environment=XDG_CACHE_HOME=%C
+Environment=LIBGEN_MCP_DOWNLOAD_DIR=%S/libgen-mcp
+
+# El primer SIGTERM drena: cubre --drain-delay más los 8 s que lo siguen.
+TimeoutStopSec=30s
+
+# Dimensiona los techos del proceso (ver más abajo).
+LimitNOFILE=65536
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Instálala, arráncala y lee su log:
+
+```bash
+sudo install -m 0755 libgen-mcp /usr/local/bin/libgen-mcp
+sudo install -d -m 0750 /etc/libgen-mcp
+sudoedit /etc/libgen-mcp/libgen-mcp.env
+sudo install -m 0644 libgen-mcp.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now libgen-mcp
+journalctl -u libgen-mcp -f
+```
+
+El servidor registra un objeto JSON por línea en stderr, y el journal lo guarda. Las líneas de arranque dicen qué se le dio: el listener, el par del proxy de confianza, el límite de tasa y los `process ceilings`.
+
+**Dónde escribe, y por qué están las tres líneas `Environment=`.** `DynamicUser=yes` ejecuta el servidor con una cuenta desechable sin directorio personal, y `ProtectSystem=strict` deja todo el sistema de archivos en solo lectura salvo los directorios que systemd crea para la unidad:
+
+| Directorio                       | Lo fija           | Qué guarda ahí el servidor                              |
+| -------------------------------- | ----------------- | ------------------------------------------------------- |
+| `/var/lib/libgen-mcp` (`%S/…`)   | `StateDirectory=` | `HOME` y `LIBGEN_MCP_DOWNLOAD_DIR`                      |
+| `/var/cache/libgen-mcp` (`%C/…`) | `CacheDirectory=` | La lista de mirrors descubierta, `mirrors.json`         |
+| Un `/tmp` privado                | `PrivateTmp=`     | Lo que trae `read` con `LIBGEN_MCP_SERVER_FETCH` activo |
+
+El directorio de descargas es el que pararía la unidad. El servidor comprueba al arrancar que `LIBGEN_MCP_DOWNLOAD_DIR` se puede crear y escribir, **también sobre HTTP**, donde `download` solo devuelve enlaces, y se niega a arrancar si no puede: `LIBGEN_MCP_DOWNLOAD_DIR "…" is not usable: mkdir …: read-only file system`. Su valor por defecto es `$HOME/Downloads`, así que apuntarlo, junto con `HOME`, al directorio de estado es lo que permite ejecutar el servidor en un sistema de solo lectura. `XDG_CACHE_HOME=%C` manda la caché de mirrors al directorio de caché, donde de otro modo un fallo al escribirla pasaría en silencio y costaría un descubrimiento de mirrors en cada arranque.
+
+### El fichero de entorno
+
+`EnvironmentFile=` lo lee systemd, como root, antes de que exista la cuenta del servicio, así que el fichero puede ser `0640 root:root` y aun así contener claves que la cuenta nunca ve en disco. El `-` inicial lo hace opcional.
+
+```bash
+# /etc/libgen-mcp/libgen-mcp.env
+LIBGEN_MCP_LOG_LEVEL=info
+LIBGEN_MCP_RATE_LIMIT_RPS=10
+LIBGEN_MCP_HTTP_IDLE_TIMEOUT=5m
+
+# Claves opcionales. Déjalas fuera para seguir sin claves.
+#LIBGEN_MCP_UNPAYWALL_EMAIL=you@example.org
+#LIBGEN_MCP_CORE_KEY=
+#LIBGEN_MCP_ANNAS_KEY=
+```
+
+Cada variable es un nombre `LIBGEN_MCP_*` de los que lista [Configuración](/libgen-mcp/es/configuration/), más `LIBGEN_MIRROR`. Un valor que no se puede interpretar detiene el servidor al arrancar, nombrando la variable. Cada opción HTTP tiene también su variable (la de `--http` es `LIBGEN_MCP_HTTP_ADDR`), así que el listener entero puede vivir en este fichero en lugar de en `ExecStart=`; una opción escrita en `ExecStart=` gana a su variable. Las claves van aquí o en un almacén de credenciales, nunca en la línea de órdenes, donde cualquier cuenta local las lee con `ps`.
+
+### Un socket unix con un usuario propio
+
+Con el proxy en la misma máquina, un socket unix elimina el salto de red y el puerto. El proxy tiene que estar en el grupo del socket, y un grupo creado por `DynamicUser=` no tiene un nombre estable al que añadirlo, así que esta variante usa una cuenta fija:
+
+```bash
+sudo useradd --system --no-create-home --home-dir /var/lib/libgen-mcp \
+  --shell /usr/sbin/nologin libgen-mcp
+sudo usermod -aG libgen-mcp www-data   # el usuario del proxy: www-data, nginx, caddy, haproxy…
+```
+
+La unidad difiere de la anterior en la línea `ExecStart=` y en la cuenta con la que corre:
+
+```ini
+[Service]
+Type=exec
+ExecStart=/usr/local/bin/libgen-mcp \
+    --http /run/libgen-mcp/libgen.sock \
+    --public-url https://mcp.example.org \
+    --trusted-proxies unix \
+    --trusted-proxy-header X-Real-IP \
+    --drain-delay 10s
+EnvironmentFile=-/etc/libgen-mcp/libgen-mcp.env
+Restart=on-failure
+RestartSec=2s
+
+User=libgen-mcp
+Group=libgen-mcp
+RuntimeDirectory=libgen-mcp
+RuntimeDirectoryMode=0750
+StateDirectory=libgen-mcp
+CacheDirectory=libgen-mcp
+Environment=HOME=%S/libgen-mcp
+Environment=XDG_CACHE_HOME=%C
+Environment=LIBGEN_MCP_DOWNLOAD_DIR=%S/libgen-mcp
+
+TimeoutStopSec=30s
+LimitNOFILE=65536
+
+# …el mismo bloque de endurecimiento que la unidad TCP…
+```
+
+Deja sin cambios las secciones `[Unit]`, `[Install]` y de endurecimiento de la unidad TCP. `RuntimeDirectory=` crea `/run/libgen-mcp` con propietario `libgen-mcp:libgen-mcp` y modo `0750` en cada arranque, y lo borra en cada parada. El servidor crea ahí el socket como `srw-rw---- libgen-mcp libgen-mcp`: el modo es `0660` por defecto diga lo que diga `UMask=`, porque el servidor lo fija explícitamente tras el bind. El proxy llega a él por el grupo, y se reinicia después del `usermod` para que sus workers recojan el grupo. Su configuración está en [Detrás de un proxy inverso](/libgen-mcp/es/deploy/reverse-proxy/#upstream-por-socket-unix).
+
+### El límite de descriptores dimensiona el proceso
+
+El proceso retiene como mucho un número de llamadas derivado de su `RLIMIT_NOFILE` duro, leído una vez al arrancar, y mantiene como mucho la mitad de ese número en sesiones con estado. La aritmética, de `cmd/server/held.go`: se deja libre un octavo del límite, se reserva un descriptor para cada una de las 64 ranuras de descarga, y cada llamada retenida cuenta como diez descriptores, su abanico más ancho.
+
+```text
+llamadas retenidas = (límite - límite/8 - 64) / 10
+```
+
+| `LimitNOFILE=`                       | Llamadas retenidas | Sesiones con estado |
+| ------------------------------------ | -----------------: | ------------------: |
+| `1024`                               |                 83 |                  41 |
+| `65536` (las unidades de arriba)     |               5728 |                2864 |
+| sin fijar (`1024:524288` de systemd) |              45868 |               22934 |
+
+Con `LimitNOFILE=` sin fijar, un servicio de systemd recibe un límite blando de 1024 y uno duro de 524288, y el runtime de Go sube el blando hasta el duro, así que la cifra sigue a 524288. No hay opción para el techo: el límite de descriptores es el ajuste. Elígelo pensando en la memoria, porque una llamada retenida también cuesta memoria, y acótala con `MemoryMax=` si el host es compartido. La línea de arranque confirma lo que recibió el proceso:
+
+```text
+"msg":"process ceilings","held_calls_per_process":5728,"descriptor_limit":65536,"descriptor_limit_source":"RLIMIT_NOFILE"
+```
+
+Qué pasa cuando se alcanza el techo, y por qué `/health` sigue siendo alcanzable, está en [Qué puede retener el proceso entero](/libgen-mcp/es/http-server-mode/#qué-puede-retener-el-proceso-entero).
+
+### Parar, reiniciar y el drenaje
+
+`systemctl stop` envía `SIGTERM` a todos los procesos de la unidad, que aquí es el único proceso del servidor. El primer `SIGTERM` inicia el drenaje: `GET /health` responde `503` con `{"status":"draining"}` durante `--drain-delay`, después se cierra el listener, y las llamadas que siguen en marcha tienen hasta 8 segundos más. Luego el proceso sale con estado 0, que systemd registra como una parada limpia.
+
+- **`KillMode=` se queda en su valor por defecto, `control-group`.** Un segundo `SIGTERM` que llega dentro del segundo siguiente al primero se toma como la misma parada y el drenaje continúa; solo una señal pasada esa ventana fuerza la salida. Hasta la 2.1.0 el duplicado terminaba el drenaje, y `KillMode=mixed` era el apaño; ya no hace falta.
+- **`TimeoutStopSec=` cubre `--drain-delay` más 8 segundos**, con margen. Pasado ese tiempo, systemd envía `SIGKILL` y las llamadas que siguen en marcha se cortan. El valor por defecto es de 90 segundos, así que solo hay que subirlo con un retardo de drenaje de más de un minuto o así; las unidades de arriba lo fijan para que las dos cifras estén juntas.
+- **`--drain-delay` es para lo que sondea `/health`.** En un único host detrás de nginx open source, que no sondea, no aporta nada y `0` vale. Detrás de un balanceador que sondea, ponlo al menos a un intervalo de sondeo. Consulta [Actualizaciones progresivas](/libgen-mcp/es/deploy/scaling/#actualizaciones-progresivas).
+- **`Restart=on-failure` no esconde mucho tiempo una configuración mala.** Un arranque rechazado sale con 1 y deja el motivo como última línea `ERROR` del journal; systemd reintenta cada `RestartSec=` hasta su límite de arranques (cinco en diez segundos por defecto) y después deja la unidad como fallida. `systemctl status libgen-mcp` muestra el motivo.
+
+Medido con `--drain-delay 10s`: `systemctl stop` volvió a los 10 segundos, `/health` respondió `503` todo ese tiempo, y la unidad terminó con `Result=success` y estado de salida 0.
+
+### Actualizar
+
+Sustituye el binario y reinicia la unidad. El reinicio drena como cualquier parada:
+
+```bash
+sudo install -m 0755 libgen-mcp /usr/local/bin/libgen-mcp
+sudo systemctl restart libgen-mcp
+```
+
+`install` escribe un fichero nuevo en lugar de sobrescribir el que está en marcha, así que el proceso antiguo sigue corriendo desde su propia copia hasta el reinicio. `libgen-mcp --version` sobre el binario nuevo, y el campo `version` de `GET /health` después, confirman el cambio.
+
+<Aside type="caution" title="No --shutdown">
+	No uses `libgen-mcp --shutdown` con un servicio supervisado. Pide a todas las
+	instancias del binario en la máquina que salgan y mata lo que queda a los
+	cinco segundos, diga lo que diga `--drain-delay`, y systemd cuenta esa muerte
+	como un fallo y vuelve a arrancar la unidad. Con las unidades de arriba, mató
+	el servidor a mitad de drenaje y systemd lo reinició una vez. La opción existe
+	para instancias que nadie supervisa, como una arrancada por el lanzador npm de
+	un cliente de escritorio o por un paquete `.mcpb`.
+</Aside>
+
+### Comprobarlo desde fuera
+
+`libgen-mcp --healthcheck` encuentra la instancia en marcha, lee su listener de su línea de órdenes (la dirección TCP, la ruta del socket, `--http-path`, `--tls-cert`) y pregunta a su `/health`:
+
+```bash
+$ sudo libgen-mcp --healthcheck
+healthcheck: pid 3446 at unix:/run/libgen-mcp/libgen.sock/health answered
+$ echo $?
+0
+```
+
+Sale con 0 cuando la instancia responde, con 1 cuando no, y con 2 si el destino no se puede interpretar, así que una comprobación de monitorización puede ejecutarlo tal cual. En Linux lee además el entorno de la instancia, de modo que también encuentra un listener fijado con `LIBGEN_MCP_HTTP_ADDR`; leer el entorno de otro proceso requiere root o la misma cuenta, así que ahí ejecútalo con `sudo`. `ProtectProc=invisible` en la unidad oculta los demás procesos al servicio, no el servicio a un administrador. Para sondear una dirección fija, dale el destino: `libgen-mcp --healthcheck http://127.0.0.1:8080/health`.
+
+### Endurecimiento
+
+Las directivas de las unidades confinan el proceso sin romper nada de lo que hace. El servidor necesita IPv4 e IPv6 de salida, un socket unix para su listener en la variante con socket, un directorio de estado y otro de caché con escritura, y nada más: ninguna capability, ningún dispositivo, ningún parámetro del kernel, ningún otro proceso.
+
+No añadas `PrivateNetwork=` ni un `IPAddressDeny=` que bloquee el tráfico de salida: cada llamada a una herramienta llega a un mirror o a un proveedor de acceso abierto. `MemoryDenyWriteExecute=yes` es seguro porque Go no genera código en tiempo de ejecución. `SystemCallFilter=@system-service` con `~@privileged @resources` cubre todo lo que llama el binario, y el runtime de Go sigue subiendo su límite blando de descriptores bajo ese filtro: una unidad sin `LimitNOFILE=` arrancó con un límite blando de 1024 y corrió con su límite duro. `systemd-analyze security libgen-mcp` puntúa las unidades con **1.3 OK**.
+
+Para endurecer más un servidor con un listener público, los siguientes pasos son un cortafuegos que solo permita salida y `MemoryMax=`; la lista del lado del servidor está en [Modelo de seguridad](/libgen-mcp/es/security/#lista-de-comprobación-para-endurecer-un-despliegue-http).
+
+### Cómo se probaron las unidades
+
+Las dos unidades se ejecutaron tal como están escritas con systemd 252 (Debian 12), en un contenedor arrancado con systemd como PID 1, con solo `--public-url` apuntando a un nombre de prueba. Cada una se comprobó con `systemd-analyze verify` (sin hallazgos), se arrancó y se ejercitó: `GET /health`, un `search` real contra el catálogo en vivo (que escribió `mirrors.json` en `/var/cache/libgen-mcp`), `tools/list` a través de nginx por el socket, `--healthcheck` contra los dos listeners, un `systemctl stop` que drenó, y `--shutdown` contra la unidad en marcha.
+
+## macOS: launchd
+
+Un LaunchAgent ejecuta el servidor con tu usuario, desde el inicio de sesión, lo que encaja con un Mac que sirve a su dueño o a un equipo pequeño. Guárdalo como `~/Library/LaunchAgents/io.github.jmrplens.libgen-mcp.plist`, con tu nombre de usuario en las rutas:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>io.github.jmrplens.libgen-mcp</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/libgen-mcp</string>
+    <string>--http</string>
+    <string>127.0.0.1:8080</string>
+    <string>--public-url</string>
+    <string>https://mcp.example.org</string>
+    <string>--trusted-proxies</string>
+    <string>127.0.0.1/32</string>
+    <string>--trusted-proxy-header</string>
+    <string>X-Real-IP</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>LIBGEN_MCP_LOG_LEVEL</key>
+    <string>info</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <key>ExitTimeOut</key>
+  <integer>30</integer>
+  <key>SoftResourceLimits</key>
+  <dict>
+    <key>NumberOfFiles</key>
+    <integer>65536</integer>
+  </dict>
+  <key>HardResourceLimits</key>
+  <dict>
+    <key>NumberOfFiles</key>
+    <integer>65536</integer>
+  </dict>
+  <key>StandardErrorPath</key>
+  <string>/Users/you/Library/Logs/libgen-mcp.log</string>
+</dict>
+</plist>
+```
+
+```bash
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/io.github.jmrplens.libgen-mcp.plist
+launchctl kickstart -k "gui/$(id -u)/io.github.jmrplens.libgen-mcp"   # reiniciar, tras actualizar
+launchctl bootout "gui/$(id -u)/io.github.jmrplens.libgen-mcp"        # parar y descargar
+```
+
+`launchd` para un trabajo con `SIGTERM` y envía `SIGKILL` pasados `ExitTimeOut` segundos, así que ese valor hace el papel de `TimeoutStopSec=`. `KeepAlive` con `SuccessfulExit` a falso reinicia el servidor tras un fallo pero no tras una parada limpia. El servidor lee su límite de descriptores en macOS igual que en Linux; la línea `process ceilings` del log dice qué recibió. Las descargas van por defecto a `~/Downloads` y la caché de mirrors a `~/Library/Caches/libgen-mcp`, ambos con escritura para un agente de usuario. Para un servidor que arranque con el sistema sin iniciar sesión, las mismas claves van en `/Library/LaunchDaemons/`, con una clave `UserName` que nombre una cuenta sin privilegios.
+
+<Aside type="note" title="No se ha probado en macOS">
+	Solo se comprobó que la lista de propiedades está bien formada.
+</Aside>
+
+## Windows
+
+`libgen-mcp.exe` no implementa el protocolo de control de servicios de Windows, así que no se puede registrar por sí solo con `sc.exe create`: el Service Control Manager lo arranca, espera un informe de estado que nunca llega y lo para con el error 1053. Un envoltorio de servicio lo arranca como un proceso normal y responde en su lugar. Con [NSSM](https://nssm.cc/):
+
+```powershell
+nssm install libgen-mcp "C:\Program Files\libgen-mcp\libgen-mcp.exe"
+nssm set libgen-mcp AppParameters "--http 127.0.0.1:8080 --public-url https://mcp.example.org --trusted-proxies 127.0.0.1/32 --trusted-proxy-header X-Real-IP"
+nssm set libgen-mcp AppEnvironmentExtra LIBGEN_MCP_DOWNLOAD_DIR=C:\ProgramData\libgen-mcp
+nssm set libgen-mcp AppStderr C:\ProgramData\libgen-mcp\libgen-mcp.log
+nssm set libgen-mcp AppStopMethodConsole 30000
+nssm start libgen-mcp
+```
+
+NSSM para una aplicación enviándole primero Ctrl+C, que el servidor toma como una parada y con la que drena; `AppStopMethodConsole` es cuánto espera NSSM antes de insistir, en milisegundos, y su valor por defecto de 1500 es más corto que cualquier drenaje. [WinSW](https://github.com/winsw/winsw) es la alternativa mantenida y se configura igual, en un fichero XML junto a su ejecutable.
+
+Tres cosas cambian en Windows:
+
+- **Los techos del proceso quedan fijos en la cifra de 1024 descriptores**, 83 llamadas retenidas y 41 sesiones. Windows no tiene un `RLIMIT_NOFILE` que leer, y ninguna opción lo sube.
+- **`--http-socket-mode` se rechaza.** Una ruta de socket unix en `--http` funciona en un Windows actual, pero la plataforma no puede imponer un modo de fichero sobre ella, así que pedirlo detiene el servidor al arrancar en lugar de prometer permisos que no tendría.
+- **`--healthcheck` solo lee la línea de órdenes de la instancia.** Fuera de Linux no puede ver el entorno de otro proceso, así que un listener configurado solo con variables se sondea dándole el destino directamente, `libgen-mcp --healthcheck http://127.0.0.1:8080/health`. Lo mismo vale en macOS.
+
+<Aside type="note" title="No se ha probado en Windows">
+	Las órdenes siguen la interfaz documentada de NSSM.
+</Aside>

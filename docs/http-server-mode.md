@@ -10,8 +10,9 @@ decisions depend on each other, and what each one costs when it is left out.
 Three documents share the subject and do not repeat each other:
 
 - **This page** says how to deploy it, and owns the operational prose.
-- [Getting started](getting-started.md#remote-streamable-http) has the copy-and-run recipes:
-  nginx, docker-compose, the socket, TLS.
+- [Behind a reverse proxy](deploy/reverse-proxy.md), [Run as a service](deploy/service.md) and
+  [Containers and orchestration](deploy/containers.md) have the complete, tested
+  configurations: every common proxy, systemd units, Compose and Kubernetes.
 - [Architecture → Transports](architecture.md#transports) explains how the transport is built
   and carries the **[full flag table](architecture.md#stateless-mode)**. Every flag named here
   is defined there, together with its `LIBGEN_MCP_*` variable.
@@ -73,8 +74,8 @@ deployment-wide one.
 
 ### A TCP listener behind a proxy
 
-This is the common shape, it is what [Getting started](getting-started.md#remote-streamable-http)
-recommends, and it is what the hosted endpoint at `mcp.jmrp.io/libgen` runs.
+This is the common shape, it is what [Behind a reverse proxy](deploy/reverse-proxy.md)
+configures, and it is what the hosted endpoint at `mcp.jmrp.io/libgen` runs.
 
 Without `--trusted-proxies`, **every request arrives from the proxy**, so every caller is the
 same caller: the rate limit is one bucket for the whole world, the in-flight ceiling is a
@@ -556,9 +557,12 @@ is not.
 default because a socket is reached through the filesystem, so the alternative to it is not
 "localhost only" but "every local account". The proxy joins the socket's group instead.
 
-In nginx that means the *worker* processes, which is the second argument of the `user`
-directive (`user nginx 10001;`): nginx calls `initgroups()` when it drops privileges and so does
-not inherit a container-level `group_add`. The blunter alternative is `--http-socket-mode 0666`,
+In nginx that means the *worker* processes: nginx calls `initgroups()` when it drops privileges,
+so on a host it picks up a group its user was added to in `/etc/group`, and in a container it
+discards a container-level `group_add`. The group argument of nginx's `user` directive is a
+name, so `user nginx 10001;` fails at startup with `getgrnam("10001") failed` unless the proxy's
+image has a group of that name; in a container it is simpler to run the server with the proxy's
+group, as [Containers](deploy/containers.md#nginx-in-front-over-a-shared-unix-socket) does. The blunter alternative is `--http-socket-mode 0666`,
 reasonable only when the socket's own directory is already restricted, since traversal
 permission on the directory gates access before the socket's mode is consulted.
 
@@ -741,7 +745,9 @@ the address guard without it.
 | --------------------------------------------------------- | --------------------------------------------------------------- |
 | Every flag and its `LIBGEN_MCP_*` variable, with defaults | [Architecture → Stateless mode](architecture.md#stateless-mode) |
 | Routes, security headers, CORS, cancellation, cache hints | [Architecture → Transports](architecture.md#transports)         |
-| Copy-and-run nginx and docker-compose recipes             | [Getting started](getting-started.md#remote-streamable-http)    |
+| Complete proxy configurations                             | [Behind a reverse proxy](deploy/reverse-proxy.md)               |
+| systemd units, launchd and Windows services               | [Run as a service](deploy/service.md)                           |
+| Compose files and Kubernetes manifests                    | [Containers and orchestration](deploy/containers.md)            |
 | Every environment variable this server reads              | [Configuration](configuration.md#http-listener)                 |
 | What a remote deployment does to `download` and `read`    | [Tools](tools.md#where-the-file-goes-local-vs-remote)           |
 | What an exported signal may say about a caller            | [Telemetry](telemetry.md)                                       |
