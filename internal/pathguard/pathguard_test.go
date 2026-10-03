@@ -316,6 +316,85 @@ func TestOpenReadableFileRefusesAnAncestorSwappedForASymlink(t *testing.T) {
 	assertSwapRefused(t, path, rootsFor(allowed), "id_rsa")
 }
 
+// swapRootForLink returns a swap that moves dir aside and puts a symlink to
+// target in its place, which is what a principal able to write in dir's parent
+// does to the root itself.
+func swapRootForLink(t *testing.T, dir, target string) func(string) {
+	t.Helper()
+	return func(string) {
+		if err := os.Rename(dir, dir+".moved"); err != nil {
+			t.Error(err)
+			return
+		}
+		if err := os.Symlink(target, dir); err != nil {
+			t.Error(err)
+		}
+	}
+}
+
+// TestOpenReadableFileRefusesARootSwappedForASymlink covers the one directory
+// os.Root opens by name: the root itself. Its parent is writable and is not a
+// root, the root is replaced by a symlink to an outside directory holding a file
+// of the same name, and only the identity check on the opened descriptor stands
+// between that and a read of the outside file.
+func TestOpenReadableFileRefusesARootSwappedForASymlink(t *testing.T) {
+	allowLocal(t)
+	outsideDir, allowed := sandbox(t)
+	writeFile(t, outsideDir, "book.txt", "id_rsa")
+	inner := filepath.Join(allowed, "inner")
+	if err := os.Mkdir(inner, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	path := writeFile(t, inner, "book.txt", "harmless")
+	if err := os.Symlink(outsideDir, filepath.Join(allowed, "probe")); err != nil {
+		t.Skipf("this platform cannot create a symlink: %v", err)
+	}
+
+	swapBeforeOpen(t, swapRootForLink(t, inner, outsideDir))
+	assertSwapRefused(t, path, rootsFor(inner), "id_rsa")
+}
+
+// TestOpenReadableFileRefusesANestedRootSwappedForASymlink is the same swap
+// made on a root nested inside another: roots {allowed/inner, allowed}, with
+// inner replaced from inside allowed. Opening the outermost root walks inner
+// rather than opening it by name, and the identity check refuses it as well.
+func TestOpenReadableFileRefusesANestedRootSwappedForASymlink(t *testing.T) {
+	allowLocal(t)
+	outsideDir, allowed := sandbox(t)
+	writeFile(t, outsideDir, "book.txt", "id_rsa")
+	inner := filepath.Join(allowed, "inner")
+	if err := os.Mkdir(inner, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	path := writeFile(t, inner, "book.txt", "harmless")
+	if err := os.Symlink(outsideDir, filepath.Join(allowed, "probe")); err != nil {
+		t.Skipf("this platform cannot create a symlink: %v", err)
+	}
+
+	swapBeforeOpen(t, swapRootForLink(t, inner, outsideDir))
+	roots := Roots{Implicit: []string{inner, allowed}, EnvName: "LIBGEN_MCP_ALLOWED_READ_DIRS"}
+	assertSwapRefused(t, path, roots, "id_rsa")
+}
+
+// TestContainingRootIsTheOutermost pins the choice the nested-root defense
+// rests on, whatever order the roots are listed in.
+func TestContainingRootIsTheOutermost(t *testing.T) {
+	outer := filepath.Join(string(filepath.Separator), "a")
+	inner := filepath.Join(outer, "b")
+	path := filepath.Join(inner, "c.txt")
+	for name, roots := range map[string][]string{
+		"inner first": {inner, outer},
+		"outer first": {outer, inner},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, ok := containingRoot(path, roots)
+			if !ok || got != outer {
+				t.Errorf("containingRoot() = %q, %t, want %q", got, ok, outer)
+			}
+		})
+	}
+}
+
 // TestOpenReadableFileReportsARootRemovedBeforeTheOpen covers the open of the
 // root itself failing: the directory the path was found under is gone by the
 // time it is opened, which must be an error rather than an open by some other

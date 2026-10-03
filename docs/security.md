@@ -185,16 +185,21 @@ followed. What happens after the check differs by tool:
   all there is.
 - **`read`** opens the file relative to the allowed root it was found under, through Go's
   `os.Root`, and reads only from that open descriptor; nothing reopens it by name. Every path
-  component is walked from the root's own descriptor, so a symlink, a junction or a `..` that
-  would leave the root fails the open, on every platform this server ships for. A local user who
-  can write in an allowed root — and the OS temporary directory is always one — therefore cannot
-  redirect a read outside the roots by swapping the file, or a directory above it, after the
-  check. The regular-file check is repeated on the open descriptor, and on unix the open does
-  not block, so a fifo swapped in is refused rather than hanging the call. Two things are not
-  defended: a swap to a different file that is itself inside the roots, which the caller could
-  have named anyway, and a hard link to an outside file made inside a root, which is not a path
-  escape at all (on Linux, `fs.protected_hardlinks` is what stops an account linking a file it
-  cannot read).
+  component below the root is walked from the root's own descriptor, so a symlink, a junction or
+  a `..` that would leave the root fails the open, on every platform this server ships for. When
+  roots are nested, the outermost one holding the path is the one opened. The root directory
+  itself is opened by name, so the opened file must also be the very file the check examined
+  just before the open (same device and inode, or volume and file ID on Windows), or the read is
+  refused. A local user who can write in an allowed root — and the OS temporary directory is
+  always one — therefore cannot redirect a read outside the roots by swapping the file, a
+  directory between it and the root, or the root itself, after that check. The regular-file
+  check is repeated on the open descriptor, and on unix the open does not block, so a fifo
+  swapped in is refused rather than hanging the call. Three things are not defended: a swap of
+  the root or a directory above it (which needs write access outside every root) made after the
+  path was resolved but before that pre-open check, and still in place at the open; a swap to a
+  different file that is itself inside the roots, which the caller could have named anyway; and
+  a hard link to an outside file made inside a root, which is not a path escape at all (on
+  Linux, `fs.protected_hardlinks` is what stops an account linking a file it cannot read).
 
 A download's filename is sanitized to a single path component, so a title from the
 catalog cannot name a directory.

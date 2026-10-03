@@ -140,21 +140,34 @@ var beforeOpen func(canonicalPath string)
 //   - The open is made relative to the root the check found the path under,
 //     through [os.Root], so each component is walked by the kernel from that
 //     root's own descriptor and a symlink, junction or ".." that would leave it
-//     makes the open fail. A leaf or an ancestor swapped after the check cannot
-//     redirect the open outside the roots. On unix this is openat with
+//     makes the open fail. A leaf or a directory below the root swapped after
+//     the check cannot redirect the open outside the roots. On unix this is openat with
 //     O_NOFOLLOW per component, the same refusal [OpenNoFollow] gives the
 //     download's partial file; on Windows it is the handle-relative equivalent,
 //     so Windows gets the same containment even though it has no O_NOFOLLOW.
+//   - The root opened is the outermost allowed root holding the path, so a
+//     nested root that can be swapped from inside an enclosing one is walked
+//     through, not opened by name.
 //   - The regular-file and size conditions are re-checked on the open
 //     descriptor, so a file swapped for a directory, a device or a fifo after
 //     the check is refused. On unix the open is non-blocking, so a fifo planted
 //     in that window cannot hang the call before the descriptor is examined.
+//   - The opened file must be the file the pre-open Lstat saw ([os.SameFile]).
+//     The root directory itself is opened by name, and this is what refuses a
+//     root, or a directory above it, swapped for a link after the check.
 //
-// What is not: a swap to a different file that is itself inside the roots
-// still opens, and is a file the caller could have named directly. A hard link
-// to an outside file, made inside a root, is not a path-level escape at all and
-// is out of reach of any path check; on Linux fs.protected_hardlinks is what
-// stops an unprivileged principal making one to a file it cannot read.
+// What is not:
+//
+//   - A swap of the root or a directory above it (which needs write access
+//     outside every root) made after the path was resolved but before the
+//     pre-open Lstat, and still in place at the open: the Lstat and the open
+//     then agree on the same outside file.
+//   - A swap to a different file that is itself inside the roots, which still
+//     opens and is a file the caller could have named directly.
+//   - A hard link to an outside file, made inside a root, which is not a
+//     path-level escape at all and is out of reach of any path check; on Linux
+//     fs.protected_hardlinks is what stops an unprivileged principal making one
+//     to a file it cannot read.
 //
 // maxSize of zero means no size bound. The caller decides: the text legs of
 // internal/extract already cap themselves at 8 MiB, and a PDF is read by seeking
@@ -166,8 +179,8 @@ func OpenReadableFile(path string, maxSize int64, roots Roots) (*os.File, error)
 		return nil, err
 	}
 	// Lstat before the open, so a directory or a device is refused with its own
-	// diagnosis without being opened at all. It proves nothing about what the
-	// open will reach; the checks after the open are the ones that hold.
+	// diagnosis without being opened at all, and so the file the check named has
+	// an identity the opened one can be compared with.
 	info, err := os.Lstat(canonicalPath)
 	if err != nil {
 		return nil, fmt.Errorf("stat %s: %w", canonicalPath, err)
@@ -175,6 +188,11 @@ func OpenReadableFile(path string, maxSize int64, roots Roots) (*os.File, error)
 	if checkErr := checkRegularAndSize(canonicalPath, info, maxSize); checkErr != nil {
 		return nil, checkErr
 	}
+	// On Windows an Lstat of an ordinary file records only its path, and
+	// os.SameFile reads the file's identity from that path the first time it is
+	// asked — which, asked after the open, would be after any swap. Asking now
+	// pins the identity of the file the check saw. Elsewhere this is a no-op.
+	_ = os.SameFile(info, info)
 	if beforeOpen != nil {
 		beforeOpen(canonicalPath)
 	}
@@ -182,16 +200,33 @@ func OpenReadableFile(path string, maxSize int64, roots Roots) (*os.File, error)
 	if err != nil {
 		return nil, err
 	}
-	opened, err := f.Stat()
-	if err != nil {
-		_ = f.Close()
-		return nil, fmt.Errorf("stat %s: %w", canonicalPath, err)
-	}
-	if checkErr := checkRegularAndSize(canonicalPath, opened, maxSize); checkErr != nil {
+	if checkErr := checkOpened(f, canonicalPath, info, maxSize); checkErr != nil {
 		_ = f.Close()
 		return nil, checkErr
 	}
 	return f, nil
+}
+
+// checkOpened applies the conditions that must hold of the opened descriptor
+// itself: a regular file, within maxSize, and the very file the check named.
+//
+// The identity check is what covers the root. [os.Root] keeps every component
+// below the root from leaving it, but the root directory is opened by name, so a
+// root (or a directory above it) replaced by a symlink after the check would
+// hand the walk a different tree. The file found there is not the file the
+// Lstat saw, and this refuses it.
+func checkOpened(f *os.File, canonicalPath string, checked os.FileInfo, maxSize int64) error {
+	opened, err := f.Stat()
+	if err != nil {
+		return fmt.Errorf("stat %s: %w", canonicalPath, err)
+	}
+	if checkErr := checkRegularAndSize(canonicalPath, opened, maxSize); checkErr != nil {
+		return checkErr
+	}
+	if !os.SameFile(checked, opened) {
+		return fmt.Errorf("open %s: the file opened is not the file that was checked; it was replaced in between", canonicalPath)
+	}
+	return nil
 }
 
 // openInRoot opens canonicalPath for reading relative to root, which must
@@ -424,14 +459,20 @@ func withinAny(path string, roots []string) bool {
 	return ok
 }
 
-// containingRoot returns the first of roots that path lies under.
+// containingRoot returns the outermost of roots that path lies under.
+//
+// Outermost, because [OpenReadableFile] opens the root by name and walks the
+// rest from its descriptor: a nested root lies inside a directory a reader may
+// write in, and opening the enclosing root instead keeps the nested one on the
+// walked side, where a swap of it cannot lead the open out.
 func containingRoot(path string, roots []string) (string, bool) {
+	best := ""
 	for _, base := range roots {
-		if withinBase(path, base) {
-			return base, true
+		if withinBase(path, base) && (best == "" || withinBase(best, base)) {
+			best = base
 		}
 	}
-	return "", false
+	return best, best != ""
 }
 
 // withinBase reports whether path is base or lies under it.
