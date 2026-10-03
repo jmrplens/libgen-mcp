@@ -163,26 +163,10 @@ none of this applies to them, which is the opposite of true.
 
 The public instance at `https://mcp.jmrp.io/libgen` is the first shape: three containers each
 binding `0.0.0.0:8080`, published on the host's loopback, reached by an nginx on another
-machine. Its configuration is the worked example:
-
-```bash
-libgen-mcp \
-  --http 0.0.0.0:8080 \
-  --public-url https://mcp.jmrp.io/libgen \
-  --trusted-proxies 172.19.0.1/32 \
-  --trusted-proxy-header X-Real-IP \
-  --rate-limit-rps 60
-```
-
-`172.19.0.1/32` is **this deployment's Docker bridge gateway** — the address these containers
-see when the proxy reaches them through a published loopback port. It is not a value to copy:
-on a bare host the peer is `127.0.0.1`, on another machine's bridge it is another `/32`, and
-pasting this one into a deployment with no container gets a header that is silently ignored.
-Read it off your own deployment, as the table above describes.
-
-The rest transfers unchanged, and matches what the sibling server on the same domain carries,
-so the two endpoints answer the same way: a declared public URL, a named proxy, `X-Real-IP`,
-and a rate limit set deliberately rather than left at the default.
+machine, with `--public-url`, both proxy flags naming its Docker bridge gateway and
+`X-Real-IP`, and `--rate-limit-rps 60`. The exact command, why the gateway address is not one
+to copy, and the one environment variable that sets its tool surface apart from the default
+are in [Hosted endpoint → Run the same setup yourself](hosted.md#run-the-same-setup-yourself).
 
 ## What one caller may ask for
 

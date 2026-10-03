@@ -1,6 +1,147 @@
 ---
 title: Hosted endpoint
 description: "The public libgen-mcp endpoint: how to connect a client to it, what it serves, and what it leaves out compared with a server you run."
+mentions:
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+chips:
+  - text: "No install"
+  - text: "No account or key"
+  - text: "Streamable HTTP"
+  - text: "Connect a client"
+    href: "/libgen-mcp/clients/"
+datePublished: "2026-10-03"
+head:
+  - tag: title
+    content: "Use libgen-mcp without installing it: the hosted endpoint"
 ---
 
-This page will describe the public endpoint at `https://mcp.jmrp.io/libgen`: how to point a client at it, what it serves, and what it leaves out compared with a server you run yourself — `read` is not registered there, and `download` returns links rather than files.
+import { Aside } from "@astrojs/starlight/components";
+
+A public instance of this server runs at **`https://mcp.jmrp.io/libgen`**. It needs no account, no key and no local process: point an HTTP-capable MCP client at the URL and the catalog is there. It is the fastest way to try the server, and the sections below say what it does differently from a server on your own machine, what it limits, what it sees, and how to run the same thing yourself once you have decided to keep using it.
+
+## Point a client at it
+
+The generic entry, which most clients accept as it is:
+
+```json
+{
+	"mcpServers": {
+		"libgen": { "type": "http", "url": "https://mcp.jmrp.io/libgen" }
+	}
+}
+```
+
+In Claude Code, one command writes it:
+
+```bash
+claude mcp add --transport http libgen https://mcp.jmrp.io/libgen
+```
+
+Every other client spells the entry a little differently — `servers` instead of `mcpServers`, `serverUrl` instead of `url`, a TOML table — and [Connect a client](/libgen-mcp/clients/) has the complete remote entry for each of them. There is no `env` block to send and no header to add: the endpoint asks for no credential, and the settings a local server reads from its environment are the deployment's here, not yours.
+
+## What the endpoint is
+
+| Property        | Value                                                                                                                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| URL             | `https://mcp.jmrp.io/libgen`, and its alias `https://mcp.jmrp.io/libgen/mcp`                                                                                                                |
+| Transport       | Stateless streamable HTTP. `POST` carries the protocol; `GET` on the endpoint answers `405` by design, and a path the server does not serve answers `404` naming the endpoint               |
+| Authentication  | None. No account, no API key, no OAuth                                                                                                                                                      |
+| Tools           | `search`, `get_details`, `download` and `read` (see [What differs](#what-differs-from-a-server-on-your-machine))                                                                            |
+| Health          | `GET https://mcp.jmrp.io/libgen/health` answers `200` with the `version`, `commit` and `config_digest` actually serving                                                                     |
+| MCP server card | `GET https://mcp.jmrp.io/libgen/server-card`: the SEP-2127 discovery card, with the endpoint in `remotes` and no tools                                                                      |
+| SEP-1649 card   | `GET https://mcp.jmrp.io/libgen/.well-known/mcp/server-card.json`: the enumerating card, with every tool and prompt this deployment serves                                                  |
+| AI Catalog      | `GET https://mcp.jmrp.io/.well-known/ai-catalog.json`, served by the host rather than the server, lists it as `urn:air:jmrp.io:mcp:libgen`, pointing at the discovery card                  |
+| Directory       | [mcp.jmrp.io](https://mcp.jmrp.io/) lists the MCP servers the author maintains, each at its own endpoint on the domain; [`servers.json`](https://mcp.jmrp.io/servers.json) is the same list |
+
+The two cards are described in [HTTP server mode → Two cards](/libgen-mcp/http-server-mode/#two-cards-and-which-one-a-scanner-wants). The well-known card lives under the endpoint, not at the root of the domain: `mcp.jmrp.io` serves several servers, and its own `/.well-known/mcp/server-card.json` answers `404` with a pointer to the AI Catalog.
+
+## What differs from a server on your machine
+
+Everything a local server does in the catalog — search, details, citations, enrichment, the open-access fallbacks — works the same here. What changes is everything that depends on whose machine the server is on.
+
+- **`download` returns a link, never a file.** A remote server cannot write to your disk, and MCP has no way for a tool to push bytes to a client, so every `download` call returns the resolved URL as a `resource_link` plus a `resolved` object (with any headers the mirror needs). Your client's own fetch tool, or your browser, retrieves the file, so the bytes land wherever that fetch runs. `resolve_only` is implied and needs no setting; the handshake instructions say so. See [Where the file goes](/libgen-mcp/tools/#where-the-file-goes-local-vs-remote).
+- **`read` is registered here, which is the operator's choice rather than the default.** A server started with `--http` defaults `LIBGEN_MCP_SERVER_FETCH` to off, and with it off `read` is not registered at all — an HTTP deployment you start yourself serves three tools. This one sets it on, so `read` fetches the file over the deployment's own connection and returns its text by `md5` or `doi`. It does not take a local `path`: the server cannot see your disk, and the argument is absent from its schema. Turning fetching on does not bring back a saved file; `download` stays link-only on any remote deployment. The reasoning behind the default is in the [decision record](https://github.com/jmrplens/libgen-mcp/blob/main/docs/decisions/2026-09-08-a-hosted-server-does-not-fetch-file-bodies.md), and `tools/list` is the authority on what this deployment serves on any given day.
+- **The keyed sources are not configured.** The deployment sets no Unpaywall contact email and no CORE key, so neither `unpaywall` nor `core` is in its download chain or in the `source` enum `download` advertises. An Anna's Archive membership key can still be passed per call in `download`'s `annas_member` argument; it is used for that request and never stored, but it does travel to a machine you do not run.
+- **The version is whatever is deployed.** The endpoint follows this repository's releases and can lag a fresh tag; `/health` reports the `version` and `commit` serving. If you need a version that stays put, run it yourself.
+
+## Check it from a terminal
+
+The endpoint is stateless, so each request stands alone. A handshake and a listing:
+
+```bash
+curl -sS https://mcp.jmrp.io/libgen \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
+
+curl -sS https://mcp.jmrp.io/libgen \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2025-06-18' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+```
+
+Each answers as a single server-sent event (`event: message`, then a `data:` line holding the JSON-RPC response). The first carries `serverInfo` and the workflow instructions, the second the tool list. `/health` is the URL to probe when you only want to know it is up:
+
+```bash
+curl -sS https://mcp.jmrp.io/libgen/health
+```
+
+```json
+{
+	"status": "ok",
+	"version": "2.1.0",
+	"commit": "549388719c56a8622aebe62c90ad1ba45c34be4b",
+	"build": "2.1.0+5493887",
+	"config_digest": "baa37d9944ce",
+	"started_at": "2026-10-03T13:33:16Z",
+	"uptime_seconds": 13509
+}
+```
+
+## Limits a caller meets
+
+The endpoint is shared, so it limits what one address may ask for and what the whole process may hold. Each limit answers in a shape a client can act on, and each is described in full on [HTTP server mode](/libgen-mcp/http-server-mode/):
+
+- **A rate per address.** `tools/call`, `prompts/get` and `subscriptions/listen` draw on a token bucket that refills at 60 requests a second, with a burst of 40; `tools/list` has a bucket of its own, so a busy caller never loses discovery. A refused `tools/call` comes back as a result flagged `isError`, so the model reads a diagnostic and backs off; the other methods are refused with JSON-RPC error `-42900`. See [What one caller may ask for](/libgen-mcp/http-server-mode/#what-one-caller-may-ask-for).
+- **Calls held at once, per address.** `download` and `read` occupy a slot for as long as the transfer takes, and one address can hold only so many. See [What one caller may hold](/libgen-mcp/http-server-mode/#what-one-caller-may-hold).
+- **One outbound budget for everybody.** Every request to the mirrors waits for a token of one bucket the whole process shares. When other callers are busy, a call is slower rather than refused, because it is queued behind theirs.
+- **Process ceilings.** The number of calls the process holds open is derived from its descriptor limit. At the ceiling a new call is refused with `503`, a `Retry-After: 30` header and a JSON-RPC error (`-50300`, `This server is busy. Retry later.`), and the connection is closed — retry after the pause rather than at once. See [What the whole process may hold](/libgen-mcp/http-server-mode/#what-the-whole-process-may-hold).
+- **A request body cap** of 4 MiB, the default, which no ordinary call approaches.
+
+## Privacy
+
+Using the endpoint means your tool calls — the titles, authors, DOIs and identifiers you search for — are sent to a machine operated by this project's maintainer, and the requests to Library Genesis and the open-access sources are made from that machine's address rather than yours. Locally, what you search for never leaves your computer; here it does, and "stores nothing" is a promise where "never sent" would be a fact.
+
+What the server itself writes to its log is the operational record: each tool call's name and duration, which download source was tried and whether it resolved (with any credential redacted from the error), and counted refusals. It does not log your query text or your arguments. The requests pass through Cloudflare and an nginx proxy before they reach the server, and those have logs of their own: the instance is operated as part of [mcp.jmrp.io](https://mcp.jmrp.io/) and its handling of requests is governed by [that service's policies](https://mcp.jmrp.io/policies/).
+
+Whether a deployment exports telemetry is published on its own card: the well-known card carries an `observability` block when it does, and this one carries none. The full statement is in the [Privacy Policy → Hosted endpoint](/libgen-mcp/privacy/#hosted-endpoint).
+
+<Aside type="tip">
+	If what you search for is sensitive to you, run the server locally. [Getting
+	started](/libgen-mcp/getting-started/) takes one install command.
+</Aside>
+
+## Availability
+
+It is a personal service, run by one person and offered as it is: no SLA, no support channel, and no promise that it is unchanged next week. It is deployed out of band, from the [mcp.jmrp.io](https://mcp.jmrp.io/) host, and this repository deploys nothing to it. Anything that depends on the server being there belongs on a deployment you run.
+
+## Run the same setup yourself
+
+The public instance is three containers, each binding `0.0.0.0:8080`, published on the host's loopback and reached by an nginx on another machine — the [TCP listener behind a proxy](/libgen-mcp/http-server-mode/#a-tcp-listener-behind-a-proxy) shape. Its configuration is the worked example:
+
+```bash
+LIBGEN_MCP_SERVER_FETCH=1 libgen-mcp \
+  --http 0.0.0.0:8080 \
+  --public-url https://mcp.jmrp.io/libgen \
+  --trusted-proxies 172.19.0.1/32 \
+  --trusted-proxy-header X-Real-IP \
+  --rate-limit-rps 60
+```
+
+`172.19.0.1/32` is **this deployment's Docker bridge gateway** — the address these containers see when the proxy reaches them through a published loopback port. It is not a value to copy: on a bare host the peer is `127.0.0.1`, on another machine's bridge it is another `/32`, and pasting this one into a deployment with no container gets a header that is silently ignored. Read it off your own deployment, as the table in [A TCP listener behind a proxy](/libgen-mcp/http-server-mode/#a-tcp-listener-behind-a-proxy) describes.
+
+`LIBGEN_MCP_SERVER_FETCH=1` is what puts `read` on the surface and lets the server fetch file bodies over its own egress. Leave it out and the deployment serves three tools, which is the default for a reason: a hosted server's address is shared by every user, and a mirror that throttles it for one caller's transfers throttles it for all of them.
+
+The rest transfers unchanged, and matches what the sibling server on the same domain carries, so the two endpoints answer the same way: a declared public URL, a named proxy, `X-Real-IP`, and a rate limit set deliberately rather than left at the default. The proxy side is in [Behind a reverse proxy](/libgen-mcp/deploy/reverse-proxy/), the containers in [Containers and orchestration](/libgen-mcp/deploy/containers/), and the replicas in [Scaling and capacity](/libgen-mcp/deploy/scaling/).
