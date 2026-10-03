@@ -40,7 +40,7 @@
         ],
         "properties": {
           "extra_sources": {
-            "description": "a single value, not an array: always also queries Anna's Archive, arXiv, OpenAlex, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed and ERIC. auto (default) reaches them only when the catalog finds nothing or fails, and never stays on the catalog. Set always for open-access, public-domain, preprint or grey-literature requests. A server set to never ignores this argument",
+            "description": "a single value, not an array: always also queries Anna's Archive, arXiv, OpenAlex, Europe PMC, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed and ERIC. auto (default) reaches them only when the catalog finds nothing or fails, and never stays on the catalog. Set always for open-access, public-domain, preprint or grey-literature requests. A server set to never ignores this argument",
             "enum": [
               "auto",
               "always",

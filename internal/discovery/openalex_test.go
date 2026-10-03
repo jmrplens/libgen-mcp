@@ -381,7 +381,7 @@ func TestOpenAlexWorkToResult(t *testing.T) {
 }
 
 // TestOpenAlexAuthors checks names are joined, blanks skipped, and a list past
-// openAlexMaxAuthors cut with "et al.".
+// maxHitAuthors cut with "et al.".
 func TestOpenAlexAuthors(t *testing.T) {
 	named := func(names ...string) []openAlexAuthorship {
 		out := make([]openAlexAuthorship, len(names))
@@ -390,7 +390,7 @@ func TestOpenAlexAuthors(t *testing.T) {
 		}
 		return out
 	}
-	many := make([]string, openAlexMaxAuthors+3)
+	many := make([]string, maxHitAuthors+3)
 	for i := range many {
 		many[i] = "A" + strconv.Itoa(i)
 	}
@@ -401,8 +401,8 @@ func TestOpenAlexAuthors(t *testing.T) {
 	}{
 		{name: "none", in: nil, want: ""},
 		{name: "two with a blank", in: named("Ada  Lovelace", " ", "Alan Turing"), want: "Ada Lovelace; Alan Turing"},
-		{name: "exactly the cap", in: named(many[:openAlexMaxAuthors]...), want: strings.Join(many[:openAlexMaxAuthors], "; ")},
-		{name: "past the cap", in: named(many...), want: strings.Join(many[:openAlexMaxAuthors], "; ") + "; et al."},
+		{name: "exactly the cap", in: named(many[:maxHitAuthors]...), want: strings.Join(many[:maxHitAuthors], "; ")},
+		{name: "past the cap", in: named(many...), want: strings.Join(many[:maxHitAuthors], "; ") + "; et al."},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

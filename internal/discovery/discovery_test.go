@@ -235,6 +235,7 @@ func TestSetBasesForTest(t *testing.T) {
 		Gutendex:    gutendexBase,
 		ERIC:        ericBase,
 		OpenAlex:    openAlexBase,
+		EuropePMC:   europePMCBase,
 	}
 	want := ProviderBases{
 		Arxiv:       "http://a.test",
@@ -245,6 +246,7 @@ func TestSetBasesForTest(t *testing.T) {
 		Gutendex:    "http://g.test",
 		ERIC:        "http://e.test",
 		OpenAlex:    "http://x.test",
+		EuropePMC:   "http://m.test",
 	}
 
 	restore := SetBasesForTest(want)
@@ -314,5 +316,6 @@ func currentBases() ProviderBases {
 		Gutendex:    gutendexBase,
 		ERIC:        ericBase,
 		OpenAlex:    openAlexBase,
+		EuropePMC:   europePMCBase,
 	}
 }

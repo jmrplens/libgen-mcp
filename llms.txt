@@ -77,7 +77,7 @@ Configuration (environment variables, all optional):
 - LIBGEN_MCP_ENV_FILE: Load settings from this file in addition to ~/.libgen-mcp.env. (default: (none))
 - LIBGEN_MCP_ENRICH: Deployment kill-switch for get_details' opt-in Crossref/OpenLibrary enrichment. (default: true)
 - LIBGEN_MCP_CONFIRM_DOWNLOADS: Ask the user to approve each file that download writes to disk. (default: true)
-- LIBGEN_MCP_EXTRA_SOURCES: When the extra searchers (Anna's Archive, arXiv, OpenAlex, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) are consulted. (default: auto)
+- LIBGEN_MCP_EXTRA_SOURCES: When the extra searchers (Anna's Archive, arXiv, OpenAlex, Europe PMC, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) are consulted. (default: auto)
 - LIBGEN_MCP_TRANSPORT: Which transport to serve, the variable form of --transport. (default: empty (--http decides))
 - LIBGEN_MCP_HTTP_ADDR: Where streamable HTTP listens, the variable form of --http. (default: empty (stdio))
 - LIBGEN_MCP_HTTP_PATH: Path prefix every HTTP route is mounted under — the MCP endpoint, /health and both server cards. (default: /)

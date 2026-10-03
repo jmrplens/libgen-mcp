@@ -36,7 +36,7 @@ func discoveryUserAgent() string { return version.UserAgent() }
 //
 //nolint:revive // DiscoveryResult is the deliberate cross-package contract name.
 type DiscoveryResult struct {
-	Origin  string `json:"origin" jsonschema:"provider: arxiv, openalex, crossref, openlibrary, gutenberg, dblp, pubmed, eric, annas"`
+	Origin  string `json:"origin" jsonschema:"provider: arxiv, openalex, europepmc, crossref, openlibrary, gutenberg, dblp, pubmed, eric, annas"`
 	Title   string `json:"title,omitempty" jsonschema:"record title"`
 	Authors string `json:"authors,omitempty" jsonschema:"authors"`
 	Year    string `json:"year,omitempty" jsonschema:"publication year"`
@@ -69,15 +69,17 @@ type DiscoveryResult struct {
 	// for every other result, so it doubles as the "this book is freely readable"
 	// signal in the locator column.
 	ArchiveURL string `json:"archive_url,omitempty" jsonschema:"free-to-read archive.org page"`
-	// FullTextURL is a directly-fetchable book FILE (EPUB, plain text or PDF) for a
-	// provider whose catalog is not keyed by any identifier the download tool
-	// accepts — Project Gutenberg, whose ebooks have no DOI, ISBN or md5. It is the
-	// whole value of such a hit: without it the record could only be described, not
-	// obtained. Distinct from PDFURL, which is specifically an article PDF.
-	FullTextURL string `json:"full_text_url,omitempty" jsonschema:"book file (epub/txt/pdf), to fetch directly"`
+	// FullTextURL is a directly-fetchable full-text FILE that is not an article PDF.
+	// For Project Gutenberg it is the ebook (EPUB, plain text or PDF), the whole
+	// value of such a hit, since its ebooks have no DOI, ISBN or md5 the download
+	// tool accepts. For Europe PMC it is the open-access article's full text as JATS
+	// XML from the REST API, set only for the subset Europe PMC may redistribute.
+	// Distinct from PDFURL, which is specifically an article PDF.
+	FullTextURL string `json:"full_text_url,omitempty" jsonschema:"full text to fetch directly: a gutenberg ebook (epub/txt/pdf) or a europepmc open-access article as JATS XML"`
 	// OpenAccess states the record's LICENSING status as the provider reports it (a
-	// Creative Commons license for crossref, OpenAlex's own is_oa for openalex, a
-	// hosted free copy for the rest). It is
+	// Creative Commons license for crossref, OpenAlex's own is_oa for openalex,
+	// membership of the redistributable subset for europepmc, a hosted free copy
+	// for the rest). It is
 	// not a claim that the file can be fetched right now: an openly licensed article
 	// can still sit behind a publisher that refuses automated clients.
 	OpenAccess bool `json:"open_access" jsonschema:"openly licensed, which is not proof it can be fetched"`
@@ -213,6 +215,8 @@ type ProviderBases struct {
 	ERIC string
 	// OpenAlex is the OpenAlex API root (openAlexBase).
 	OpenAlex string
+	// EuropePMC is the Europe PMC REST API root (europePMCBase).
+	EuropePMC string
 }
 
 // SetBasesForTest overrides every provider base URL and returns a restore func that
@@ -231,15 +235,47 @@ func SetBasesForTest(bases ProviderBases) (restore func()) {
 		Gutendex:    gutendexBase,
 		ERIC:        ericBase,
 		OpenAlex:    openAlexBase,
+		EuropePMC:   europePMCBase,
 	}
 	arxivBase, crossrefBase, openLibraryBase = bases.Arxiv, bases.Crossref, bases.OpenLibrary
 	dblpBase, pubmedBase = bases.DBLP, bases.PubMed
 	gutendexBase, ericBase, openAlexBase = bases.Gutendex, bases.ERIC, bases.OpenAlex
+	europePMCBase = bases.EuropePMC
 	return func() {
 		arxivBase, crossrefBase, openLibraryBase = old.Arxiv, old.Crossref, old.OpenLibrary
 		dblpBase, pubmedBase = old.DBLP, old.PubMed
 		gutendexBase, ericBase, openAlexBase = old.Gutendex, old.ERIC, old.OpenAlex
+		europePMCBase = old.EuropePMC
 	}
+}
+
+// maxHitAuthors caps how many author names one hit carries. A physics
+// collaboration paper names thousands, and a search hit is a pointer to a record,
+// not the record: the first names identify it, and get_details holds the rest.
+const maxHitAuthors = 20
+
+// joinHitAuthors joins author names with "; ", collapsing the whitespace inside
+// each, skipping blanks, keeping the first maxHitAuthors and marking the rest with
+// "et al.".
+func joinHitAuthors(authors []string) string {
+	names := make([]string, 0, min(len(authors), maxHitAuthors))
+	extra := false
+	for _, a := range authors {
+		name := strings.Join(strings.Fields(a), " ")
+		if name == "" {
+			continue
+		}
+		if len(names) == maxHitAuthors {
+			extra = true
+			break
+		}
+		names = append(names, name)
+	}
+	joined := strings.Join(names, "; ")
+	if extra {
+		joined += "; et al."
+	}
+	return joined
 }
 
 // firstNonEmpty returns the first trimmed non-empty string in the slice, or "".

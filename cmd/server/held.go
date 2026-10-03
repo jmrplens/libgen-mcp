@@ -59,8 +59,8 @@ const (
 // client, and none of them waits on the outbound bucket, so none of them is
 // paced behind another. Under extra_sources=always the catalog and the
 // federation run together too. Counted from the provider list rather than
-// written down, so a provider added there moves the ceiling with it: 2 + 9 is
-// 11 today.
+// written down, so a provider added there moves the ceiling with it: 2 + 10 is
+// 12 today.
 //
 // Most held calls cost far less (a search still queued for its catalog token
 // holds only the caller's connection), so the figure is the bound rather than
@@ -78,7 +78,7 @@ var heldCallDescriptors = uint64(2 + discovery.ExtraProviderCount())
 // the file it fetches and a read opens the one it extracts from, a descriptor
 // on top of what every held call costs. What is left is divided by what one
 // held call costs ([heldCallDescriptors]). Under a limit of 1024 that is
-// (1024 - 128 - 64) / 11 = 75.
+// (1024 - 128 - 64) / 12 = 69.
 //
 // A limit too small to leave room for one held call after the reservation still
 // serves one at a time: a ceiling of zero would refuse every call a process

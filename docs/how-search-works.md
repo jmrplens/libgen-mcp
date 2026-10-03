@@ -49,6 +49,14 @@ call. Rather than hand back an empty result, the search can escalate and consult
   `LIBGEN_MCP_OPENALEX_KEY` it steps aside once the day's credits run down to the reserve kept
   for the one-credit filtered lookups `get_details` makes, and comes back when the allowance
   resets at midnight UTC.
+- [Europe PMC](https://europepmc.org/) — EMBL-EBI's index of the biomedical and life-science
+  literature (PubMed, PubMed Central, preprints), with the full text of the open-access subset
+  it may redistribute. A hit is marked open access only when Europe PMC holds the full text
+  **and** may redistribute it — the same test the `europepmc` download source applies — and
+  then carries a `full_text_url` to that full text as JATS XML. A paper Europe PMC holds as an
+  author manuscript, free to read on its site but not openly licensed, is not marked open
+  access. Every other hit is a bibliographic record, with a DOI when the paper has one:
+  preprints, Agricola records and older MEDLINE entries often have none.
 - [dblp](https://dblp.org/) and [PubMed](https://pubmed.ncbi.nlm.nih.gov/) — bibliographic
   indexes, for computer science and biomedicine respectively. They answer *what the paper is*
   (venue, year, full author list, DOI) without claiming it is free to read, which is exactly
@@ -119,6 +127,9 @@ argument to hand to `download`:
   own finding that a free copy exists somewhere. A `pdf_url` is that copy's direct link as
   OpenAlex indexed it, not fetched by the search: hand the DOI to `download`/`read`, whose
   chain asks the same index and fails over when the link refuses.
+- **`europepmc`** — the result carries a DOI when the paper has one, and `open_access: true`
+  with a `full_text_url` (the article as JATS XML) only for the open-access subset. Download it
+  by `doi`, or fetch the XML yourself for the text.
 - **`arxiv`** — the result carries a direct `pdf_url`. Fetch that URL; `download` takes no
   arXiv identifier.
 - **`openlibrary`** — the result carries an `isbn` and a title. OpenLibrary is mainly a
@@ -139,6 +150,7 @@ flowchart LR
     O -->|annas| M
     O -->|crossref| P[has a DOI<br/>→ download by doi]
     O -->|openalex| P
+    O -->|europepmc| P
     O -->|arxiv| U[has a pdf_url<br/>→ fetch it directly]
     O -->|eric| U
     O -->|openlibrary| S[has an isbn<br/>→ download by isbn,<br/>or refine the search]
@@ -158,7 +170,7 @@ instruction for the next step — it tells you exactly which argument to pass.
 
 One distinction worth stating plainly: **Anna's Archive is not an open-access source.** It is
 a shadow library, not a publisher of freely-licensed material, so it is listed separately from
-the open-access providers (arXiv, OpenAlex, Crossref, OpenLibrary). Nor are the bibliographic indexes
+the open-access providers (arXiv, OpenAlex, Europe PMC, Crossref, OpenLibrary). Nor are the bibliographic indexes
 (dblp, PubMed) open-access sources: they index papers regardless of licensing and say nothing
 about it, so their hits are never marked open access. ERIC is both at once — it hosts some of
 what it indexes and merely lists the rest — which is why its hits are marked open access one by

@@ -35,11 +35,6 @@ const (
 // truncated mid-record decodes to nothing at all.
 const openAlexMaxBody = 4 << 20 // 4 MiB
 
-// openAlexMaxAuthors caps how many author names one hit carries. A physics
-// collaboration paper names thousands, and a search hit is a pointer to a record,
-// not the record: the first names identify it, and get_details holds the rest.
-const openAlexMaxAuthors = 20
-
 // openAlexSelect projects each work onto the fields mapped here. OpenAlex honors it
 // server-side, which keeps a page a fraction of the full records' size.
 const openAlexSelect = "doi,display_name,publication_year,authorships,open_access,best_oa_location,primary_location"
@@ -271,27 +266,13 @@ func openAlexDOI(raw string) string {
 	return doi
 }
 
-// openAlexAuthors joins the authors' display names with "; ", keeping the first
-// openAlexMaxAuthors and marking the rest with "et al.".
+// openAlexAuthors joins the authors' display names as joinHitAuthors does.
 func openAlexAuthors(authorships []openAlexAuthorship) string {
-	names := make([]string, 0, min(len(authorships), openAlexMaxAuthors))
-	extra := false
-	for _, a := range authorships {
-		name := strings.Join(strings.Fields(a.Author.DisplayName), " ")
-		if name == "" {
-			continue
-		}
-		if len(names) == openAlexMaxAuthors {
-			extra = true
-			break
-		}
-		names = append(names, name)
+	names := make([]string, len(authorships))
+	for i, a := range authorships {
+		names[i] = a.Author.DisplayName
 	}
-	joined := strings.Join(names, "; ")
-	if extra {
-		joined += "; et al."
-	}
-	return joined
+	return joinHitAuthors(names)
 }
 
 // openAlexVenue is the name of the journal, conference or repository the work's

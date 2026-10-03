@@ -98,7 +98,7 @@ type Settings struct {
 }
 
 // DefaultProviders returns the standard keyless open-access providers in the order
-// arxiv, openalex, crossref, openlibrary, gutenberg.
+// arxiv, openalex, europepmc, crossref, openlibrary, gutenberg.
 //
 // The order is the dedup order, since dedup keeps the first occurrence of a DOI or a
 // title and year. arXiv leads because its PDF is its own hosted file, the one link
@@ -110,12 +110,19 @@ type Settings struct {
 // to anonymous clients. A paywalled paper loses nothing by it: neither row is then a
 // file, and the download tool still tries the Crossref link by DOI.
 //
+// Europe PMC sits between the two for the same reason. Its open_access is a
+// license check and its full text a file Europe PMC itself serves, which beats
+// Crossref's row for a biomedical DOI. It follows OpenAlex rather than leading it
+// because it only knows its own holdings: a paper it holds without the right to
+// redistribute is closed to Europe PMC and may still be open elsewhere, which
+// OpenAlex's row would say and Europe PMC's, kept first, would hide.
+//
 // Gutenberg comes last because its hits are public-domain classics matched on
 // title: valuable when they are what was asked for, noise next to a precise
 // identifier match, and dedup keeps whichever provider answered first.
 func DefaultProviders(s Settings) []Provider {
 	return []Provider{
-		NewArxiv(), NewOpenAlex(s.OpenAlexKey), NewCrossref(s.Email),
+		NewArxiv(), NewOpenAlex(s.OpenAlexKey), NewEuropePMC(), NewCrossref(s.Email),
 		NewOpenLibrary(s.Email), NewGutenberg(),
 	}
 }
@@ -126,8 +133,8 @@ func DefaultProviders(s Settings) []Provider {
 // Anna's Archive.
 //
 // The indexes come after the open-access providers on purpose: dedup keeps the first
-// occurrence of a DOI, so an arXiv, OpenAlex or Crossref hit — which can carry a
-// fetchable PDF — wins over the bibliographic-only record of the same paper. ERIC
+// occurrence of a DOI, so an arXiv, OpenAlex, Europe PMC or Crossref hit — which
+// can carry a fetchable file — wins over the bibliographic-only record of the same paper. ERIC
 // sits with them for the same reason: the education journal articles it indexes by
 // DOI are described better by Crossref, while the reports and theses that are its
 // real contribution carry no DOI at all and so can never be deduped away.

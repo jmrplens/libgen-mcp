@@ -181,7 +181,8 @@ func openAccessFlag(openAccess bool) string {
 }
 
 // openAccessLocator renders the most actionable identifier for an OA hit: its doi,
-// else an arXiv pdf_url, else a Project Gutenberg full_text_url, else a free-to-read
+// else an arXiv pdf_url, else a full_text_url (a Project Gutenberg ebook, or a Europe
+// PMC article with no DOI), else a free-to-read
 // archive.org url, else an OpenLibrary isbn, each labeled so the reader knows which
 // key it is. The two file URLs rank above the isbn because they are directly
 // fetchable, not just a lookup key.

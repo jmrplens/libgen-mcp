@@ -375,8 +375,8 @@ re-run `make gen-llms`, never edit `llms.txt`/`llms-full.txt` by hand.
 ### What the whole process may hold
 
 `cmd/server/held.go` and `sessions.go` bound the calls the process holds open and the stateful
-sessions it keeps, both **derived from `RLIMIT_NOFILE` at startup** and set by no flag (75
-calls and 37 sessions under a hard limit of 1024). Four things fail open, silently, if
+sessions it keeps, both **derived from `RLIMIT_NOFILE` at startup** and set by no flag (69
+calls and 34 sessions under a hard limit of 1024). Four things fail open, silently, if
 undone:
 
 - **A held call is costed at its widest fan-out**, `heldCallDescriptors` = 2 +

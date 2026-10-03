@@ -96,7 +96,7 @@ type SearchInput struct {
 	Page           int      `json:"page,omitempty" jsonschema:"page number from 1 (default 1)"`
 	Order          string   `json:"order,omitempty" jsonschema:"a single value, not an array, to sort by: id time_added title author year or size"`
 	OrderMode      string   `json:"order_mode,omitempty" jsonschema:"a single value, not an array: asc or desc"`
-	ExtraSources   string   `json:"extra_sources,omitempty" jsonschema:"a single value, not an array: always also queries Anna's Archive, arXiv, OpenAlex, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed and ERIC. auto (default) reaches them only when the catalog finds nothing or fails, and never stays on the catalog. Set always for open-access, public-domain, preprint or grey-literature requests. A server set to never ignores this argument"`
+	ExtraSources   string   `json:"extra_sources,omitempty" jsonschema:"a single value, not an array: always also queries Anna's Archive, arXiv, OpenAlex, Europe PMC, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed and ERIC. auto (default) reaches them only when the catalog finds nothing or fails, and never stays on the catalog. Set always for open-access, public-domain, preprint or grey-literature requests. A server set to never ignores this argument"`
 }
 
 // SearchOutput holds a page of search results plus pagination metadata. NextSteps
