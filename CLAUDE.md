@@ -153,6 +153,12 @@ make coverage-mutants    PKG=./internal/netguard   # gremlins: mutants no test k
   on a package a change touches is **`Lived 0` and `Not covered 0`**. It is not
   a CI job: a single package takes minutes, and it runs on one platform for the
   same reason the coverage number does — **do not put gremlins on the matrix**.
+- **A package-level declaration is never in a coverage block**, so gremlins
+  reports a mutant there as NOT COVERED whatever the tests do. Move a default
+  that carries behaviour into a function (`RateLimiter.window`), where a test can
+  kill it. The one accepted exception is the minus sign of a negative exported
+  constant (`RateLimitedErrorCode = -42900`): it is pinned by a test gremlins
+  cannot see, and spelling it without the sign would make it unreadable.
 - **`test/e2e*` is outside both.** Each runs a package's tests once per mutant
   or per condition, and those suites start real binaries, so the cost is the
   suite's runtime multiplied by the mutant count.
