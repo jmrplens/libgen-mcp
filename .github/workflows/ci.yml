@@ -193,6 +193,15 @@ jobs:
       # skips when one is missing; here, where GitHub sets CI, it fails instead.
       - name: The Claude Desktop bundle starts on every platform it lists
         run: make check-mcpb
+      # The npm launcher is the process a client or a supervisor signals, and
+      # under npx not even that: npm passes the signal only to the shell it runs
+      # the launcher through. So the launcher is run here, with the runner's
+      # node, against a stand-in server, and held to passing argv and stdout
+      # through, mirroring the exit code or signal, passing SIGTERM, SIGINT and
+      # SIGHUP on, and stopping the server when npm's shell dies. A missing
+      # node fails here rather than skipping, since GitHub sets CI.
+      - name: The npm launcher stops the server it started
+        run: make check-npm-launcher
       # The pr-description job and the site audit judge text that is not in the
       # tree, a pull request description and an npm advisory report, so their
       # rules are driven here against fixtures, on every event: the description gate

@@ -863,6 +863,7 @@ npx --yes markdownlint-cli2 "**/*.md"                      # CI-only gate, no ma
 make check-icon-webp                                       # only if you touched an icon (needs librsvg + libwebp)
 make check-manifests && make check-stamper                 # only if you touched a version-bearing manifest
 make check-mcpb                                            # only if you touched mcpb/ or scripts/build-mcpb.sh
+make check-npm-launcher                                    # only if you touched npm/libgen-mcp/cli.js
 make check-ci-scripts                                      # only if you touched the PR description gate or the site audit
 make audit-site-deps                                       # only if you touched site/package.json or its lockfile (needs network)
 make check-pr-description                                  # once the pull request is open: its title and body land on main
@@ -1382,6 +1383,24 @@ Three things about it are easy to get wrong:
   the child's exit code and terminating signal. `scripts/validate-npm.mjs` drives
   a real `initialize` handshake and asserts every stdout line parses as JSON-RPC
   2.0, so a regression fails `make validate-npm` rather than a user's client.
+- **The launcher waits for the server in the event loop, never in
+  `spawnSync`.** A blocked loop runs no signal handler, so a SIGTERM to the
+  launcher used to leave the server running, in HTTP mode with its port bound.
+  Under `npx` the launcher is not even signalled: npm passes the signal only to
+  the `sh -c` it runs the launcher through. So on POSIX `cli.js` passes
+  SIGTERM, SIGINT and SIGHUP on, and, only when `npm_lifecycle_event` says npm
+  started it, sends the server SIGTERM once its parent changes; anywhere else a
+  server left running after its parent is the operator's choice. Windows is left
+  alone (the console's Ctrl+C reaches the server itself). After the server
+  starts, the launcher writes to fd 2 with `writeSync`, never through
+  `process.stderr`, which would switch the shared pipe to non-blocking.
+  `make check-npm-launcher` (`scripts/npm_cli_js_test.py`, CI's `server.json`
+  job) holds it to that against a stand-in server, and `validate-npm.mjs`
+  sends SIGTERM to a real `npx` on Linux, in stdio and `--http` mode, and fails
+  if the server outlives it. Its stdio there is a FIFO and two files, not
+  Node's pipes: npm shuts its socket pairs down as it exits, which kills the
+  server whatever the launcher does and so passes a launcher that forwards
+  nothing.
 - **The bytes that ship are the bytes that were verified.** `build-npm.mjs`
   checks every binary against the release's own cosign-signed `checksums.txt`
   before packing it and records the digests in `npm/packages/verified-binaries.json`;

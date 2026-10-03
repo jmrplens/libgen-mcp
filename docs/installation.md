@@ -140,6 +140,16 @@ goes with it, because the launcher is the only thing that depends on it.
 On a platform with no prebuilt binary the launcher exits with a message pointing
 at the release binaries and at building from source.
 
+**Stopping it.** From the first release after 2.0.1 the launcher stops the
+server when it is told to stop. On Linux and macOS it passes SIGTERM, SIGINT
+and SIGHUP on to the server, and when npm started it (`npx`, or an npm script)
+it sends the server SIGTERM within a second of npm's shell exiting: a SIGTERM
+sent to the `npx` process reaches only that shell, never the launcher. Up to
+2.0.1 an HTTP server started with `npx` kept its port after its supervisor had
+stopped it. Started any other way, a server that outlives its parent is left
+alone, as the binary run directly would be. On Windows the console's Ctrl+C
+reaches the server itself, and the launcher only waits for it.
+
 ## PyPI
 
 **What you get.** [`libgen-mcp`](https://pypi.org/project/libgen-mcp/), one wheel
