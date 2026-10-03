@@ -43,7 +43,7 @@ func TestShutdown_ExitStatusSaysItWasClean(t *testing.T) {
 		},
 		{
 			// What a supervisor sends. The server installs a handler for it
-			// through signal.NotifyContext, so this is the path that has to
+			// through signal.Notify, so this is the path that has to
 			// unwind the transport rather than let the default disposition kill
 			// the process.
 			name: terminationSignalName,

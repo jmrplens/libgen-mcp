@@ -221,7 +221,7 @@ func sdkLevelFor(record slog.Record) slog.Level {
 		return slog.LevelDebug
 	}
 	// Only a canceled context reaches this line, and the only context this
-	// process cancels is the one signal.NotifyContext builds. A signal is how a
+	// process cancels is the one watchStopSignals builds. A signal is how a
 	// server is meant to be stopped, so an ERROR record for it makes every
 	// ordinary exit look like a failure — the same misreport as a nonzero status
 	// on a clean shutdown, which the binding forbids and this binary does not

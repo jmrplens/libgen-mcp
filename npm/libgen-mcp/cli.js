@@ -30,19 +30,20 @@
 //     it (an HTTP server put in the background) is not stopped.
 //
 // The server is told to stop at most once. It starts its graceful shutdown on
-// the first SIGINT or SIGTERM and restores the default action at once, so a
-// second one ends it outright, drain and all. That is the operator's escape
-// hatch when the binary is run directly, and a launcher that relayed every
-// signal it saw would pull it on the operator's behalf: a Ctrl+C reaches the
-// server through the terminal's process group as well as through this
-// launcher, and the parent watch could add a third. So only the first
+// the first SIGINT or SIGTERM, and a second one sent more than a second later
+// ends it outright, drain and all. That is the operator's escape hatch when the
+// binary is run directly, and a launcher that relayed every signal it saw
+// would pull it on the operator's behalf: a Ctrl+C reaches the server through
+// the terminal's process group as well as through this launcher, and the
+// parent watch could add a third, possibly seconds later. So only the first
 // terminating signal is acted on, the watch stays quiet once it has been, and
 // a SIGINT or SIGHUP is not relayed at all when stdin is a terminal, since
 // that is the terminal's own signal and has already reached the server. What
 // the launcher cannot see is a signal sent to every process at once by other
 // means (a process-group kill outside a terminal, or systemd's default
-// KillMode=control-group): the server then receives the launcher's copy too.
-// Run the binary directly there, or use KillMode=mixed.
+// KillMode=control-group): the server then receives the launcher's copy too,
+// milliseconds after its own, and takes the two for one request (a server up
+// to 2.1.0 did not, and skipped its drain).
 //
 // On Windows neither applies, and the launcher only waits. There are no POSIX
 // signals there: Ctrl+C and closing the console reach every process attached
