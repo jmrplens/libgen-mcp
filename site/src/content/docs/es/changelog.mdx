@@ -1,6 +1,150 @@
 ---
 title: Versiones y actualizaciones
 description: "Cómo se versionan las releases de libgen-mcp y cómo actualizar, fijar una versión y volver atrás en cada canal de instalación."
+mentions:
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+chips:
+  - text: "Versionado semántico"
+  - text: "Etiquetas firmadas"
+  - text: "Fijar y volver atrás"
+  - text: "Instalación"
+    href: "/libgen-mcp/es/install/overview/"
+datePublished: "2026-10-03"
 ---
 
-Esta página explicará cómo se versionan las releases y qué cambia una versión mayor y, para cada canal de instalación, cómo actualizar, fijar una versión y volver atrás. Las notas de cada release están en la [página de releases](https://github.com/jmrplens/libgen-mcp/releases), que esta página enlaza en lugar de copiar.
+import { Aside } from "@astrojs/starlight/components";
+
+`libgen-mcp` se publica con un número de versión, y todos los canales publican el mismo número a partir de la misma etiqueta. Esta página explica qué promete un número de versión, dónde se describe cada release, qué ha cambiado desde la 2.0.0 y, para cada canal de instalación, cómo actualizar, fijar una versión y volver atrás.
+
+El servidor nunca se actualiza solo ni comprueba si hay una release nueva. Una instalación se queda en la versión que instalaste hasta que la sustituyes con el mismo canal que la puso ahí.
+
+## Qué significa el número de versión
+
+Las versiones siguen el [versionado semántico](https://semver.org/lang/es/), leído contra aquello de lo que depende una instalación o un cliente. El número sale de un único sitio, el fichero `VERSION` del repositorio; la release lo estampa en cada manifiesto de paquete, así que `npx`, `uvx`, `dnx`, Homebrew, la etiqueta de la imagen y el `.mcpb` llevan todos el mismo.
+
+| Cambio                                                                                                                                  | Ejemplo                                                                                            | Sube   |
+| --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------ |
+| Una corrección, o un añadido pequeño que no cambia ninguna llamada que ya funcionaba                                                    | La 2.0.1 añadió la columna del nombre de fichero a los resultados de búsqueda y el bundle de Linux | Parche |
+| Comportamiento nuevo, un flag o una variable nuevos con un valor por defecto que mantiene lo de hoy, una fuente o un proveedor nuevos   | La 2.1.0 acotó las llamadas que un proceso HTTP mantiene abiertas                                  | Menor  |
+| Un cambio que hace que una instalación, un cliente o una integración existentes dejen de funcionar hasta que su responsable cambie algo | La 2.0.0 movió la ruta del módulo de Go a `/v2`                                                    | Mayor  |
+
+Lo que aquí cuenta como contrato, y por tanto necesita una versión mayor para romperse:
+
+- **La superficie de herramientas.** Los nombres de las cuatro herramientas, los nombres y el significado de sus argumentos, y los nombres y argumentos de los prompts. Un argumento opcional nuevo es un añadido; renombrar o quitar uno no lo es.
+- **Flags y variables de entorno.** Cada `--flag` y cada nombre `LIBGEN_MCP_*` de [Flags de línea de comandos](/libgen-mcp/es/cli/) y [Configuración](/libgen-mcp/es/configuration/). Un flag eliminado detiene al arrancar cualquier despliegue que lo pase, y una variable eliminada es peor: simplemente deja de leerse, sin aviso.
+- **Formas publicadas.** El orden de las tres entradas de cada icono (SVG, WebP claro, WebP oscuro), que la server card republica tal cual, y los nombres de los instrumentos de OpenTelemetry sobre los que se construye un dashboard.
+- **La ruta del módulo de Go**, que lleva la versión mayor desde la 2.0.0.
+
+Los nombres de los campos de log y el texto Markdown de un resultado no son contratos. Cuando una release renombra un campo de log, sus notas lo dicen bajo **Upgrade note**, como hizo la 2.1.0 con `request_host`.
+
+Para saber qué versión está en marcha, pregunta al binario o al despliegue:
+
+```bash
+libgen-mcp --version
+curl -s http://127.0.0.1:8080/health   # campos "version", "commit" y "build"
+```
+
+## Dónde están las notas de cada release
+
+- **El mensaje de la etiqueta firmada** es el resumen escrito a mano, pensado para quien usa el servidor: qué ha cambiado y qué hacer al respecto. Léelo con `git show v2.1.0` en un clon, o verifícalo con `git tag -v v2.1.0`. Las secciones de abajo salen de esos mensajes.
+- **La [release de GitHub](https://github.com/jmrplens/libgen-mcp/releases)** lista cada commit de la release, agrupados por tipo (funcionalidades, correcciones, documentación, mantenimiento), y lleva los ficheros: los binarios, sus SBOM, el `checksums.txt` firmado y los bundles `.mcpb`. Suscríbete a [`releases.atom`](https://github.com/jmrplens/libgen-mcp/releases.atom) o sigue las releases del repositorio para enterarte de una nueva.
+- **Lo que está en `main` y aún no se ha publicado** es la [comparación desde la última etiqueta](https://github.com/jmrplens/libgen-mcp/compare/v2.1.0...main). Esta página no mantiene a mano una lista de «pendiente de publicar»: habría que editarla en tres copias con cada merge y estaría desfasada entre una y otra. El resumen de esos cambios se escribe una vez, en el mensaje de la siguiente etiqueta, y llega aquí con esa release.
+
+## Release a release
+
+### 2.1.0
+
+- Un despliegue HTTP acota las llamadas y las sesiones con estado que mantiene abiertas, dimensionadas a partir del límite de descriptores del proceso al arrancar (83 llamadas y 41 sesiones con un límite duro de 1024). Pasado cualquiera de los dos, una petición recibe `503` con `Retry-After`, en lugar de que el proceso se quede sin descriptores y rechace también `/health`. Consulta [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/#qué-puede-retener-el-proceso-entero).
+- Detrás de un `HTTP_PROXY`/`HTTPS_PROXY` corporativo en una dirección privada, Crossref, arXiv, Unpaywall, OpenLibrary y todas las descargas vuelven a funcionar. El destino que hay detrás del proxy se juzga ahora en cada petición, así que no se puede llegar a través de él a una dirección de metadatos de la nube, la escriba como la escriba en forma numérica.
+- Una cabecera `Host` rechazada, las líneas de error de `net/http` y los mensajes compuestos del SDK se quedan en stderr y nunca llegan a un colector OTLP.
+- Una barra vertical en la etiqueta de un mirror ya no parte la tabla de búsqueda, y el texto del catálogo ya no puede abrir un encabezado, una lista o una cita en un resultado.
+- Los rechazos del límite de ritmo y del techo por llamante llevan `resultType` en el protocolo `2026-07-28`.
+- Un servidor stdio nombra los flags y las variables solo de HTTP que recibió y que ignora.
+- La server card de descubrimiento también se sirve tras la forma `/mcp` del endpoint, en `/mcp/server-card`.
+- Las citas nombran la fuente real del registro y leen las listas de autores del catálogo.
+- El lanzador de npm detiene el servidor cuando se le pide que pare, una sola vez, así que un servidor HTTP arrancado con `npx` libera su puerto y drena.
+- Todos los paquetes llevan `LICENSE` y `THIRD_PARTY_NOTICES`, y los paquetes de NuGet están atestados.
+- **Upgrade note:** el campo de log de una cabecera `Host` rechazada es ahora `request_host`.
+
+### 2.0.1
+
+- Anna's Archive deja de reintentar respuestas que no pueden cambiar: un «no hay copia rápida» de la API de miembros detrás de una página de registro con desafío de navegador termina la descarga en la primera petición, en lugar de gastar unos cien segundos, y le dice al modelo que pruebe otra copia de la misma obra.
+- La búsqueda muestra el nombre de fichero original de cada resultado, que es lo que distingue las ediciones de una norma cuando el catálogo deja vacío el año.
+- La extensión de Claude Desktop funciona en la beta de Linux, en x86_64 y arm64. Instálala desde **Extensions > Install Extension…**.
+- El esquema de entrada de cada herramienta lleva una llamada de ejemplo en la palabra clave `examples` de JSON Schema.
+
+### 2.0.0
+
+- **La ruta del módulo de Go es `github.com/jmrplens/libgen-mcp/v2`.** Los demás canales no cambian. Consulta [Actualizar desde 1.x](#actualizar-desde-1x).
+- Ningún esquema de entrada lleva `oneOf`, `anyOf` ni `allOf` en la raíz. La Messages API de Anthropic rechaza una herramienta así con HTTP 400 para la petición entera, de modo que una sola desactivaba todas las herramientas de la llamada. Las reglas que expresaban (da exactamente uno de `md5`, `id` o `doi`) las aplican los handlers y las describen los campos, como antes. Una llamada que funcionaba en 1.x funciona igual.
+- Anna's Archive responde a sus páginas HTML con un desafío de navegador. El descubrimiento lo distingue de un resultado vacío, lo dice una vez y no pregunta nada durante quince minutos. Una clave de miembro configurada sigue descargando por la API de miembros.
+- Leer un PDF ya no crea un directorio de configuración en el home de quien llama.
+- Dos flags HTTP cierran lo que se ha quedado inactivo: `--session-timeout` para una sesión con estado heredada y `--http-idle-timeout` para una conexión keep-alive. Consulta [Flags de línea de comandos](/libgen-mcp/es/cli/).
+
+### 1.x
+
+La línea 1.x terminó en la 1.7.3. Sus notas están en la [página de releases](https://github.com/jmrplens/libgen-mcp/releases), una por etiqueta, y en el mensaje de cada etiqueta.
+
+## Actualizar desde 1.x
+
+No cambia nada para npm, PyPI, NuGet, Homebrew, Docker, los binarios de la release ni la extensión de Claude Desktop: los nombres de paquete, el comando, los argumentos y todos los ajustes son los mismos. Actualiza como con cualquier release.
+
+**`go install` es el único canal que se ha movido.** Go exige la versión mayor en la ruta del módulo a partir de la 2, y la ruta sin sufijo no falla de forma visible: sigue resolviendo para siempre la última etiqueta 1.x:
+
+```bash
+go install github.com/jmrplens/libgen-mcp/v2/cmd/server@latest   # 2.x
+go install github.com/jmrplens/libgen-mcp/cmd/server@latest      # se queda en 1.7.3
+```
+
+Si un script o un Dockerfile compila desde el código fuente, cambia la ruta en él.
+
+## Actualizar, fijar y volver atrás
+
+Todas las releases siguen descargables, y todos los canales se pueden fijar en una versión exacta. Fíjala donde una actualización inesperada haría daño (un despliegue compartido, un job de CI, la configuración de un cliente en una máquina que no vigilas) y mueve la versión fijada a propósito.
+
+<Aside type="tip" title="Detén el proceso antiguo tras actualizar">
+	Un cliente mantiene en marcha el servidor que arrancó, así que sustituir el
+	binario por debajo no cambia nada hasta que el cliente lo vuelve a arrancar.
+	`libgen-mcp --shutdown` pide a todas las demás instancias de la máquina que
+	terminen; el cliente arranca la nueva en su siguiente llamada. Consulta
+	[Instalación](/libgen-mcp/es/install/overview/).
+</Aside>
+
+| Canal                                                    | Actualizar                                       | Fijar una versión                                                                   | Volver atrás                                                                     |
+| -------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [npm](/libgen-mcp/es/install/npm/)                       | `npm install -g @jmrp.io/libgen-mcp@latest`      | `npx -y @jmrp.io/libgen-mcp@2.1.0`, o `npm install -g @jmrp.io/libgen-mcp@2.1.0`    | Instala la versión anterior del mismo modo                                       |
+| [PyPI](/libgen-mcp/es/install/pypi/)                     | `pipx upgrade libgen-mcp`                        | `uvx libgen-mcp@2.1.0`, o `pipx install libgen-mcp==2.1.0`                          | `pipx install --force libgen-mcp==2.0.1`                                         |
+| [NuGet](/libgen-mcp/es/install/nuget/)                   | `dotnet tool update -g libgen-mcp`               | `dnx libgen-mcp@2.1.0`, o `dotnet tool install -g libgen-mcp --version 2.1.0`       | `dotnet tool uninstall -g libgen-mcp`, y luego instala con `--version`           |
+| [Homebrew](/libgen-mcp/es/install/homebrew/)             | `brew upgrade libgen-mcp`                        | `brew pin libgen-mcp` retiene la versión instalada                                  | El tap solo lleva la fórmula actual: usa el binario de la release de esa versión |
+| [Docker](/libgen-mcp/es/install/docker/)                 | `docker pull ghcr.io/jmrplens/libgen-mcp:latest` | La etiqueta de versión, `ghcr.io/jmrplens/libgen-mcp:2.1.0`, o su digest `@sha256:` | Apunta a la etiqueta o el digest anteriores                                      |
+| [Binario de la release](/libgen-mcp/es/install/binary/)  | Descarga el fichero nuevo sobre el antiguo       | Descárgalo de la release etiquetada, `releases/download/v2.1.0/…`                   | Descarga el fichero anterior del mismo modo                                      |
+| [Claude Desktop](/libgen-mcp/es/install/claude-desktop/) | Descarga el bundle nuevo y ábrelo                | Guarda el fichero del bundle de la versión que quieras                              | Quita la extensión y abre el bundle anterior                                     |
+| [`go install`](/libgen-mcp/es/install/binary/)           | `…/v2/cmd/server@latest`                         | `…/v2/cmd/server@v2.1.0`                                                            | `…/v2/cmd/server@v2.0.1`                                                         |
+
+Dos de ellas merecen una frase más.
+
+- **Una configuración de cliente que ejecuta `npx` o `uvx` sin versión** toma lo que resuelva el gestor de paquetes, según su caché, así que dos máquinas con la misma configuración pueden ejecutar versiones distintas. Pon la versión en los `args` para que sea exacta:
+
+  ```json
+  {
+  	"mcpServers": {
+  		"libgen": {
+  			"command": "npx",
+  			"args": ["-y", "@jmrp.io/libgen-mcp@2.1.0"]
+  		}
+  	}
+  }
+  ```
+
+- **La etiqueta de versión de una imagen es un nombre; el digest son los bytes.** La release publica `2.1.0` y `latest` en los dos registros, y una etiqueta de registro es un puntero que se puede mover, así que un despliegue que tiene que ser reproducible debe nombrar el digest. Léelo con `docker buildx imagetools inspect ghcr.io/jmrplens/libgen-mcp:2.1.0` y verifica la imagen que fijaste como muestra [Ejecutar con Docker](/libgen-mcp/es/install/docker/).
+
+Llegues a la versión que llegues, comprueba que es la que publicó este proyecto antes de ejecutarla: [Instalación](/libgen-mcp/es/install/overview/#verificar-lo-que-instalas) tiene la receta por canal.
+
+## Adónde ir después
+
+| Para                                                             | Consulta                                                 |
+| ---------------------------------------------------------------- | -------------------------------------------------------- |
+| Cada canal, y verificar lo que instaló                           | [Instalación](/libgen-mcp/es/install/overview/)          |
+| Las plataformas y versiones de protocolo que admite cada release | [Compatibilidad](/libgen-mcp/es/compatibility/)          |
+| Un despliegue que no arranca tras actualizar                     | [Solución de problemas](/libgen-mcp/es/troubleshooting/) |

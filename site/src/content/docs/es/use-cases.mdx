@@ -1,6 +1,154 @@
 ---
 title: Casos de uso
 description: "Peticiones resueltas a un asistente con libgen-mcp conectado: qué pedir, qué herramientas llama y en qué orden, y qué se recibe."
+mentions:
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+  - name: "Digital object identifier"
+    wikidata: Q25670
+  - name: "BibTeX"
+    wikidata: Q105859274
+  - name: "RIS"
+    wikidata: Q923990
+chips:
+  - text: "Ejemplos resueltos"
+  - text: "Llamadas reales"
+  - text: "Herramientas"
+    href: "/libgen-mcp/es/tools/"
+datePublished: "2026-10-03"
 ---
 
-Esta página recorrerá peticiones resueltas de principio a fin: qué pedir, qué herramientas llama el asistente y en qué orden, y qué se recibe. Mientras tanto, [Descargar un artículo por DOI](/libgen-mcp/es/download-a-paper/) y [Herramientas](/libgen-mcp/es/tools/) muestran qué hace cada llamada.
+import { Aside } from "@astrojs/starlight/components";
+
+Tú hablas con el asistente, y el asistente llama a las herramientas. Esta página recorre seis peticiones habituales de principio a fin: qué pedir, qué llamadas hace el asistente y en qué orden, y en qué fijarse en la respuesta. Las llamadas se muestran con los argumentos que envía el asistente, para que las reconozcas en un cliente que enseña las llamadas a herramientas, y cada nombre de argumento es el que documenta [Herramientas](/libgen-mcp/es/tools/).
+
+Dos cosas valen para todas:
+
+- **Los resultados citan a terceros.** Los títulos, las descripciones y el texto extraído son datos que el asistente lee, nunca instrucciones que obedece.
+- **Un servidor remoto devuelve enlaces.** En el [endpoint alojado](/libgen-mcp/es/hosted/) o en cualquier despliegue con `--http`, `download` responde con un enlace directo en lugar de guardar un fichero, y `read` no está. Los casos que leen un documento necesitan un servidor local.
+
+## Encontrar una edición concreta de un libro
+
+> Encuentra la tercera edición del volumen 1 de _The Art of Computer Programming_ de Knuth, en PDF.
+
+El asistente busca en el catálogo y ordena para que las ediciones sean fáciles de comparar:
+
+```json
+{
+	"query": "Art of Computer Programming Knuth",
+	"topics": ["nonfiction"],
+	"order": "year",
+	"order_mode": "desc"
+}
+```
+
+Cada fila lleva `year`, `edition`, `extension`, `size`, `pages` y el `filename` original, que es lo que distingue dos ediciones cuando el catálogo deja vacío el año. Si conoces el ISBN, una búsqueda solo en ese campo es más precisa:
+
+```json
+{ "query": "9780201896831", "search_in": ["isbn"] }
+```
+
+Antes de descargar, `get_details` con el `md5` de la fila elegida confirma la edición, la editorial y los ISBN, y después `download` recibe ese mismo `md5`:
+
+```json
+{ "md5": "<md5 de la fila elegida>" }
+```
+
+Un `verified: true` en la respuesta significa que los bytes guardados dan ese md5. El prompt `acquire_book` pide todo este recorrido de una vez, con `title` y, si quieres, `author`, `format` y `language`.
+
+## Conseguir una copia en acceso abierto de un artículo
+
+> Descarga el artículo con DOI 10.1038/nature12373.
+
+Basta una llamada:
+
+```json
+{ "doi": "10.1038/nature12373" }
+```
+
+`download` ofrece el DOI primero a las fuentes de acceso abierto (OpenAlex, Europe PMC, bioRxiv, Zenodo y las demás), después a los recursos de reserva, y guarda la primera copia que sirva una de ellas. Cada paso, qué preparar y qué hacer si falla, está en [Descargar un artículo por DOI](/libgen-mcp/es/download-a-paper/). Para probar una sola fuente y ninguna más, nómbrala, por ejemplo `"source": "openalex"`. El prompt `get_paper` acepta el mismo DOI, o en su lugar una cita en texto libre.
+
+## Revisar la literatura sobre un tema
+
+> Encuentra artículos recientes en acceso abierto y un par de libros sobre retrieval-augmented generation, y hazme una lista de lectura.
+
+Para los artículos, el asistente busca más allá del catálogo a propósito, porque los preprints y la obra en acceso abierto a menudo solo están ahí:
+
+```json
+{
+	"query": "retrieval-augmented generation",
+	"topics": ["articles"],
+	"extra_sources": "always"
+}
+```
+
+Las coincidencias del catálogo, y las de Anna's Archive, vuelven como filas, y las de los demás proveedores en una lista `open_access` aparte, cada una marcada con su `origin`. El origen dice qué hacer después: un resultado de `crossref`, `dblp` o `pubmed` lleva un DOI para `download`, uno de `arxiv` lleva un `pdf_url` que el asistente descarga directamente, y solo uno marcado `open_access: true` afirma que se puede leer gratis. Una segunda búsqueda sin `topics` encuentra los libros. [Cómo funciona la búsqueda](/libgen-mcp/es/how-search-works/) explica las etiquetas.
+
+El prompt `research_topic` hace esta revisión por ti, con `topic`, `kind` (`articles`, `books` o ambos) y `limit`, y pide al final una bibliografía anotada.
+
+## Montar una bibliografía
+
+> Dame BibTeX de estos tres libros y RIS de los dos artículos, para Zotero.
+
+Para cada elemento, el asistente llama a `get_details` con el identificador que ya tiene:
+
+```json
+{ "md5": "<md5 de un resultado de búsqueda>" }
+```
+
+```json
+{ "doi": "10.1016/j.cell.2011.02.013" }
+```
+
+El registro lleva un campo `citations` con una entrada `bibtex` y un registro `ris`, más `doi_status`, que dice si Crossref confirmó el DOI. Un DOI que no se pudo confirmar se deja fuera de las entradas en lugar de pegarlo en una referencia a la que quizá no pertenece. La respuesta en Markdown solo muestra el BibTeX, así que pide el RIS de forma explícita cuando lo quieras. Qué identificador da la entrada más completa, y por qué falta a veces un DOI, está en [Citas](/libgen-mcp/es/citations/).
+
+## Leer y resumir un capítulo
+
+> Resume el capítulo sobre análisis amortizado de este libro y cita dónde define el método del potencial.
+
+`read` funciona sin guardar el libro entero en ningún sitio que tengas que mirar. El asistente pide primero la tabla de contenidos, solo el nivel superior:
+
+```json
+{ "md5": "<md5>", "outline": true, "max_depth": 1 }
+```
+
+El índice da la página de cada capítulo, y el asistente lee a partir de ahí:
+
+```json
+{ "md5": "<md5>", "start_page": 451, "max_pages": 20 }
+```
+
+Cuando `has_more` es true, devuelve el `cursor` recibido para el siguiente fragmento. Para encontrar un pasaje en lugar de leer de corrido, busca dentro del documento:
+
+```json
+{ "md5": "<md5>", "find": "potential method", "max_matches": 5 }
+```
+
+Cada coincidencia trae su página y un fragmento. Un libro que ya descargaste se lee por `path` en lugar de por `md5`, siempre que esté dentro del directorio de trabajo, el temporal o el de descargas. Un libro escaneado sin capa de texto vuelve con `extractable: false`: no hay OCR.
+
+<Aside type="note">
+	`read` es una herramienta de servidor local. En el [endpoint
+	alojado](/libgen-mcp/es/hosted/) el asistente descarga con su propia
+	herramienta el enlace que devuelve `download` y lee el fichero en local.
+</Aside>
+
+## Comprobar a qué apunta una referencia
+
+> Esta lista de referencias cita 10.1371/journal.pmed.0020124 para _Antifragile_. ¿Es correcto?
+
+El asistente consulta el DOI en lugar de fiarse de él:
+
+```json
+{ "doi": "10.1371/journal.pmed.0020124" }
+```
+
+La respuesta muestra el título del registro al que llega el DOI, y `get_details` pregunta a Crossref a qué título tiene registrado ese DOI. Aquí no coinciden: Crossref lo tiene registrado para el artículo de Ioannidis _Why Most Published Research Findings Are False_, así que un registro que lo empareja con el libro vuelve con `doi_status: "mismatch"`, y su línea `provenance` nombra la obra real. Cuando el catálogo no tiene el DOI en absoluto, los metadatos de Crossref ocupan su lugar, marcados `origin: "crossref"`. Para una referencia sin DOI, una búsqueda de su título en la colección `articles`, o el prompt `get_paper` con la referencia como `citation`, encuentra los candidatos que comparar.
+
+## Adónde ir después
+
+| Para                                                  | Consulta                                                      |
+| ----------------------------------------------------- | ------------------------------------------------------------- |
+| Cada argumento y cada campo de las respuestas         | [Herramientas](/libgen-mcp/es/tools/)                         |
+| Qué consulta una búsqueda y qué significa cada origen | [Cómo funciona la búsqueda](/libgen-mcp/es/how-search-works/) |
+| Una descarga que no funcionó                          | [Solución de problemas](/libgen-mcp/es/troubleshooting/)      |
+| Los términos que se usan aquí                         | [Glosario](/libgen-mcp/es/glossary/)                          |
