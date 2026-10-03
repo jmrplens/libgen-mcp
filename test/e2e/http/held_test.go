@@ -12,14 +12,14 @@ import (
 )
 
 // heldDescriptorLimit is the descriptor limit these cases start the binary
-// under. The ceilings follow from it: (256 - 256/8 - 64) / 10 = 16 held calls,
-// ten descriptors being the widest fan-out one call has, and half that, 8,
+// under. The ceilings follow from it: (256 - 256/8 - 64) / 11 = 14 held calls,
+// eleven descriptors being the widest fan-out one call has, and half that, 7,
 // stateful sessions. Small enough to fill from one test, large enough that the
 // idle process, the refused connections and /health fit in the spare eighth.
 const (
 	heldDescriptorLimit = 256
-	heldCeiling         = 16
-	sessionCeiling      = 8
+	heldCeiling         = 14
+	sessionCeiling      = 7
 )
 
 // heldSearchBody is a search that reaches the catalog and nothing beyond it,

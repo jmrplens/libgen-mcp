@@ -446,7 +446,7 @@ func (c *Client) buildSourceChain(cfg *config.Config) []DownloadSource {
 	annasLister := func() MirrorLister { return c.annasMirrors }
 	factories := map[string]func() DownloadSource{
 		"unpaywall": func() DownloadSource { return unpaywallSource{email: cfg.UnpaywallEmail, http: c.http} },
-		"openalex":  func() DownloadSource { return openalexSource{http: c.http} },
+		"openalex":  func() DownloadSource { return openalexSource{http: c.http, key: cfg.OpenAlexKey} },
 		"europepmc": func() DownloadSource { return europePMCSource{http: c.http} },
 		"biorxiv":   func() DownloadSource { return biorxivSource{http: c.http} },
 		"rfc":       func() DownloadSource { return rfcSource{} },

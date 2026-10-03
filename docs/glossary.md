@@ -75,8 +75,8 @@ automated fetch. See [How search works](how-search-works.md#what-comes-back-orig
 
 ### Provider
 
-A searcher beyond the catalog that a search can consult: Anna's Archive, arXiv, Crossref,
-OpenLibrary, Project Gutenberg, dblp, PubMed and ERIC. Each is best-effort, so a slow or failing
+A searcher beyond the catalog that a search can consult: Anna's Archive, arXiv, OpenAlex,
+Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed and ERIC. Each is best-effort, so a slow or failing
 provider leaves the others' results intact. See
 [How search works](how-search-works.md#reaching-beyond-the-catalog).
 
@@ -90,7 +90,7 @@ catalog, `never` not at all. `LIBGEN_MCP_EXTRA_SOURCES=never` is a lock a call c
 ### Origin
 
 The label on every result naming the searcher that produced it (`libgen`, `annas`, `crossref`,
-`arxiv`, `openlibrary`, `gutenberg`, `dblp`, `pubmed`, `eric`). It tells you which identifier
+`openalex`, `arxiv`, `openlibrary`, `gutenberg`, `dblp`, `pubmed`, `eric`). It tells you which identifier
 the result carries, and so which argument the next call takes. See
 [How search works](how-search-works.md#what-comes-back-origins-and-downloads).
 

@@ -83,33 +83,57 @@ func isDuplicate(r DiscoveryResult, seenDOI, seenTitle, seenMD5 map[string]bool)
 	return false
 }
 
+// Settings is what the providers are built from: the deployment values a provider
+// cannot find for itself. Every field is optional, and the zero value builds every
+// provider keyless and anonymous.
+type Settings struct {
+	// Email is the contact address the polite-pool and etiquette-aware providers
+	// identify themselves with (Crossref, OpenLibrary, PubMed), typically
+	// cfg.UnpaywallEmail.
+	Email string
+	// OpenAlexKey is the optional OpenAlex API key (cfg.OpenAlexKey).
+	OpenAlexKey string
+	// AnnasMirrors supplies Anna's Archive base URLs.
+	AnnasMirrors MirrorLister
+}
+
 // DefaultProviders returns the standard keyless open-access providers in the order
-// arxiv, crossref, openlibrary, gutenberg. email is the Crossref polite-pool mailto
-// contact (typically cfg.UnpaywallEmail); pass "" to omit it.
+// arxiv, openalex, crossref, openlibrary, gutenberg.
 //
-// Gutenberg comes last of the four because its hits are public-domain classics
-// matched on title: valuable when they are what was asked for, noise next to a
-// precise identifier match, and dedup keeps whichever provider answered first.
-func DefaultProviders(email string) []Provider {
-	return []Provider{NewArxiv(), NewCrossref(email), NewOpenLibrary(email), NewGutenberg()}
+// The order is the dedup order, since dedup keeps the first occurrence of a DOI or a
+// title and year. arXiv leads because its PDF is its own hosted file, the one link
+// in this list that is always fetchable. OpenAlex follows and comes before Crossref
+// because, for the same DOI, it carries the more useful row: its open_access is
+// OpenAlex's own is_oa, read from the open-access index Unpaywall publishes, and its
+// pdf_url is an open-access location that index found, where Crossref's flag is a
+// license and its link an unverified publisher deposit that many publishers refuse
+// to anonymous clients. A paywalled paper loses nothing by it: neither row is then a
+// file, and the download tool still tries the Crossref link by DOI.
+//
+// Gutenberg comes last because its hits are public-domain classics matched on
+// title: valuable when they are what was asked for, noise next to a precise
+// identifier match, and dedup keeps whichever provider answered first.
+func DefaultProviders(s Settings) []Provider {
+	return []Provider{
+		NewArxiv(), NewOpenAlex(s.OpenAlexKey), NewCrossref(s.Email),
+		NewOpenLibrary(s.Email), NewGutenberg(),
+	}
 }
 
 // ExtraProviders returns every searcher consulted beyond the Library Genesis
 // catalog: the keyless open-access providers, the two bibliographic indexes (dblp for
 // computer science, PubMed for biomedicine), ERIC for education grey literature, and
-// Anna's Archive. email is the contact address the polite-pool and etiquette-aware
-// providers identify themselves with (Crossref, OpenLibrary, PubMed); annasMirrors
-// supplies Anna's base URLs.
+// Anna's Archive.
 //
 // The indexes come after the open-access providers on purpose: dedup keeps the first
-// occurrence of a DOI, so an arXiv or Crossref hit — which can carry a fetchable PDF —
-// wins over the bibliographic-only record of the same paper. ERIC sits with them for
-// the same reason: the education journal articles it indexes by DOI are described
-// better by Crossref, while the reports and theses that are its real contribution
-// carry no DOI at all and so can never be deduped away.
-func ExtraProviders(email string, annasMirrors MirrorLister) []Provider {
-	return append(DefaultProviders(email),
-		NewDBLP(), NewPubMed(email), NewERIC(), NewAnnas(annasMirrors))
+// occurrence of a DOI, so an arXiv, OpenAlex or Crossref hit — which can carry a
+// fetchable PDF — wins over the bibliographic-only record of the same paper. ERIC
+// sits with them for the same reason: the education journal articles it indexes by
+// DOI are described better by Crossref, while the reports and theses that are its
+// real contribution carry no DOI at all and so can never be deduped away.
+func ExtraProviders(s Settings) []Provider {
+	return append(DefaultProviders(s),
+		NewDBLP(), NewPubMed(s.Email), NewERIC(), NewAnnas(s.AnnasMirrors))
 }
 
 // NormalizeDOI lowercases and trims a DOI so two spellings of the same identifier

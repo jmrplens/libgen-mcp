@@ -51,7 +51,7 @@ func TestStatefulSessionsFor_IsHalfTheHeldCeiling(t *testing.T) {
 		held int64
 		want int64
 	}{
-		{name: "a hard limit of 1024", held: 83, want: 41},
+		{name: "a hard limit of 1024", held: 75, want: 37},
 		{name: "an odd ceiling rounds down", held: 5, want: 2},
 		{name: "one held call still keeps one session", held: 1, want: 1},
 	} {

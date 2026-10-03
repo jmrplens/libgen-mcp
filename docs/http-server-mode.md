@@ -244,8 +244,8 @@ connection at all, **`/health` included**.
 So the process holds at most a number of calls **derived from its descriptor limit**, read once
 at startup: an eighth of the limit is left spare, one descriptor is reserved for each of the 64
 byte-moving slots (a download writes a file and a read opens one), and each held call is
-counted at **ten**. That is the widest fan-out one call has: an escalated `search` holds the
-caller's connection, the catalog request and one connection for each of the eight searchers
+counted at **eleven**. That is the widest fan-out one call has: an escalated `search` holds the
+caller's connection, the catalog request and one connection for each of the nine searchers
 beyond the catalog, all at once, because the federation runs every provider concurrently and
 none of them waits on the outbound bucket. The figure is counted from the provider list, so a
 provider added there lowers the ceiling with it, and each provider's connection closes as soon
@@ -254,12 +254,12 @@ hard one before `main`, so the figure follows the **hard** limit:
 
 | Hard `RLIMIT_NOFILE`               | Held calls | Stateful sessions |
 | ---------------------------------- | ---------: | ----------------: |
-| 1024                               |         83 |                41 |
-| 4096                               |        352 |               176 |
-| 524288 (a default systemd service) |      45868 |             22934 |
-| 1048576 (a common container limit) |      91744 |             45872 |
+| 1024                               |         75 |                37 |
+| 4096                               |        320 |               160 |
+| 524288 (a default systemd service) |      41698 |             20849 |
+| 1048576 (a common container limit) |      83403 |             41701 |
 
-Ten is the bound, not the typical cost: a search still queued for its catalog token holds only
+Eleven is the bound, not the typical cost: a search still queued for its catalog token holds only
 the caller's connection. The ceiling is sized so that it cannot be outrun, which is why it is
 counted at the worst case.
 
@@ -299,7 +299,7 @@ nothing that caller did. The operator's line is
 **One caller can fill it.** There is no per-caller partner, because an address is something a
 caller can have many of, and a per-caller number multiplies with every one. Where the limit is
 small that is quick: at the default inbound limit (a burst of 40, then ten a second) one address
-reaches 83 held calls in about five seconds. The inbound limit is what slows it, and a proxy
+reaches 75 held calls in about four seconds. The inbound limit is what slows it, and a proxy
 that charges the real client address is what keeps it per caller.
 
 **What `/health` still needs.** It takes no call slot, so a full ceiling does not refuse it, and

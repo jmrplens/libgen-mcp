@@ -161,10 +161,10 @@ Cada resultado se devuelve por dos canales: la salida JSON estructurada que se d
 	<Fragment slot="order_mode">Dirección de orden: `asc` o `desc`.</Fragment>
 	<Fragment slot="extra_sources">
 		Cuándo buscar más allá del catálogo de Library Genesis (Anna's Archive,
-		arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC): `auto`
-		los consulta solo cuando el catálogo no encuentra nada, `always` los
-		consulta en cada búsqueda, `never` restringe la búsqueda al catálogo. Omitir
-		para usar el valor por defecto del servidor (`auto`).
+		arXiv, OpenAlex, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed,
+		ERIC): `auto` los consulta solo cuando el catálogo no encuentra nada,
+		`always` los consulta en cada búsqueda, `never` restringe la búsqueda al
+		catálogo. Omitir para usar el valor por defecto del servidor (`auto`).
 	</Fragment>
 </SchemaTable>
 
@@ -198,11 +198,11 @@ La entrada inválida se rechaza antes de cualquier llamada de red: un `query` va
 
 ### Descubrimiento de acceso abierto
 
-Más allá del catálogo de Library Genesis, `search` puede consultar también **fuentes extra** — [Anna's Archive](https://annas-archive.org/), [arXiv](https://arxiv.org/), [Crossref](https://www.crossref.org/), [OpenLibrary](https://openlibrary.org/), [Project Gutenberg](https://www.gutenberg.org/), [dblp](https://dblp.org/), [PubMed](https://pubmed.ncbi.nlm.nih.gov/) y [ERIC](https://eric.ed.gov/) — controlado por el argumento `extra_sources` (`auto`/`always`/`never`) y su valor por defecto de despliegue `LIBGEN_MCP_EXTRA_SOURCES` (que a su vez es `auto` — ver [Configuración](/libgen-mcp/es/configuration/)). El valor por defecto `auto` los consulta solo cuando el catálogo no devuelve nada o falla; `always` los consulta en cada búsqueda, a la vez que el catálogo; `never` restringe la búsqueda al catálogo, incluso si no hay resultados. Los resultados de Anna's, identificados por md5, se fusionan en `results` (etiquetados `origin: "annas"`); los de arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC aparecen en un campo `open_access` separado junto a `results`.
+Más allá del catálogo de Library Genesis, `search` puede consultar también **fuentes extra** — [Anna's Archive](https://annas-archive.org/), [arXiv](https://arxiv.org/), [OpenAlex](https://openalex.org/), [Crossref](https://www.crossref.org/), [OpenLibrary](https://openlibrary.org/), [Project Gutenberg](https://www.gutenberg.org/), [dblp](https://dblp.org/), [PubMed](https://pubmed.ncbi.nlm.nih.gov/) y [ERIC](https://eric.ed.gov/) — controlado por el argumento `extra_sources` (`auto`/`always`/`never`) y su valor por defecto de despliegue `LIBGEN_MCP_EXTRA_SOURCES` (que a su vez es `auto` — ver [Configuración](/libgen-mcp/es/configuration/)). El valor por defecto `auto` los consulta solo cuando el catálogo no devuelve nada o falla; `always` los consulta en cada búsqueda, a la vez que el catálogo; `never` restringe la búsqueda al catálogo, incluso si no hay resultados. Los resultados de Anna's, identificados por md5, se fusionan en `results` (etiquetados `origin: "annas"`); los de arXiv, OpenAlex, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed y ERIC aparecen en un campo `open_access` separado junto a `results`.
 
 Ese nombre de campo es anterior a los índices bibliográficos y hoy es algo impreciso: dblp y PubMed describen un artículo sin afirmar nada sobre su disponibilidad, y ERIC solo aloja una parte de lo que indexa, así que **solo se sabe que es de lectura libre un resultado cuyo propio flag `open_access` sea `true`**. Un resultado de dblp o PubMed es una cita, no una descarga.
 
-Y `open_access: true` habla de la **licencia**, no de si el fichero se puede descargar ahora mismo. Se fija desde una licencia Creative Commons (Crossref) o desde una copia libre alojada (arXiv, ERIC, Gutenberg, OpenLibrary); un artículo con licencia abierta puede seguir estando tras una editorial que rechaza a los clientes automáticos, y en ese caso `download`/`read` lo dicen y señalan el navegador como la vía que queda. El `pdf_url` de un resultado de Crossref es el enlace que depositó la **editorial** y está **sin comprobar** — la mayoría de las grandes editoriales comerciales solo lo sirven a suscriptores o lo rechazan de plano —, así que pasa el `doi` a `read`/`download` y deja que la cadena de fuentes lo sondee en lugar de presentar ese enlace como el texto completo.
+Y `open_access: true` habla de la **licencia**, no de si el fichero se puede descargar ahora mismo. Se fija desde una licencia Creative Commons (Crossref), desde la conclusión del propio OpenAlex sobre el acceso abierto (OpenAlex) o desde una copia libre alojada (arXiv, ERIC, Gutenberg, OpenLibrary); un artículo con licencia abierta puede seguir estando tras una editorial que rechaza a los clientes automáticos, y en ese caso `download`/`read` lo dicen y señalan el navegador como la vía que queda. El `pdf_url` de un resultado de Crossref es el enlace que depositó la **editorial** y está **sin comprobar** — la mayoría de las grandes editoriales comerciales solo lo sirven a suscriptores o lo rechazan de plano —, así que pasa el `doi` a `read`/`download` y deja que la cadena de fuentes lo sondee en lugar de presentar ese enlace como el texto completo.
 
 ```json title="entrada de search"
 {
@@ -236,7 +236,8 @@ Y `open_access: true` habla de la **licencia**, no de si el fichero se puede des
 
 Cada resultado lleva al menos un identificador accionable, según su `origin`:
 
-- **`doi` (crossref)** — pásalo a `download` o `read` igual que un DOI de un resultado de Library Genesis.
+- **`doi` (crossref, openalex)** — pásalo a `download` o `read` igual que un DOI de un resultado de Library Genesis.
+- **`pdf_url` (openalex)** — el enlace directo a una copia de acceso abierto que localizó el índice de OpenAlex, que solo se fija cuando esa copia es de acceso abierto. La búsqueda no lo descarga, así que es preferible el `doi`: la fuente `openalex` de la cadena de descarga consulta el mismo índice y pasa a la siguiente cuando el enlace se niega. Cuando la asignación diaria de OpenAlex está en la reserva que se guarda para las consultas de descarga, un despliegue sin clave no devuelve resultados de OpenAlex hasta que se renueva (consulta [`LIBGEN_MCP_OPENALEX_KEY`](/libgen-mcp/es/configuration/#libgen_mcp_openalex_key)).
 - **`pdf_url` (arxiv)** — el PDF que aloja el propio arXiv, directamente descargable; obtenlo tú mismo (no es una descarga de Library Genesis, así que `download`/`read` no lo resuelven por URL).
 - **`pdf_url` (crossref)** — el enlace que depositó la _editorial_ en Crossref, y está **sin comprobar**: la mayoría de las grandes editoriales comerciales solo lo sirven a suscriptores o rechazan de plano a los clientes automáticos. No lo ofrezcas como texto completo. Pasa el `doi` del resultado a `download`/`read` — la cadena incluye una fuente `crossref` que sondea ese mismo enlace e informa con honestidad cuando la editorial lo rechaza.
 - **`isbn`/`title` (openlibrary)** — OpenLibrary es principalmente un _resolutor de consultas_ sin clave: usa su `isbn` o `title` canónicos para refinar una `search` de Library Genesis posterior. La única excepción es un libro de lectura pública — uno que OpenLibrary indica como libremente legible por completo en Internet Archive — que además lleva un `archive_url` (una página `https://archive.org/details/<id>` que puedes leer directamente) y se marca `open_access: true`.

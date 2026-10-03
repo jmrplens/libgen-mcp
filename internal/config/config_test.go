@@ -844,6 +844,34 @@ func TestLoadCoreKey(t *testing.T) {
 	}
 }
 
+// TestLoadOpenAlexKey verifies LIBGEN_MCP_OPENALEX_KEY populates OpenAlexKey with
+// surrounding space trimmed, and that an unset or blank variable leaves OpenAlex
+// keyless, which is the default.
+func TestLoadOpenAlexKey(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{name: "a key", value: "oa-secret", want: "oa-secret"},
+		{name: "a key pasted with a newline", value: " oa-secret\n", want: "oa-secret"},
+		{name: "unset", value: "", want: ""},
+		{name: "blank", value: "   ", want: ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("LIBGEN_MCP_OPENALEX_KEY", tc.value)
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if cfg.OpenAlexKey != tc.want {
+				t.Errorf("OpenAlexKey = %q, want %q", cfg.OpenAlexKey, tc.want)
+			}
+		})
+	}
+}
+
 // TestSourceEnabledCoreRequiresKey verifies the core source is gated on a
 // configured API key, mirroring the unpaywall/email gate: enabled with a key,
 // disabled without one even when explicitly listed in Sources.

@@ -194,7 +194,11 @@ func (f providerFunc) Search(ctx context.Context, q string, limit int) ([]Discov
 // covered without anyone remembering to write this test again. No request leaves the
 // machine: the context is already canceled, so the transport refuses before dialing.
 func TestEveryProviderPropagatesContextCancellation(t *testing.T) {
-	providers := ExtraProviders("test@example.com", staticMirrors{"https://annas-archive.invalid"})
+	providers := ExtraProviders(Settings{
+		Email:        "test@example.com",
+		OpenAlexKey:  "test-key",
+		AnnasMirrors: staticMirrors{"https://annas-archive.invalid"},
+	})
 	if len(providers) < 8 {
 		t.Fatalf("ExtraProviders returned %d providers; the registry shrank and this test may be skipping one", len(providers))
 	}
@@ -356,7 +360,7 @@ func TestAnnasProviderWithNoMirrorsDegradesToEmpty(t *testing.T) {
 // the provenance the search tool shows for every hit that provider contributes.
 func TestEveryProviderNamesItself(t *testing.T) {
 	seen := map[string]bool{}
-	for _, p := range ExtraProviders("", staticMirrors{"https://annas-archive.invalid"}) {
+	for _, p := range ExtraProviders(Settings{AnnasMirrors: staticMirrors{"https://annas-archive.invalid"}}) {
 		name := p.Name()
 		if name == "" {
 			t.Errorf("a provider (%T) reports an empty Name", p)
@@ -493,14 +497,15 @@ func TestFederate_RecoversProviderPanic(t *testing.T) {
 	}
 }
 
-// TestDefaultProviders verifies DefaultProviders returns the four standard keyless
-// providers in the documented order: arxiv, crossref, openlibrary, gutenberg.
+// TestDefaultProviders verifies DefaultProviders returns the five standard keyless
+// providers in the documented order: arxiv, openalex, crossref, openlibrary,
+// gutenberg.
 func TestDefaultProviders(t *testing.T) {
-	providers := DefaultProviders("")
-	if len(providers) != 4 {
-		t.Fatalf("DefaultProviders() returned %d providers, want 4", len(providers))
+	providers := DefaultProviders(Settings{})
+	if len(providers) != 5 {
+		t.Fatalf("DefaultProviders() returned %d providers, want 5", len(providers))
 	}
-	want := []string{"arxiv", "crossref", "openlibrary", "gutenberg"}
+	want := []string{"arxiv", "openalex", "crossref", "openlibrary", "gutenberg"}
 	for i, name := range want {
 		t.Run(name, func(t *testing.T) {
 			if got := providers[i].Name(); got != name {
@@ -538,8 +543,8 @@ func TestDedupKeepsDistinctMD5s(t *testing.T) {
 // providers, the bibliographic indexes, and Anna's, in that order — the indexes must
 // follow the open-access providers so dedup keeps the fetchable copy of a shared DOI.
 func TestExtraProvidersIncludesAnnasAndOA(t *testing.T) {
-	got := ExtraProviders("", staticMirrors{"https://annas-archive.gl"})
-	want := []string{"arxiv", "crossref", "openlibrary", "gutenberg", "dblp", "pubmed", "eric", "annas"}
+	got := ExtraProviders(Settings{AnnasMirrors: staticMirrors{"https://annas-archive.gl"}})
+	want := []string{"arxiv", "openalex", "crossref", "openlibrary", "gutenberg", "dblp", "pubmed", "eric", "annas"}
 	if len(got) != len(want) {
 		t.Fatalf("ExtraProviders() returned %d providers, want %d", len(got), len(want))
 	}

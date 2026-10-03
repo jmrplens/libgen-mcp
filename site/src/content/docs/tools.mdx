@@ -159,10 +159,10 @@ Every result is returned on two channels: the structured JSON output documented 
 	<Fragment slot="order_mode">Sort direction: `asc` or `desc`.</Fragment>
 	<Fragment slot="extra_sources">
 		When to search beyond the Library Genesis catalog (Anna's Archive, arXiv,
-		Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC): `auto`
-		consults them only when the catalog finds nothing, `always` consults them on
-		every search, `never` restricts the search to the catalog. Omit to use the
-		server default (`auto`).
+		OpenAlex, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC):
+		`auto` consults them only when the catalog finds nothing, `always` consults
+		them on every search, `never` restricts the search to the catalog. Omit to
+		use the server default (`auto`).
 	</Fragment>
 </SchemaTable>
 
@@ -196,11 +196,11 @@ Invalid input is rejected before any network call: an empty `query`, an unknown 
 
 ### Open-access discovery
 
-Beyond the Library Genesis catalog, `search` can also consult **extra sources** — [Anna's Archive](https://annas-archive.org/), [arXiv](https://arxiv.org/), [Crossref](https://www.crossref.org/), [OpenLibrary](https://openlibrary.org/), [Project Gutenberg](https://www.gutenberg.org/), [dblp](https://dblp.org/), [PubMed](https://pubmed.ncbi.nlm.nih.gov/), and [ERIC](https://eric.ed.gov/) — controlled by the `extra_sources` argument (`auto`/`always`/`never`) and its deployment default `LIBGEN_MCP_EXTRA_SOURCES` (itself `auto` — see [Configuration](/libgen-mcp/configuration/)). The default `auto` consults them only when the catalog returns nothing or fails; `always` consults them on every search, concurrently with the catalog; `never` restricts the search to the catalog, even on a miss. Anna's md5-keyed hits merge into `results` (labeled `origin: "annas"`); arXiv, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, and ERIC hits appear in a separate `open_access` field alongside `results`.
+Beyond the Library Genesis catalog, `search` can also consult **extra sources** — [Anna's Archive](https://annas-archive.org/), [arXiv](https://arxiv.org/), [OpenAlex](https://openalex.org/), [Crossref](https://www.crossref.org/), [OpenLibrary](https://openlibrary.org/), [Project Gutenberg](https://www.gutenberg.org/), [dblp](https://dblp.org/), [PubMed](https://pubmed.ncbi.nlm.nih.gov/), and [ERIC](https://eric.ed.gov/) — controlled by the `extra_sources` argument (`auto`/`always`/`never`) and its deployment default `LIBGEN_MCP_EXTRA_SOURCES` (itself `auto` — see [Configuration](/libgen-mcp/configuration/)). The default `auto` consults them only when the catalog returns nothing or fails; `always` consults them on every search, concurrently with the catalog; `never` restricts the search to the catalog, even on a miss. Anna's md5-keyed hits merge into `results` (labeled `origin: "annas"`); arXiv, OpenAlex, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, and ERIC hits appear in a separate `open_access` field alongside `results`.
 
 That field name predates the bibliographic indexes and is now a slight misnomer: dblp and PubMed describe a paper without asserting anything about its availability, and ERIC hosts only part of what it indexes, so **only a hit whose own `open_access` flag is `true` is known to be free to read**. A dblp or PubMed hit is a citation, not a download.
 
-And `open_access: true` is a statement about the **licence**, not about whether the file can be fetched right now. It is set from a Creative Commons licence (Crossref) or from a hosted free copy (arXiv, ERIC, Gutenberg, OpenLibrary); an openly licensed article can still sit behind a publisher that refuses automated clients, in which case `download`/`read` say so and name the browser as the route that remains. A Crossref hit's `pdf_url` is the link the **publisher** deposited and is **unverified** — most large commercial publishers serve it only to subscribers or refuse it outright — so pass the `doi` to `read`/`download` and let the source chain probe it rather than presenting that link as the full text.
+And `open_access: true` is a statement about the **licence**, not about whether the file can be fetched right now. It is set from a Creative Commons licence (Crossref), from OpenAlex's own open-access finding (OpenAlex) or from a hosted free copy (arXiv, ERIC, Gutenberg, OpenLibrary); an openly licensed article can still sit behind a publisher that refuses automated clients, in which case `download`/`read` say so and name the browser as the route that remains. A Crossref hit's `pdf_url` is the link the **publisher** deposited and is **unverified** — most large commercial publishers serve it only to subscribers or refuse it outright — so pass the `doi` to `read`/`download` and let the source chain probe it rather than presenting that link as the full text.
 
 ```json title="search input"
 {
@@ -234,7 +234,8 @@ And `open_access: true` is a statement about the **licence**, not about whether 
 
 Each hit carries at least one actionable identifier, depending on its `origin`:
 
-- **`doi` (crossref)** — pass it to `download` or `read` exactly like a DOI from a Library Genesis result.
+- **`doi` (crossref, openalex)** — pass it to `download` or `read` exactly like a DOI from a Library Genesis result.
+- **`pdf_url` (openalex)** — the direct link of an open-access copy OpenAlex's index located, set only when that copy is itself open access. It is not fetched by the search, so prefer the `doi`: the download chain's `openalex` source asks the same index and fails over when the link refuses. When OpenAlex's daily allowance is down to the reserve kept for download lookups, a keyless deployment returns no OpenAlex hits until it resets (see [`LIBGEN_MCP_OPENALEX_KEY`](/libgen-mcp/configuration/#libgen_mcp_openalex_key)).
 - **`pdf_url` (arxiv)** — arXiv's own hosted PDF, directly fetchable; fetch it yourself (it is not a Library Genesis download, so `download`/`read` do not resolve it by URL).
 - **`pdf_url` (crossref)** — the link the _publisher_ deposited with Crossref, and **unverified**: most large commercial publishers serve it only to subscribers or refuse automated clients outright. Do not offer it as the full text. Pass the hit's `doi` to `download`/`read` instead — the chain includes a `crossref` source that probes this same link and reports honestly when the publisher refuses it.
 - **`isbn`/`title` (openlibrary)** — OpenLibrary is mainly a keyless _query resolver_: use its canonical `isbn` or `title` to refine a follow-up Library Genesis `search`. The one exception is a publicly readable book — one OpenLibrary reports as freely readable in full on the Internet Archive — which additionally carries an `archive_url` (a `https://archive.org/details/<id>` page you can read directly) and is marked `open_access: true`.

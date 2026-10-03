@@ -89,6 +89,7 @@ type Config struct {
 	ScihubHosts            []string   // LIBGEN_MCP_SCIHUB_HOSTS: ordered Sci-Hub mirror hosts (comma-separated, bare host, no scheme)
 	AnnasKey               string     // LIBGEN_MCP_ANNAS_KEY: optional Anna's Archive account secret enabling the member fast-download API; empty keeps the annas source keyless (IPFS only)
 	CoreKey                string     // LIBGEN_MCP_CORE_KEY: optional CORE (core.ac.uk) API key enabling the core open-access source; empty leaves the core source out of the chain, mirroring how an empty Unpaywall email disables unpaywall
+	OpenAlexKey            string     // LIBGEN_MCP_OPENALEX_KEY: optional OpenAlex API key, sent on every OpenAlex request (the openalex download source and search provider) to draw on the key's daily budget instead of the keyless per-address one; empty keeps both keyless
 	Sources                []string   // LIBGEN_MCP_SOURCES: enabled download sources (comma-separated names; empty = all enabled)
 	// ActionTimeout bounds one tool call's handler on both transports.
 	// LIBGEN_MCP_ACTION_TIMEOUT, a Go duration; 0 disables it.
@@ -500,6 +501,9 @@ func loadStringVars(cfg *Config) {
 	}
 	if v := Getenv("CORE_KEY"); v != "" {
 		cfg.CoreKey = v
+	}
+	if v := TrimmedGetenv("OPENALEX_KEY"); v != "" {
+		cfg.OpenAlexKey = v
 	}
 	if v := Getenv("SCIHUB_HOSTS"); v != "" {
 		cfg.ScihubHosts = splitHosts(v)

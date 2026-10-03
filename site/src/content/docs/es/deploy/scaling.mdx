@@ -45,7 +45,7 @@ llamadas retenidas = (límite - límite/8 - 64) / (2 + buscadores extra)
 sesiones con estado = llamadas retenidas / 2
 ```
 
-Un octavo del límite queda libre para el proceso en reposo, `/health` y las conexiones que se están rechazando. Se reservan sesenta y cuatro descriptores para el techo del proceso sobre las llamadas que mueven bytes (`download` y `read`), cada una de las cuales abre un fichero además de su conexión. Lo que queda se divide entre lo máximo que puede costar una llamada retenida, que es un `search` escalado: la conexión del llamante, la petición al catálogo y una conexión por cada uno de los ocho buscadores más allá del catálogo, diez en total. El divisor se cuenta a partir de la lista de proveedores, así que un proveedor añadido en una release baja el techo con él. Ambos resultados valen al menos `1`.
+Un octavo del límite queda libre para el proceso en reposo, `/health` y las conexiones que se están rechazando. Se reservan sesenta y cuatro descriptores para el techo del proceso sobre las llamadas que mueven bytes (`download` y `read`), cada una de las cuales abre un fichero además de su conexión. Lo que queda se divide entre lo máximo que puede costar una llamada retenida, que es un `search` escalado: la conexión del llamante, la petición al catálogo y una conexión por cada uno de los nueve buscadores más allá del catálogo, once en total. El divisor se cuenta a partir de la lista de proveedores, así que un proveedor añadido en una release baja el techo con él. Ambos resultados valen al menos `1`.
 
 Un ejemplo resuelto, para un contenedor arrancado con `--ulimit nofile=4096`:
 
@@ -53,13 +53,13 @@ Un ejemplo resuelto, para un contenedor arrancado con `--ulimit nofile=4096`:
 margen      4096 / 8                       =  512
 reserva     64 plazas que mueven bytes     =   64
 resto       4096 - 512 - 64                = 3520
-retenidas   3520 / 10                      =  352
-sesiones    352 / 2                        =  176   (solo cuentan con --stateless=false)
+retenidas   3520 / 11                      =  320
+sesiones    320 / 2                        =  160   (solo cuentan con --stateless=false)
 ```
 
-El runtime de Go sube el límite blando al duro antes de `main`, así que la cifra sigue al límite **duro**: 83 llamadas retenidas con 1024, 45868 con los 524288 que recibe un servicio de systemd por defecto. La línea de arranque `process ceilings` dice qué recibió este proceso (`held_calls_per_process`, `descriptor_limit`, `descriptor_limit_source`), y la tabla completa, el rechazo (`503`, `Retry-After: 30`, `This server is busy. Retry later.`) y qué cuenta como llamada retenida están en [Modo servidor HTTP → Qué puede retener el proceso entero](/libgen-mcp/es/http-server-mode/#qué-puede-retener-el-proceso-entero).
+El runtime de Go sube el límite blando al duro antes de `main`, así que la cifra sigue al límite **duro**: 75 llamadas retenidas con 1024, 41698 con los 524288 que recibe un servicio de systemd por defecto. La línea de arranque `process ceilings` dice qué recibió este proceso (`held_calls_per_process`, `descriptor_limit`, `descriptor_limit_source`), y la tabla completa, el rechazo (`503`, `Retry-After: 30`, `This server is busy. Retry later.`) y qué cuenta como llamada retenida están en [Modo servidor HTTP → Qué puede retener el proceso entero](/libgen-mcp/es/http-server-mode/#qué-puede-retener-el-proceso-entero).
 
-Diez descriptores es la cota, no el coste típico: una búsqueda que sigue en cola esperando su token del catálogo solo retiene la conexión de su llamante. Por eso el techo rara vez es lo primero con lo que se topa un despliegue.
+Once descriptores es la cota, no el coste típico: una búsqueda que sigue en cola esperando su token del catálogo solo retiene la conexión de su llamante. Por eso el techo rara vez es lo primero con lo que se topa un despliegue.
 
 ### Memoria y CPU
 

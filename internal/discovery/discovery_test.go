@@ -232,7 +232,9 @@ func TestSetBasesForTest(t *testing.T) {
 		OpenLibrary: openLibraryBase,
 		DBLP:        dblpBase,
 		PubMed:      pubmedBase,
+		Gutendex:    gutendexBase,
 		ERIC:        ericBase,
+		OpenAlex:    openAlexBase,
 	}
 	want := ProviderBases{
 		Arxiv:       "http://a.test",
@@ -240,7 +242,9 @@ func TestSetBasesForTest(t *testing.T) {
 		OpenLibrary: "http://o.test",
 		DBLP:        "http://d.test",
 		PubMed:      "http://p.test",
+		Gutendex:    "http://g.test",
 		ERIC:        "http://e.test",
+		OpenAlex:    "http://x.test",
 	}
 
 	restore := SetBasesForTest(want)
@@ -293,7 +297,7 @@ func TestNewDiscoveryClient_ClosesEachConnectionAfterItsResponse(t *testing.T) {
 // TestExtraProviderCount_IsTheLengthOfTheList keeps the count the process
 // ceiling is sized from tied to the list it counts.
 func TestExtraProviderCount_IsTheLengthOfTheList(t *testing.T) {
-	if got, want := ExtraProviderCount(), len(ExtraProviders("x@example.org", nil)); got != want || got == 0 {
+	if got, want := ExtraProviderCount(), len(ExtraProviders(Settings{Email: "x@example.org"})); got != want || got == 0 {
 		t.Errorf("ExtraProviderCount() = %d, want %d", got, want)
 	}
 }
@@ -307,6 +311,8 @@ func currentBases() ProviderBases {
 		OpenLibrary: openLibraryBase,
 		DBLP:        dblpBase,
 		PubMed:      pubmedBase,
+		Gutendex:    gutendexBase,
 		ERIC:        ericBase,
+		OpenAlex:    openAlexBase,
 	}
 }
