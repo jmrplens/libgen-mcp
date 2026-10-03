@@ -159,15 +159,25 @@ function parentGone() {
 // watchParent asks for the server to stop once npm's shell is gone, at once
 // when it went while the launcher was starting, and otherwise on the first
 // check that finds it gone.
+//
+// Either way the request waits for the end of the current turn of the event
+// loop. A signal is handed to its listener in the turn's I/O phase, which comes
+// after its timers, so a launcher stalled across a Ctrl+C and the death of the
+// shell that Ctrl+C also reached would otherwise run the overdue check first,
+// and send the server a SIGTERM on top of the SIGINT it is already draining
+// on. Deferred with setImmediate, the request runs after that phase, by which
+// time any signal that had already arrived has been acted on and the request
+// finds there is nothing left to do.
 function watchParent(stop) {
+  const stopAfterPendingSignals = () => setImmediate(() => stop("SIGTERM"));
   if (parentGone()) {
-    stop("SIGTERM");
+    stopAfterPendingSignals();
     return;
   }
   const watch = setInterval(() => {
     if (!parentGone()) return;
     clearInterval(watch);
-    stop("SIGTERM");
+    stopAfterPendingSignals();
   }, PARENT_POLL_MS);
   watch.unref();
 }

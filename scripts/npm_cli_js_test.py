@@ -41,13 +41,18 @@ import urllib.request
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 LAUNCHER = os.path.join(ROOT, "npm", "libgen-mcp", "cli.js")
 
-# A stand-in for the server binary. It writes its PID and its parent's, then
-# one line per argument and one per signal it traps, to the files the case
-# names, and behaves as STUB_MODE says: exit with a code, die by a signal,
-# wait until a signal arrives, or, like the real server, drain for a while
-# after the first signal and keep logging any that arrive meanwhile.
+# A stand-in for the server binary. It writes one line per argument and one
+# per signal it traps to the log the case names, and its PID and its parent's
+# to a second file, and behaves as STUB_MODE says: exit with a code, die by a
+# signal, wait until a signal arrives, or, like the real server, drain for a
+# while after the first signal and keep logging any that arrive meanwhile.
+#
+# The PID file is the cases' sign that the stand-in is ready, so it is written
+# only once every trap is in place. Written before them, it opened a window in
+# which a case's signal found the shell's default action instead of the trap:
+# the stand-in died without logging anything, and on a loaded host one run in
+# ten of the parent-watch case failed with an empty log.
 STUB = """#!/bin/sh
-printf '%s %s\\n' "$$" "$PPID" > "$STUB_PIDS.tmp" && mv "$STUB_PIDS.tmp" "$STUB_PIDS"
 for a in "$@"; do
   printf 'arg=[%s]\\n' "$a" >> "$STUB_LOG"
 done
@@ -60,6 +65,7 @@ on_signal() {
 trap 'on_signal TERM' TERM
 trap 'on_signal INT' INT
 trap 'on_signal HUP' HUP
+printf '%s %s\\n' "$$" "$PPID" > "$STUB_PIDS.tmp" && mv "$STUB_PIDS.tmp" "$STUB_PIDS"
 case "$STUB_MODE" in
   drain)
     ticks=0
@@ -140,12 +146,16 @@ def alive(pid):
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
-    stat_path = "/proc/{}/stat".format(pid)
-    if os.path.exists(stat_path):
-        with open(stat_path, encoding="utf-8") as fh:
+    if not os.path.isdir("/proc"):
+        return True
+    # Read rather than checked first: the process can be reaped between a
+    # check and the read, and a stat file gone by then is a process gone.
+    try:
+        with open("/proc/{}/stat".format(pid), encoding="utf-8") as fh:
             text = fh.read()
-        return text[text.rindex(")") + 2] != "Z"
-    return True
+    except (FileNotFoundError, ProcessLookupError):
+        return False
+    return text[text.rindex(")") + 2] != "Z"
 
 
 @unittest.skipUnless(os.name == "posix", "the launcher forwards signals on POSIX only")
@@ -325,6 +335,56 @@ class NpmLauncherTest(unittest.TestCase):
         if shell.poll() is None:
             shell.send_signal(signal.SIGTERM)
         shell.wait(timeout=SOON)
+        self.assertTrue(wait_for(lambda: not alive(server), WATCH_PERIOD + SOON), "the server never finished its drain")
+        self.assertEqual(self.signals_logged(), ["INT"])
+
+    def test_the_parent_watch_stays_quiet_when_the_launcher_wakes_to_both(self):
+        # The same Ctrl+C, reaching a launcher whose event loop is held up
+        # until the shell is gone and the watch's next check is overdue. Node
+        # runs a turn's timers before it hands a signal to its listener, so a
+        # watch that acted in its own timer would send the SIGTERM first. A
+        # preloaded gate holds the loop on demand, in the phase after the I/O
+        # one, so the turn the launcher wakes into starts with the timers.
+        stall = os.path.join(self.work, "stall")
+        stalled = os.path.join(self.work, "stalled")
+        resume = os.path.join(self.work, "resume")
+        gate = os.path.join(self.work, "gate.js")
+        with open(gate, "w", encoding="utf-8") as fh:
+            fh.write(
+                "const fs = require('fs');\n"
+                "const nap = new Int32Array(new SharedArrayBuffer(4));\n"
+                "const poll = setInterval(() => {\n"
+                "  if (!fs.existsSync(%r)) return;\n"
+                "  clearInterval(poll);\n"
+                "  setImmediate(() => {\n"
+                "    fs.writeFileSync(%r, '');\n"
+                "    while (!fs.existsSync(%r)) Atomics.wait(nap, 0, 0, 10);\n"
+                "  });\n"
+                "}, 10);\n"
+                "poll.unref();\n" % (stall, stalled, resume)
+            )
+        shell, server, launcher = self.shell_around_the_launcher(
+            npm=True, mode="drain", stdin=self.terminal(), STUB_DRAIN_TICKS="50",
+            NODE_OPTIONS="--require " + gate,
+        )
+        open(stall, "w", encoding="utf-8").close()
+        self.assertTrue(wait_for(lambda: os.path.exists(stalled), SOON), "the launcher's loop was never held")
+        held = time.monotonic()
+        os.killpg(shell.pid, signal.SIGINT)
+        if shell.poll() is None:
+            shell.send_signal(signal.SIGTERM)
+        shell.wait(timeout=SOON)
+        self.assertTrue(wait_for(lambda: "INT" in self.signals_logged(), SOON), "the Ctrl+C never reached the server")
+
+        def reparented():
+            ppid = subprocess.run(["ps", "-o", "ppid=", "-p", str(launcher)], capture_output=True, text=True, check=False)
+            return ppid.stdout.strip() not in ("", str(shell.pid))
+
+        self.assertTrue(wait_for(reparented, SOON), "the launcher was never reparented")
+        # The watch's check falls due a period after the last one, which ran
+        # before the hold at the latest.
+        self.assertTrue(wait_for(lambda: time.monotonic() - held > WATCH_PERIOD * 1.2, WATCH_PERIOD * 2))
+        open(resume, "w", encoding="utf-8").close()
         self.assertTrue(wait_for(lambda: not alive(server), WATCH_PERIOD + SOON), "the server never finished its drain")
         self.assertEqual(self.signals_logged(), ["INT"])
 
