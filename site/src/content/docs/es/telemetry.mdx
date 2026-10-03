@@ -63,7 +63,7 @@ OTEL_EXPORTER_OTLP_TIMEOUT=30s     # nada; se mantiene el valor por defecto
 
 Todas las `OTEL_BSP_*`, `OTEL_BLRP_*`, `OTEL_METRIC_EXPORT_INTERVAL` y `OTEL_METRIC_EXPORT_TIMEOUT` se comportan igual. Ten en cuenta que todas las variables que define _este_ servidor toman una duración de Go, lo que empeora la incoherencia en lugar de mejorarla. Merece leerse dos veces.
 
-**`http/json` se rechaza, y la razón es más estrecha de lo que parece.** Desde la v1.46.0 el exportador de trazas de Go lo implementa; los de métricas y registros no. Aceptarlo daría a un mismo despliegue dos codificaciones a la vez —spans en JSON junto a métricas en protobuf— a partir de un único ajuste que se lee como si seleccionara una sola cosa. Así que falla al arrancar, por su nombre, en lugar de degradarse o partirse en silencio.
+**`http/json` se rechaza, y la razón es más estrecha de lo que parece.** Desde la v1.46.0 el exportador de trazas de Go lo implementa; los de métricas y registros no. Aceptarlo daría a un mismo despliegue dos codificaciones a la vez —spans en JSON junto a métricas en protobuf— a partir de un único ajuste que se lee como si seleccionara una sola cosa. Así que los exportadores no llegan a arrancar, en lugar de degradarse o partirse en silencio: el servidor registra `telemetry disabled: it could not be started` en `ERROR`, nombrando `http/json`, y sigue sirviendo con la telemetría apagada.
 
 **`OTEL_EXPORTER_OTLP_INSECURE=true` anula un endpoint `https`, para trazas y métricas.** La especificación dice que la variable «solo se aplica a OTLP/gRPC cuando se proporciona un endpoint sin el esquema http o https». Los exportadores de trazas y métricas de Go no lo leen así: su configuración por entorno aplica primero el esquema y después las opciones de `INSECURE`, así que gana la última y un endpoint `https` se degrada a texto plano, llevándose consigo cualquier credencial que hayas fijado. Los exportadores de registros, más nuevos, resuelven primero el esquema y son correctos, y por eso un mismo despliegue puede acabar exportando dos señales en claro y la tercera sobre TLS.
 
@@ -232,6 +232,8 @@ El bloque está ausente cuando la telemetría está apagada, así que nada hay q
 ## Cuando va mal
 
 Un colector inalcanzable se registra y se traga: un servidor que sigue pudiendo llegar a los mirrors sigue haciéndolo. Lo que _no_ se traga es un valor de una de las variables propias de este servidor que no se pueda interpretar —un nombre de señal desconocido, una política de identidad que nadie definió, una rotación fuera de rango—, porque un despliegue que no se corresponde con su propia configuración no debe llegar a producción con aspecto de estar sano.
+
+Un ajuste estándar `OTEL_*` que los exportadores rechazan —`http/json` o un protocolo desconocido, un fichero de certificado o de clave que no se puede leer— queda entre los dos casos: no se traga en silencio, pero tampoco detiene el servidor. La telemetría se queda apagada, el motivo se registra una vez como `telemetry disabled: it could not be started` en `ERROR`, y el servidor sigue sirviendo.
 
 Los fallos del propio SDK llegan a tu flujo de registro y no a la salida de error de lo que fuera el escritor por defecto del proceso: el manejador de errores y el logger interno se instalan sobre el handler de este servidor al arrancar. En stdio eso no es un detalle: una librería escribiendo en stdout corrompe el flujo JSON-RPC.
 

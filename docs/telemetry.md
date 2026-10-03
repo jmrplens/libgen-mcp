@@ -72,8 +72,9 @@ than better. It is worth reading twice.
 v1.46.0 the Go trace exporter implements it; the metric and log exporters do not.
 Honoring it would give one deployment two encodings at once — JSON spans beside
 protobuf metrics — from a single setting that reads as though it selects one
-thing. So it fails at startup, by name, rather than silently downgrading or
-silently splitting.
+thing. So the exporters are not started at all, rather than silently downgrading
+or silently splitting: the server logs `telemetry disabled: it could not be
+started` at `ERROR`, naming `http/json`, and keeps serving with telemetry off.
 
 **`OTEL_EXPORTER_OTLP_INSECURE=true` overrides an `https` endpoint, for traces and
 metrics.** The specification says the variable "only applies to OTLP/gRPC when an
@@ -345,6 +346,12 @@ of this server's own variables that cannot be parsed — an unknown signal name,
 identity policy nobody defined, a rotation out of range — because a deployment
 that does not match its own configuration must not reach production looking
 healthy.
+
+A standard `OTEL_*` setting the exporters reject — `http/json` or an unknown
+protocol, a certificate or key file that cannot be read — sits between the two:
+it is not swallowed silently, and it does not stop the server either. Telemetry
+stays off, the reason is logged once as `telemetry disabled: it could not be
+started` at `ERROR`, and the server keeps serving.
 
 The SDK's own failures reach your log stream rather than the stderr of whatever
 happened to be the process's default writer: the error handler and the internal
