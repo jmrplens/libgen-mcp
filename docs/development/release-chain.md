@@ -292,7 +292,7 @@ them.
 **The cosign major is load-bearing beyond the pin.** It decides how a signature
 is attached, and a 2.x client reports "no signatures found" on an image a 3.x
 client verifies. Bump it deliberately, and with the verification recipe in
-[Installation](../installation.md#docker).
+[Run with Docker](../install/docker.md).
 
 ## Adding a job
 
@@ -315,4 +315,4 @@ Three things, and the second is the one that gets forgotten:
 | The settings this chain depends on and CI cannot see  | [Repository settings](repository-settings.md) |
 | What each automated check asserts                     | [The gates](gates.md)                         |
 | The three rules that have each already cost a publish | `CLAUDE.md` § *Release Process*               |
-| What a user does with what this publishes             | [Installation](../installation.md)            |
+| What a user does with what this publishes             | [Installation](../install/overview.md)        |

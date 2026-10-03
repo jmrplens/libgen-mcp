@@ -386,6 +386,16 @@ const jsonLd = JSON.stringify({
 export default defineConfig({
 	site: "https://jmrplens.github.io",
 	base: "/libgen-mcp",
+	// Pages that moved. GitHub Pages cannot answer with a 301, so each old URL is
+	// built as a page that refreshes to the new one. A source is relative to
+	// `base` and a destination is not: Astro writes it into the page verbatim,
+	// so it carries the base and the trailing slash the pages are served under.
+	// A meta refresh drops the fragment, so an old link to a section of the
+	// installation page lands on the overview, which links every channel.
+	redirects: {
+		"/installation": "/libgen-mcp/install/overview/",
+		"/es/installation": "/libgen-mcp/es/install/overview/",
+	},
 	// Mermaid is rendered to inline SVG at build time. astro-mermaid did it in the
 	// browser, which cost ~199 KB gzip over ~35 requests on each of the four
 	// diagram pages, shipped ~2.7 MB of unreachable diagram types (cytoscape,
@@ -655,8 +665,8 @@ export default defineConfig({
 			],
 			sidebar: [
 				{
-					label: "Guide",
-					translations: { es: "Guía" },
+					label: "Start",
+					translations: { es: "Comenzar" },
 					items: [
 						{
 							slug: "getting-started",
@@ -664,10 +674,77 @@ export default defineConfig({
 							translations: { es: "Primeros pasos" },
 						},
 						{
-							slug: "installation",
-							label: "Installation",
-							translations: { es: "Instalación" },
+							slug: "clients",
+							label: "Connect a client",
+							translations: { es: "Conectar un cliente" },
 						},
+						{
+							slug: "hosted",
+							label: "Hosted endpoint",
+							translations: { es: "Endpoint alojado" },
+						},
+					],
+				},
+				{
+					label: "Install",
+					translations: { es: "Instalación" },
+					items: [
+						{
+							slug: "install/overview",
+							label: "Overview",
+							translations: { es: "Visión general" },
+						},
+						{
+							slug: "install/npm",
+							label: "npm",
+							translations: { es: "npm" },
+						},
+						{
+							slug: "install/pypi",
+							label: "PyPI",
+							translations: { es: "PyPI" },
+						},
+						{
+							slug: "install/nuget",
+							label: "NuGet",
+							translations: { es: "NuGet" },
+						},
+						{
+							slug: "install/homebrew",
+							label: "Homebrew",
+							translations: { es: "Homebrew" },
+						},
+						{
+							slug: "install/docker",
+							label: "Docker",
+							translations: { es: "Docker" },
+						},
+						{
+							slug: "install/binary",
+							label: "Release binary and Go",
+							translations: { es: "Binario de la release y Go" },
+						},
+						{
+							slug: "install/claude-desktop",
+							label: "Claude Desktop",
+							translations: { es: "Claude Desktop" },
+						},
+						{
+							slug: "install/agent-plugin",
+							label: "Agent plugin",
+							translations: { es: "Plugin para agentes" },
+						},
+						{
+							slug: "install/winget",
+							label: "winget (pending)",
+							translations: { es: "winget (pendiente)" },
+						},
+					],
+				},
+				{
+					label: "Guides",
+					translations: { es: "Guías" },
+					items: [
 						{
 							slug: "download-a-paper",
 							label: "Download a paper by DOI",
@@ -679,14 +756,50 @@ export default defineConfig({
 							translations: { es: "Citas BibTeX y RIS" },
 						},
 						{
-							slug: "configuration",
-							label: "Configuration",
-							translations: { es: "Configuración" },
+							slug: "use-cases",
+							label: "Use cases",
+							translations: { es: "Casos de uso" },
 						},
+					],
+				},
+				{
+					label: "Deploy & operate",
+					translations: { es: "Despliegue y operación" },
+					items: [
 						{
 							slug: "http-server-mode",
 							label: "HTTP server mode",
 							translations: { es: "Modo servidor HTTP" },
+						},
+						{
+							slug: "deploy/reverse-proxy",
+							label: "Behind a reverse proxy",
+							translations: { es: "Detrás de un proxy inverso" },
+						},
+						{
+							slug: "deploy/service",
+							label: "Run as a service",
+							translations: { es: "Ejecutarlo como servicio" },
+						},
+						{
+							slug: "deploy/containers",
+							label: "Containers and orchestration",
+							translations: { es: "Contenedores y orquestación" },
+						},
+						{
+							slug: "deploy/scaling",
+							label: "Scaling and capacity",
+							translations: { es: "Escalado y capacidad" },
+						},
+						{
+							slug: "security",
+							label: "Security model",
+							translations: { es: "Modelo de seguridad" },
+						},
+						{
+							slug: "telemetry",
+							label: "Telemetry",
+							translations: { es: "Telemetría" },
 						},
 						{
 							slug: "troubleshooting",
@@ -705,9 +818,14 @@ export default defineConfig({
 							translations: { es: "Herramientas" },
 						},
 						{
-							slug: "architecture",
-							label: "Architecture",
-							translations: { es: "Arquitectura" },
+							slug: "configuration",
+							label: "Configuration",
+							translations: { es: "Configuración" },
+						},
+						{
+							slug: "cli",
+							label: "Command-line flags",
+							translations: { es: "Opciones de la línea de órdenes" },
 						},
 						{
 							slug: "sources",
@@ -715,14 +833,14 @@ export default defineConfig({
 							translations: { es: "Fuentes de descarga" },
 						},
 						{
+							slug: "architecture",
+							label: "Architecture",
+							translations: { es: "Arquitectura" },
+						},
+						{
 							slug: "how-search-works",
 							label: "How search works",
 							translations: { es: "Cómo funciona la búsqueda" },
-						},
-						{
-							slug: "telemetry",
-							label: "Telemetry",
-							translations: { es: "Telemetría" },
 						},
 						{
 							slug: "limitations",
@@ -730,14 +848,24 @@ export default defineConfig({
 							translations: { es: "Limitaciones conocidas" },
 						},
 						{
-							slug: "eval-results",
-							label: "LLM eval results",
-							translations: { es: "Resultados del eval con LLM" },
+							slug: "compatibility",
+							label: "Compatibility",
+							translations: { es: "Compatibilidad" },
 						},
 						{
 							slug: "benchmarks",
 							label: "What it costs to run",
 							translations: { es: "Lo que cuesta ejecutarlo" },
+						},
+						{
+							slug: "eval-results",
+							label: "LLM eval results",
+							translations: { es: "Resultados del eval con LLM" },
+						},
+						{
+							slug: "glossary",
+							label: "Glossary",
+							translations: { es: "Glosario" },
 						},
 					],
 				},
@@ -761,6 +889,11 @@ export default defineConfig({
 							translations: { es: "Política de privacidad" },
 						},
 						{
+							slug: "changelog",
+							label: "Versions and upgrades",
+							translations: { es: "Versiones y actualizaciones" },
+						},
+						{
 							label: "Security policy",
 							translations: { es: "Política de seguridad" },
 							link: "https://github.com/jmrplens/libgen-mcp/blob/main/SECURITY.md",
@@ -768,8 +901,9 @@ export default defineConfig({
 						},
 						{
 							// The release notes GoReleaser writes for every tag. Linked
-							// rather than copied: a changelog page here would be a
-							// second record of every release, kept by hand.
+							// rather than copied: the changelog page above explains
+							// versioning and upgrading, and a list of every release
+							// kept by hand here would be a second record of each.
 							label: "Release notes",
 							translations: { es: "Notas de versión" },
 							link: "https://github.com/jmrplens/libgen-mcp/releases",

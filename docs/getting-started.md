@@ -23,7 +23,7 @@ needed.
 | Go             | —                                                       | `go install github.com/jmrplens/libgen-mcp/v2/cmd/server@latest` |
 
 The two shortest paths are spelled out below. **Every channel has its own
-section in [Installation](installation.md)** — what you get, how to check it is
+section in [Installation](install/overview.md)** — what you get, how to check it is
 what this project published, how to upgrade it and how to remove it.
 
 ### npm / npx (shortest path if you have Node 18 or newer)
@@ -123,7 +123,7 @@ Two settings that meet in a container and surprise people apart:
 
 The release binary, PyPI, Homebrew, NuGet, the Claude Desktop `.mcpb` bundle and
 `go install` are each one command, and each puts the same executable on your
-machine. They have a section apiece in [Installation](installation.md), which is
+machine. They have a section apiece in [Installation](install/overview.md), which is
 also where the verification recipes live — the release binary and the image are
 signed, and checking that is a step worth taking once.
 
@@ -152,7 +152,7 @@ Add the server to your project's `.mcp.json` (or run `claude mcp add`):
 The easiest path is the one-click **`.mcpb`** desktop extension from the
 [latest release](https://github.com/jmrplens/libgen-mcp/releases/latest) (macOS, Windows
 and Linux, no Docker): download the bundle for your system (see
-[the installation guide](installation.md#claude-desktop-mcpb)) and open it with Claude
+[the Claude Desktop extension page](install/claude-desktop.md)) and open it with Claude
 Desktop, then confirm the settings. On Linux, install it from **Extensions > Install
 Extension…**, since the Linux app does not open `.mcpb` files itself.
 

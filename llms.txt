@@ -119,46 +119,88 @@ Prompts (guided workflows a client can offer by name):
 ## Documentation
 
 - [Getting started](https://jmrp.io/docs/libgen-mcp/getting-started/): Installation and first-run guide
-- [Installation](https://jmrp.io/docs/libgen-mcp/installation/): Every channel the server is published to: what you get, how to install and verify it, how to upgrade it and how to remove it
+- [Connect a client](https://jmrp.io/docs/libgen-mcp/clients/): How to register the server in each MCP client, over stdio or over HTTP, with a complete configuration per client
+- [Hosted endpoint](https://jmrp.io/docs/libgen-mcp/hosted/): The public endpoint: how to connect a client to it, what it serves, and what it leaves out compared with a server you run
+- [Installation](https://jmrp.io/docs/libgen-mcp/install/overview/): Every channel the server is published to: what you get, how to install and verify it, how to upgrade it and how to remove it
+- [Install with npm](https://jmrp.io/docs/libgen-mcp/install/npm/): The @jmrp.io/libgen-mcp launcher package: run it with npx or install it globally, verify what npm installed, upgrade it and remove it
+- [Install with PyPI](https://jmrp.io/docs/libgen-mcp/install/pypi/): The libgen-mcp wheels: run the server with uvx or install it with pipx, verify what was installed, upgrade it and remove it
+- [Install with NuGet](https://jmrp.io/docs/libgen-mcp/install/nuget/): The libgen-mcp .NET tool: run it with dnx or install it with dotnet tool, verify the packages, upgrade it and remove it
+- [Install with Homebrew](https://jmrp.io/docs/libgen-mcp/install/homebrew/): The formula in the jmrplens/tap tap: install it, see what it puts on disk, verify it, upgrade it and remove it
+- [Run with Docker](https://jmrp.io/docs/libgen-mcp/install/docker/): The image on GitHub Container Registry and Docker Hub: stdio or HTTP, verifying its signature and provenance, upgrading and removing it
+- [Release binaries and go install](https://jmrp.io/docs/libgen-mcp/install/binary/): The static binaries on every GitHub release: pick one, verify it against the signed checksums, upgrade or remove it, or build it with go install
+- [Claude Desktop extension](https://jmrp.io/docs/libgen-mcp/install/claude-desktop/): The one-click .mcpb bundle for Claude Desktop on macOS, Windows and Linux: install it, set it up, upgrade it and remove it
+- [Agent plugin](https://jmrp.io/docs/libgen-mcp/install/agent-plugin/): The Open Plugins and Agent Plugins manifests: which tools read them and how to install the server through them
+- [Install with winget](https://jmrp.io/docs/libgen-mcp/install/winget/): The Windows Package Manager manifest, pending review, and the channels that work on Windows until it is accepted
 - [Download a paper by DOI](https://jmrp.io/docs/libgen-mcp/download-a-paper/): Step by step: ask an assistant for a paper by DOI, what the open-access-first chain does, and what comes back
 - [BibTeX and RIS citations](https://jmrp.io/docs/libgen-mcp/citations/): Ready-to-paste BibTeX and RIS from get_details, and why a DOI appears only once Crossref confirms it
-- [Configuration](https://jmrp.io/docs/libgen-mcp/configuration/): Full environment-variable configuration reference
+- [Use cases](https://jmrp.io/docs/libgen-mcp/use-cases/): Worked requests to an assistant with the server connected: what to ask, which tools it calls in what order, and what comes back
 - [HTTP server mode](https://jmrp.io/docs/libgen-mcp/http-server-mode/): Deploying over streamable HTTP: the declared host, trusted proxies, per-caller limits, TLS renewal, the drain delay and the health probes
+- [Behind a reverse proxy](https://jmrp.io/docs/libgen-mcp/deploy/reverse-proxy/): Complete reverse-proxy configurations for the HTTP transport: trusted proxies, the public URL, unbuffered streaming and TLS
+- [Run as a service](https://jmrp.io/docs/libgen-mcp/deploy/service/): Running the HTTP server as a system service: a unit file, a TCP port or a unix socket, graceful drain and the health check
+- [Containers and orchestration](https://jmrp.io/docs/libgen-mcp/deploy/containers/): Deploying the image with Compose or an orchestrator: ports, the download volume, the non-root user, the health check and stop signals
+- [Scaling and capacity](https://jmrp.io/docs/libgen-mcp/deploy/scaling/): What bounds one process, how the per-caller limits and the outbound budget interact, and when more replicas help
+- [Security model](https://jmrp.io/docs/libgen-mcp/security/): What the server trusts and what it refuses: local paths, outbound destinations, untrusted third-party text, HTTP hardening and per-call keys
+- [Telemetry](https://jmrp.io/docs/libgen-mcp/telemetry/): OpenTelemetry: off by default, exported to a collector the operator runs, and what each signal records and never records
 - [Troubleshooting](https://jmrp.io/docs/libgen-mcp/troubleshooting/): Common setup and runtime issues
 - [Tools](https://jmrp.io/docs/libgen-mcp/tools/): Per-tool reference for search, get_details, download, read
-- [Architecture](https://jmrp.io/docs/libgen-mcp/architecture/): Internal architecture, mirror discovery and download sources
+- [Configuration](https://jmrp.io/docs/libgen-mcp/configuration/): Full environment-variable configuration reference
+- [Command-line flags](https://jmrp.io/docs/libgen-mcp/cli/): Every flag the binary accepts, with its default, its environment variable, the transport it applies to and what it refuses
 - [Download sources](https://jmrp.io/docs/libgen-mcp/sources/): Per-source reference for every download source: corpus, resolve mechanics, measured traps, and keys
+- [Architecture](https://jmrp.io/docs/libgen-mcp/architecture/): Internal architecture, mirror discovery and download sources
 - [How search works](https://jmrp.io/docs/libgen-mcp/how-search-works/): Catalog-first search, and when and how it escalates to the extra sources
-- [Telemetry](https://jmrp.io/docs/libgen-mcp/telemetry/): OpenTelemetry: off by default, exported to a collector the operator runs, and what each signal records and never records
 - [Known limitations](https://jmrp.io/docs/libgen-mcp/limitations/): What the server does not do or does only partially, why, and where each limit is documented
-- [LLM eval results](https://jmrp.io/docs/libgen-mcp/eval-results/): Results of driving a real model over MCP against the live site, scenario by scenario
+- [Compatibility](https://jmrp.io/docs/libgen-mcp/compatibility/): The platforms and architectures the server is built for, the MCP protocol versions it negotiates, and what each install channel needs
 - [What it costs to run](https://jmrp.io/docs/libgen-mcp/benchmarks/): Measured, not estimated: memory and latency on both transports, what each extra caller adds, and what bounds a shared deployment
+- [LLM eval results](https://jmrp.io/docs/libgen-mcp/eval-results/): Results of driving a real model over MCP against the live site, scenario by scenario
+- [Glossary](https://jmrp.io/docs/libgen-mcp/glossary/): The terms the documentation uses, from mirror and catalog to source chain and held call, each defined once
 - [Compared with other servers](https://jmrp.io/docs/libgen-mcp/comparison/): How it compares with other paper and book MCP servers, checked against each project's own repository
 - [Responsible use](https://jmrp.io/docs/libgen-mcp/responsible-use/): Why the open-access providers are tried first, and what the server refuses to serve
 - [Privacy policy](https://jmrp.io/docs/libgen-mcp/privacy/): Nothing reaches the maintainer; requests go only to the Library Genesis mirrors and the search and download sources a call invokes, and an operator may export telemetry to a collector of their own
+- [Versions and upgrades](https://jmrp.io/docs/libgen-mcp/changelog/): How releases are versioned, and how to upgrade, pin a version and roll back on each install channel
 - [Security policy](https://github.com/jmrplens/libgen-mcp/blob/main/SECURITY.md): Threat model and how to report a vulnerability privately
 - [Headless install](https://github.com/jmrplens/libgen-mcp/blob/main/llms-install.md): Machine-readable install guide for AI assistants
 
 ## Documentación (Español)
 
 - [Primeros pasos](https://jmrp.io/docs/libgen-mcp/es/getting-started/): Guía de instalación y primera ejecución
-- [Instalación](https://jmrp.io/docs/libgen-mcp/es/installation/): Todos los canales en los que se publica el servidor: qué obtienes, cómo instalarlo y verificarlo, cómo actualizarlo y cómo quitarlo
+- [Conectar un cliente](https://jmrp.io/docs/libgen-mcp/es/clients/): Cómo registrar el servidor en cada cliente MCP, por stdio o por HTTP, con una configuración completa para cada cliente
+- [Endpoint alojado](https://jmrp.io/docs/libgen-mcp/es/hosted/): El endpoint público: cómo conectarle un cliente, qué sirve y qué deja fuera frente a un servidor que ejecutas tú
+- [Instalación](https://jmrp.io/docs/libgen-mcp/es/install/overview/): Todos los canales en los que se publica el servidor: qué obtienes, cómo instalarlo y verificarlo, cómo actualizarlo y cómo quitarlo
+- [Instalar con npm](https://jmrp.io/docs/libgen-mcp/es/install/npm/): El paquete lanzador @jmrp.io/libgen-mcp: ejecútalo con npx o instálalo de forma global, verifica lo que instaló npm, actualízalo y quítalo
+- [Instalar con PyPI](https://jmrp.io/docs/libgen-mcp/es/install/pypi/): Las wheels de libgen-mcp: ejecuta el servidor con uvx o instálalo con pipx, verifica lo instalado, actualízalo y quítalo
+- [Instalar con NuGet](https://jmrp.io/docs/libgen-mcp/es/install/nuget/): La herramienta .NET libgen-mcp: ejecútala con dnx o instálala con dotnet tool, verifica los paquetes, actualízala y quítala
+- [Instalar con Homebrew](https://jmrp.io/docs/libgen-mcp/es/install/homebrew/): La fórmula del tap jmrplens/tap: instálala, mira qué deja en el disco, verifícala, actualízala y quítala
+- [Ejecutar con Docker](https://jmrp.io/docs/libgen-mcp/es/install/docker/): La imagen en GitHub Container Registry y Docker Hub: stdio o HTTP, cómo verificar su firma y su procedencia, actualizarla y quitarla
+- [Binarios de la release y go install](https://jmrp.io/docs/libgen-mcp/es/install/binary/): Los binarios estáticos de cada release de GitHub: elige uno, verifícalo con los checksums firmados, actualízalo o quítalo, o compílalo con go install
+- [Extensión de Claude Desktop](https://jmrp.io/docs/libgen-mcp/es/install/claude-desktop/): El paquete .mcpb de un clic para Claude Desktop en macOS, Windows y Linux: instálalo, configúralo, actualízalo y quítalo
+- [Plugin para agentes](https://jmrp.io/docs/libgen-mcp/es/install/agent-plugin/): Los manifiestos Open Plugins y Agent Plugins: qué herramientas los leen y cómo instalar el servidor a través de ellos
+- [Instalar con winget](https://jmrp.io/docs/libgen-mcp/es/install/winget/): El manifiesto del Windows Package Manager, pendiente de revisión, y los canales que funcionan en Windows mientras no se acepta
 - [Descargar un artículo por DOI](https://jmrp.io/docs/libgen-mcp/es/download-a-paper/): Paso a paso: pedir un artículo por DOI a un asistente, qué hace la cadena con el acceso abierto primero y qué se recibe
 - [Citas BibTeX y RIS](https://jmrp.io/docs/libgen-mcp/es/citations/): BibTeX y RIS listos para pegar desde get_details, y por qué un DOI solo aparece cuando Crossref lo confirma
-- [Configuración](https://jmrp.io/docs/libgen-mcp/es/configuration/): Referencia completa de configuración por variables de entorno
+- [Casos de uso](https://jmrp.io/docs/libgen-mcp/es/use-cases/): Peticiones resueltas a un asistente con el servidor conectado: qué pedir, qué herramientas llama y en qué orden, y qué se recibe
 - [Modo servidor HTTP](https://jmrp.io/docs/libgen-mcp/es/http-server-mode/): Desplegar sobre HTTP en streaming: el nombre declarado, los proxies de confianza, los límites por llamante, TLS, el drenaje y las sondas
+- [Detrás de un proxy inverso](https://jmrp.io/docs/libgen-mcp/es/deploy/reverse-proxy/): Configuraciones completas de proxy inverso para el transporte HTTP: proxies de confianza, la URL pública, streaming sin búfer y TLS
+- [Ejecutarlo como servicio](https://jmrp.io/docs/libgen-mcp/es/deploy/service/): Ejecutar el servidor HTTP como servicio del sistema: un fichero de unidad, un puerto TCP o un socket unix, el drenaje ordenado y la comprobación de salud
+- [Contenedores y orquestación](https://jmrp.io/docs/libgen-mcp/es/deploy/containers/): Desplegar la imagen con Compose o con un orquestador: puertos, el volumen de descargas, el usuario sin privilegios, la comprobación de salud y las señales de parada
+- [Escalado y capacidad](https://jmrp.io/docs/libgen-mcp/es/deploy/scaling/): Qué acota un proceso, cómo interactúan los límites por llamante y el presupuesto de salida, y cuándo ayudan más réplicas
+- [Modelo de seguridad](https://jmrp.io/docs/libgen-mcp/es/security/): En qué confía el servidor y qué rechaza: rutas locales, destinos salientes, texto no fiable de terceros, el endurecimiento HTTP y las claves por llamada
+- [Telemetría](https://jmrp.io/docs/libgen-mcp/es/telemetry/): OpenTelemetry: apagada por defecto, exportada a un colector que ejecuta quien opera el servidor, y qué registra y qué no registra nunca cada señal
 - [Solución de problemas](https://jmrp.io/docs/libgen-mcp/es/troubleshooting/): Problemas habituales de configuración y ejecución
 - [Herramientas](https://jmrp.io/docs/libgen-mcp/es/tools/): Referencia por herramienta de search, get_details, download, read
-- [Arquitectura](https://jmrp.io/docs/libgen-mcp/es/architecture/): Arquitectura interna, descubrimiento de mirrors y fuentes de descarga
+- [Configuración](https://jmrp.io/docs/libgen-mcp/es/configuration/): Referencia completa de configuración por variables de entorno
+- [Opciones de la línea de órdenes](https://jmrp.io/docs/libgen-mcp/es/cli/): Todas las opciones que acepta el binario, con su valor por defecto, su variable de entorno, el transporte al que se aplican y lo que rechazan
 - [Fuentes de descarga](https://jmrp.io/docs/libgen-mcp/es/sources/): Referencia por fuente de cada fuente de descarga: corpus, mecánica de resolución, trampas medidas y claves
+- [Arquitectura](https://jmrp.io/docs/libgen-mcp/es/architecture/): Arquitectura interna, descubrimiento de mirrors y fuentes de descarga
 - [Cómo funciona la búsqueda](https://jmrp.io/docs/libgen-mcp/es/how-search-works/): Búsqueda con el catálogo primero, y cuándo y cómo escala a las fuentes extra
-- [Telemetría](https://jmrp.io/docs/libgen-mcp/es/telemetry/): OpenTelemetry: apagada por defecto, exportada a un colector que ejecuta quien opera el servidor, y qué registra y qué no registra nunca cada señal
 - [Limitaciones conocidas](https://jmrp.io/docs/libgen-mcp/es/limitations/): Qué no hace el servidor o hace solo en parte, por qué, y dónde se documenta cada límite
-- [Resultados de la evaluación con LLM](https://jmrp.io/docs/libgen-mcp/es/eval-results/): Resultados de conducir un modelo real sobre MCP contra el sitio en vivo, escenario a escenario
+- [Compatibilidad](https://jmrp.io/docs/libgen-mcp/es/compatibility/): Las plataformas y arquitecturas para las que se compila el servidor, las versiones del protocolo MCP que negocia y lo que necesita cada canal de instalación
 - [Lo que cuesta ejecutarlo](https://jmrp.io/docs/libgen-mcp/es/benchmarks/): Medido, no estimado: memoria y latencia en cada transporte, lo que añade cada llamante y qué acota un despliegue compartido
+- [Resultados de la evaluación con LLM](https://jmrp.io/docs/libgen-mcp/es/eval-results/): Resultados de conducir un modelo real sobre MCP contra el sitio en vivo, escenario a escenario
+- [Glosario](https://jmrp.io/docs/libgen-mcp/es/glossary/): Los términos que usa la documentación, desde mirror y catálogo hasta cadena de fuentes y llamada retenida, cada uno definido una vez
 - [Comparado con otros servidores](https://jmrp.io/docs/libgen-mcp/es/comparison/): Cómo se compara con otros servidores MCP de artículos y libros, comprobado en el repositorio de cada proyecto
 - [Uso responsable](https://jmrp.io/docs/libgen-mcp/es/responsible-use/): Por qué se prueban primero los proveedores de acceso abierto, y qué se niega a servir el servidor
 - [Política de privacidad](https://jmrp.io/docs/libgen-mcp/es/privacy/): Nada llega a quien mantiene el proyecto; las peticiones van solo a los mirrors de Library Genesis y a las fuentes que invoca cada llamada, y quien opera el servidor puede exportar telemetría a su propio colector
+- [Versiones y actualizaciones](https://jmrp.io/docs/libgen-mcp/es/changelog/): Cómo se versionan las releases y cómo actualizar, fijar una versión y volver atrás en cada canal de instalación
 
 ## Optional
 

@@ -1,0 +1,10 @@
+# Security model
+
+**Explanation** — for an operator or reviewer deciding what the server can be trusted with.
+
+This page will describe what the server trusts and what it refuses: which local
+paths `read` may open, which outbound destinations it will connect to, how
+third-party text is kept from reading as instructions, what an HTTP deployment
+checks before answering, and how a per-call key is used once and never stored.
+How to report a vulnerability is in the
+[security policy](https://github.com/jmrplens/libgen-mcp/blob/main/SECURITY.md).

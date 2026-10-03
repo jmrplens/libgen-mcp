@@ -1,8 +1,12 @@
 // Normalizes the built HTML in dist/ before the linters see it.
 //
-// Four passes, all of which fix output no source edit can reach. The fourth,
+// Five passes, all of which fix output no source edit can reach. The fourth,
 // putting a style's rules back inside the element an MDX compile emptied, is
-// documented at restoreCollapsedContent below.
+// documented at restoreCollapsedContent below. The fifth spells the doctype the
+// way every other page does: the redirect pages Astro writes for the
+// `redirects` in astro.config.mjs open with a lowercase `<!doctype html>`,
+// which html-validate's doctype-style rule rejects, and Astro offers no hook
+// into that template.
 //
 //
 //   1. Trailing whitespace on any line. Cosmetic, but it made real diffs of the
@@ -118,7 +122,8 @@ function normalize(html) {
 		.split("\n")
 		.map((line) => line.replace(/[ \t\r]+$/, ""))
 		.join("\n")
-		.replaceAll("<br></br>", "<br>");
+		.replaceAll("<br></br>", "<br>")
+		.replace(/^<!doctype html>/, "<!DOCTYPE html>");
 }
 
 try {

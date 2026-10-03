@@ -48,7 +48,7 @@ gh attestation verify "$(command -v libgen-mcp)" -R jmrplens/libgen-mcp \
   --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
 ```
 
-Under `uvx` the binary sits in uv's cache, and `uvx --from libgen-mcp python -c 'import libgen_mcp as m; print(m.find_binary())'` prints its path. The details are in the [installation guide](https://jmrp.io/docs/libgen-mcp/installation/#pypi).
+Under `uvx` the binary sits in uv's cache, and `uvx --from libgen-mcp python -c 'import libgen_mcp as m; print(m.find_binary())'` prints its path. The details are in the [PyPI installation guide](https://jmrp.io/docs/libgen-mcp/install/pypi/).
 
 ## Configuration
 
