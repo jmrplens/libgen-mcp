@@ -204,6 +204,41 @@ to Crossref, bounded at four seconds and made only when the record carries a DOI
 settles the verdict as well, so the registry is asked once. A Crossref outage can leave a
 DOI out of a citation, but it never fails the call.
 
+## Other citation styles
+
+BibTeX and RIS are always there. Any other style is asked for by name in `cite_as`, and
+nothing is added unless it is:
+
+```json
+{ "doi": "10.1038/nature12373", "cite_as": ["apa", "vancouver", "csl-json"] }
+```
+
+The styles are `apa`, `mla`, `chicago` (author-date), `harvard`, `vancouver`, `ieee` and
+`csl-json`. Each comes back in `citations.formatted` with its `text` and the `source` that
+produced it:
+
+| `source`      | When                                                                                                                                                                    |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `doi.org`     | The record has a DOI that names this work (Crossref confirmed it, or the record is the registry's own), and the DOI's registration agency formatted it through doi.org. |
+| `local`       | The record has no such DOI, or the registry gave no usable answer. The style is built here from the same fields as the BibTeX entry, and `note` says why.               |
+| `unavailable` | Neither path could produce it: the record has no title of its own.                                                                                                      |
+
+A catalog DOI that failed the check is never sent to doi.org, because the registry would
+format the work that DOI really belongs to. The registry's text is plain: markup, entities
+and a numeric style's leading `[1]` are removed. The styles doi.org is asked for are the CSL
+styles `apa`, `modern-language-association`, `chicago-author-date`, `elsevier-harvard`,
+`elsevier-vancouver` and `ieee`. Those were measured on Crossref, DataCite and mEDRA DOIs.
+doi.org has no style named `vancouver`, and the Harvard and Vancouver variants with an editor
+slot write `Edited by ,` for an editor Crossref records with no name. A style built locally
+uses only the fields the record holds and leaves the title unmarked where the style would
+set it in italics. APA's `n.d.` is the one stand-in it writes for a missing value. Names are
+split only where the record says which part is the family name (`Knuth, Donald E.`,
+`Knuth D.E.`, or two or three capitalized words such as `Donald E. Knuth`), and any other
+name, an organization or one with a particle or a suffix among them, is written as the record
+has it rather than abbreviated. The catalog does not state an article's journal, so the
+journal comes from Crossref once it confirms the DOI, and an article whose journal is unknown
+is written without its volume, issue and pages, which would locate nothing on their own.
+
 ## Check before you publish
 
 A formatted citation tends to be pasted into a bibliography and never looked at again, so

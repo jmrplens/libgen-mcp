@@ -552,3 +552,205 @@ func TestAttachCitations_RegistryOutageDegrades(t *testing.T) {
 		t.Errorf("the citation itself must survive a registry outage:\n%s", out.Citations.BibTeX)
 	}
 }
+
+// stubFormatter is a styleFormatter answering from a fixed table, recording
+// which DOIs it was asked about.
+type stubFormatter struct {
+	texts map[string]string
+	asked *[]string
+}
+
+// FormatDOI implements styleFormatter from the stub's table.
+func (s stubFormatter) FormatDOI(_ context.Context, doi string, styles []string) map[string]string {
+	*s.asked = append(*s.asked, doi)
+	out := map[string]string{}
+	for _, st := range styles {
+		if text, ok := s.texts[st]; ok {
+			out[st] = text
+		}
+	}
+	return out
+}
+
+// TestAttachFormatted covers every path a requested style can take, and the
+// rule that only a DOI naming this work is ever sent to the registry.
+func TestAttachFormatted(t *testing.T) {
+	confirmed := map[string]any{"title": "Hallmarks of Cancer", "author": "Douglas Hanahan", "year": "2011", "doi": "10.1016/j.cell.2011.02.013"}
+	book := map[string]any{"title": "TAOCP", "author": "Donald E. Knuth", "year": "1997"}
+	verifier := stubVerifier{byDOI: map[string]libgen.DOICheck{
+		"10.1016/j.cell.2011.02.013":   {Verdict: libgen.DOIConfirmed},
+		"10.1371/journal.pmed.0020124": {Verdict: libgen.DOIMismatch, CrossrefTitle: "Why Most..."},
+	}}
+	mismatched := map[string]any{"title": "Antifragile", "year": "2012", "doi": "10.1371/journal.pmed.0020124"}
+	tests := []struct {
+		name        string
+		edition     map[string]any
+		file        map[string]any
+		registry    map[string]string
+		enrichOff   bool
+		wantAsked   []string
+		wantSources []string
+		wantNote    string
+	}{
+		{
+			"confirmed doi from the registry, a refused style locally", confirmed, nil,
+			map[string]string{"apa": "Hanahan, D. (2011)."},
+			false,
+			[]string{"10.1016/j.cell.2011.02.013"},
+			[]string{"doi.org", "local"},
+			"gave no usable answer",
+		},
+		{"no doi is built locally", book, nil, nil, false, nil, []string{"local", "local"}, "has no DOI"},
+		{
+			"a mismatched doi is never sent", mismatched, nil,
+			map[string]string{"apa": "WRONG WORK"},
+			false,
+			nil,
+			[]string{"local", "local"},
+			"not confirmed",
+		},
+		{
+			"a server that turned enrichment off", confirmed, nil,
+			map[string]string{"apa": "x"},
+			true,
+			nil,
+			[]string{"local", "local"},
+			"LIBGEN_MCP_ENRICH=false",
+		},
+		{
+			"a crossref-only record has no fields to fall back on", nil,
+			map[string]any{"origin": "crossref", "doi": "10.1/cr"},
+			map[string]string{"apa": "Reg."},
+			false,
+			[]string{"10.1/cr"},
+			[]string{"doi.org", "unavailable"},
+			"no title",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var asked []string
+			var fmtr styleFormatter = stubFormatter{texts: tc.registry, asked: &asked}
+			if tc.enrichOff {
+				fmtr = nil
+			}
+			out := DetailsOutput{File: tc.file, Edition: tc.edition}
+			out.Citations = buildCitations(context.Background(), verifier, "", out.File, out.Edition)
+			attachFormatted(context.Background(), fmtr, &out, []string{"apa", "vancouver"})
+
+			if strings.Join(asked, ",") != strings.Join(tc.wantAsked, ",") {
+				t.Errorf("asked doi.org about %q, want %q", asked, tc.wantAsked)
+			}
+			got := out.Citations.Formatted
+			if len(got) != 2 {
+				t.Fatalf("formatted = %+v", got)
+			}
+			var notes strings.Builder
+			for i, fc := range got {
+				if fc.Source != tc.wantSources[i] {
+					t.Errorf("%s source = %q, want %q", fc.Style, fc.Source, tc.wantSources[i])
+				}
+				if strings.Contains(fc.Text, "WRONG WORK") {
+					t.Errorf("the mismatched DOI's work reached the citation: %q", fc.Text)
+				}
+				notes.WriteString(fc.Note)
+			}
+			if !strings.Contains(notes.String(), tc.wantNote) {
+				t.Errorf("notes %q lack %q", notes.String(), tc.wantNote)
+			}
+		})
+	}
+}
+
+// TestAttachFormatted_NothingRequested leaves the default output exactly as it
+// was: no formatted field and no registry call.
+func TestAttachFormatted_NothingRequested(t *testing.T) {
+	var asked []string
+	out := DetailsOutput{Edition: map[string]any{"title": "T", "doi": "10.1/x"}}
+	out.Citations = buildCitations(context.Background(), nil, "", nil, out.Edition)
+	attachFormatted(context.Background(), stubFormatter{asked: &asked}, &out, nil)
+	if out.Citations.Formatted != nil || len(asked) != 0 {
+		t.Errorf("formatted %+v, asked %q", out.Citations.Formatted, asked)
+	}
+	raw, err := json.Marshal(out.Citations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "formatted") {
+		t.Errorf("the default output grew: %s", raw)
+	}
+}
+
+// TestBuildCitations_RegistryRecord treats a record built from the DOI's own
+// registry as confirming its DOI without asking Crossref, does not turn a
+// dataset into an article on the strength of that DOI, and names the registry as the source of the fields.
+func TestBuildCitations_RegistryRecord(t *testing.T) {
+	file := map[string]any{"origin": "doi.org", "doi": "10.5061/dryad.8515", "title": "Data from: A new malaria agent", "year": "2011"}
+	c := buildCitations(context.Background(), stubVerifier{}, "", file, nil)
+	if c.DOIStatus != string(libgen.DOIConfirmed) || !strings.Contains(c.BibTeX, "doi = {10.5061/dryad.8515}") {
+		t.Errorf("status %q bibtex %s", c.DOIStatus, c.BibTeX)
+	}
+	if !strings.HasPrefix(c.BibTeX, "@book") {
+		t.Errorf("a dataset became an article: %s", c.BibTeX)
+	}
+	if c.Provenance != registryProvenance {
+		t.Errorf("provenance = %q", c.Provenance)
+	}
+}
+
+// TestBuildCitations_Container takes an article's journal only from a source
+// that states it for this work: the record's own field, or Crossref once the
+// DOI is confirmed. A mismatched DOI's journal belongs to the other work, and
+// the BibTeX entry is unchanged either way.
+func TestBuildCitations_Container(t *testing.T) {
+	verifier := stubVerifier{byDOI: map[string]libgen.DOICheck{
+		"10.1/ok":  {Verdict: libgen.DOIConfirmed, CrossrefContainer: "Cell"},
+		"10.1/bad": {Verdict: libgen.DOIMismatch, CrossrefTitle: "Other", CrossrefContainer: "Other Journal"},
+	}}
+	tests := []struct {
+		name    string
+		edition map[string]any
+		want    string
+	}{
+		{"confirmed by Crossref", map[string]any{"title": "T", "type": "a", "doi": "10.1/ok"}, "Cell"},
+		{"stated by the record", map[string]any{"title": "T", "type": "a", "doi": "10.1/ok", "container_title": "Cell Reports"}, "Cell Reports"},
+		{"a mismatched DOI", map[string]any{"title": "T", "type": "a", "doi": "10.1/bad"}, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := buildCitations(context.Background(), verifier, "", nil, tc.edition)
+			if c.fields.container != tc.want {
+				t.Errorf("container = %q, want %q", c.fields.container, tc.want)
+			}
+			if strings.Contains(c.BibTeX, "journal") {
+				t.Errorf("the BibTeX entry grew a journal: %s", c.BibTeX)
+			}
+		})
+	}
+}
+
+// TestAttachCitations_EnrichContainer takes the journal from the Crossref
+// work enrichment already fetched, for a DOI that work confirmed.
+func TestAttachCitations_EnrichContainer(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"message":{"title":["Hallmarks of Cancer"],"container-title":["Cell"]}}`))
+	}))
+	t.Cleanup(srv.Close)
+	client, cfg := clientWithCrossref(t, srv.URL)
+	out := DetailsOutput{Edition: map[string]any{"title": "Hallmarks of Cancer", "type": "a", "doi": "10.1016/j.cell.2011.02.013"}}
+	attachCitations(context.Background(), client, cfg, true, &out)
+	if out.Citations.fields.container != "Cell" {
+		t.Errorf("container = %q", out.Citations.fields.container)
+	}
+}
+
+// TestWriteFormattedCitations_Unavailable writes the reason for a style
+// nothing could produce, and no empty block.
+func TestWriteFormattedCitations_Unavailable(t *testing.T) {
+	var b strings.Builder
+	writeFormattedCitations(&b, []FormattedCitation{{Style: "apa", Source: formatSourceUnavailable, Note: "No title."}})
+	md := b.String()
+	if strings.Contains(md, "```") || !strings.Contains(md, "> No title.") || !strings.Contains(md, "apa, unavailable") {
+		t.Errorf("rendered as:\n%s", md)
+	}
+}
