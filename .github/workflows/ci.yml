@@ -197,8 +197,10 @@ jobs:
       # tree, a pull request description and an npm advisory report, so their
       # rules are driven here against fixtures, on every event: the description gate
       # over bodies that must fail and bodies that must pass, and the site
-      # audit over pnpm's captured output for a finding and for an outage.
-      - name: The PR description gate and the site audit refuse what they claim
+      # audit over pnpm's captured output for a finding and for an outage. The
+      # image smoke test's build-information check rides along: the Docker job
+      # runs only when the Dockerfile changes, and its refusals need no image.
+      - name: The PR description gate, the site audit and the image smoke test refuse what they claim
         run: make check-ci-scripts
       - name: Validate server.json against the MCP Registry schema
         run: |

@@ -43,11 +43,22 @@ ARG TARGETARCH
 #
 # The grep is the guard: an interpreter path is a literal string in the ELF, so
 # a re-added -buildmode=pie fails here rather than at exec on one architecture.
+#
+# No -trimpath either, unlike the GoReleaser and Makefile builds. With it Go
+# leaves -ldflags out of the binary's build information, and .git is not in the
+# build context, so the main module's version is (devel) and nothing in the
+# binary says which release it is: the image SBOM listed the server as UNKNOWN
+# with an unversioned purl, which no advisory against this module could ever be
+# matched to. Without it the build information records -X main.version, which
+# syft reads as the module's version and writes into a versioned purl. What it
+# costs is the paths of this stage, /src for our packages, /go/pkg/mod for the
+# dependencies and /usr/local/go for the standard library, none of which says
+# anything about the host that ran the build. scripts/smoke-test-image.sh holds
+# the image to it, since --version answers correctly either way.
 RUN --mount=type=cache,target=/go/pkg/mod \
 	--mount=type=cache,target=/root/.cache/go-build \
 	set -eu; \
 	CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
-	-trimpath \
 	-ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT}" \
 	-o /out/libgen-mcp ./cmd/server; \
 	if grep -a -q "ld-linux\|ld-musl" /out/libgen-mcp; then \

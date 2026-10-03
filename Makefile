@@ -567,9 +567,10 @@ check-pr-description: ## Refuse a skip command, a bot-injected block or assistan
 audit-site-deps: ## pnpm audit of site/ at high and above, tolerant of an npm outage (needs network)
 	bash scripts/audit-site-deps.sh
 
-check-ci-scripts: ## Exercise the PR description gate and the site audit's outage rule against fixtures (offline)
+check-ci-scripts: ## Exercise the PR description gate, the site audit's outage rule and the image smoke test against fixtures (offline)
 	python3 -m unittest discover -s scripts -p 'check_pr_description_sh_test.py'
 	python3 -m unittest discover -s scripts -p 'audit_site_deps_sh_test.py'
+	python3 -m unittest discover -s scripts -p 'smoke_test_image_sh_test.py'
 
 mcpb: ## Build the .mcpb Claude Desktop bundle (needs GoReleaser artifacts in dist/)
 	bash scripts/build-mcpb.sh $(VERSION)
