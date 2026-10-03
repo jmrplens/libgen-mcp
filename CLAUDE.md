@@ -1415,12 +1415,16 @@ Three things about it are easy to get wrong:
   read as the module's first statement, and a launcher that is already init's
   when the watch starts stops the server at once, because npm's shell can die
   while Node boots. **The server is told to stop at most once**: it drains on
-  its first SIGINT/SIGTERM and dies outright on a second, so a relayed copy of
-  a Ctrl+C the terminal already delivered, a repeated SIGTERM or the watch's
-  SIGTERM after a signal would each skip `--drain-delay`. Only the first
-  terminating signal is acted on, and SIGINT/SIGHUP are not relayed when stdin
-  is a terminal. A cgroup-wide kill (systemd's default `KillMode`) still
-  delivers twice; the launcher cannot tell it apart. Windows is left
+  its first SIGINT/SIGTERM and dies outright on a second sent more than
+  `repeatedStopSignalWindow` (one second, `cmd/server/stop_signal.go`) later,
+  so the watch's SIGTERM or an operator's repeated signal relayed after that
+  would skip `--drain-delay`. Only the first terminating signal is acted on,
+  and SIGINT/SIGHUP are not relayed when stdin is a terminal. A cgroup-wide
+  kill (systemd's default `KillMode`) still delivers twice, milliseconds apart;
+  the launcher cannot tell it apart, and the server's window is what absorbs
+  it — `TestDrain_ARepeatedSignalIsTheSameRequest` drives exactly that over
+  the real binary. Do not shrink the window into the relay's latency, or
+  widen it into a person's second press. Windows is left
   alone (the console's Ctrl+C reaches the server itself). After the server
   starts, the launcher writes to fd 2 with `writeSync`, never through
   `process.stderr`, which would switch the shared pipe to non-blocking.

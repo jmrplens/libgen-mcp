@@ -5,6 +5,7 @@ package httpe2e
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -203,26 +204,24 @@ func probeHealthAt(t *testing.T, url string) (int, healthBody) {
 	return resp.StatusCode, body
 }
 
-// TestDrain_ASecondSignalDoesNotWaitOutTheDelay is the escape hatch an operator
-// needs and the code promises.
+// repeatedSignalWindow mirrors the server's repeatedStopSignalWindow, which
+// this module cannot import: a stop signal repeated inside it is the same
+// request, and one after it ends the process at once.
+const repeatedSignalWindow = time.Second
+
+// startDrainingServer starts the real binary with the given drain delay and
+// returns it once /health answers, with a channel that reports its exit.
 //
-// signal.NotifyContext keeps intercepting after the first signal until its stop
-// function is called, so with that call deferred to the end of main a second
-// SIGTERM during the drain is swallowed exactly like the first — and the drain
-// can be minutes. Somebody who has decided not to wait then has nothing short of
-// SIGKILL, which is the outcome a graceful shutdown exists to avoid.
-//
-// Driven over the real binary, because what is being asserted is the process's
-// signal disposition rather than a function's.
-func TestDrain_ASecondSignalDoesNotWaitOutTheDelay(t *testing.T) {
+// Not started through the harness: the harness kills with a context cancel,
+// and what is under test is the graceful path a supervisor takes.
+func startDrainingServer(t *testing.T, drainDelay string) (*exec.Cmd, string, <-chan error) {
+	t.Helper()
 	port := freePort(t)
 	base := fmt.Sprintf("http://127.0.0.1:%d", port)
 
-	// Long enough that waiting it out is unmistakable, and short enough that a
-	// regression fails this test rather than hanging it.
 	//nolint:gosec // the binary this package built, on a port it reserved
 	cmd := exec.CommandContext(context.Background(), serverBinary(t),
-		"--http", fmt.Sprintf("127.0.0.1:%d", port), "--drain-delay", "60s")
+		"--http", fmt.Sprintf("127.0.0.1:%d", port), "--drain-delay", drainDelay)
 	cmd.Env = append(os.Environ(), "LIBGEN_MCP_LOG_LEVEL=info", "LIBGEN_MCP_DOWNLOAD_DIR="+t.TempDir())
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("starting the server: %v", err)
@@ -232,49 +231,90 @@ func TestDrain_ASecondSignalDoesNotWaitOutTheDelay(t *testing.T) {
 	t.Cleanup(func() { _ = cmd.Process.Kill() })
 
 	waitHealthy(t, &server{baseURL: base, logs: func() string { return "" }})
+	return cmd, base, stopped
+}
+
+// TestDrain_ARepeatedSignalIsTheSameRequest is one stop delivered twice, the
+// way it usually arrives: a terminal's Ctrl+C reaches the whole foreground
+// process group, systemd's default KillMode=control-group signals every
+// process in the unit, and the npm launcher relays the stop it received as
+// well. The copies land milliseconds apart, and each used to be read as the
+// operator's second press, ending the process before the drain it was asking
+// for had begun.
+func TestDrain_ARepeatedSignalIsTheSameRequest(t *testing.T) {
+	const drainDelay = 2 * time.Second
+	cmd, _, stopped := startDrainingServer(t, drainDelay.String())
+
+	start := time.Now()
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("signaling: %v", err)
+	}
+	time.Sleep(10 * time.Millisecond)
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("signaling a second time: %v", err)
+	}
+
+	select {
+	case err := <-stopped:
+		if err != nil {
+			t.Fatalf("exited with %v after %v, want a clean exit after the drain: the repeat was read as a second request",
+				err, time.Since(start).Round(time.Millisecond))
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("the server did not exit within 30s of SIGTERM")
+	}
+	// A little under the delay, because the clock starts before the signal is
+	// sent and the drain only once it has been handled — never the other way.
+	if elapsed := time.Since(start); elapsed < drainDelay-200*time.Millisecond {
+		t.Errorf("the server exited %v after the signals, inside its %v drain delay", elapsed, drainDelay)
+	}
+}
+
+// TestDrain_ASecondSignalDoesNotWaitOutTheDelay is the escape hatch an operator
+// needs and the code promises: a second signal after the repeat window ends the
+// process at once, drain and all.
+//
+// Without it a second SIGTERM during the drain is swallowed exactly like the
+// first, and the drain can be minutes. Somebody who has decided not to wait then
+// has nothing short of SIGKILL, which is the outcome a graceful shutdown exists
+// to avoid.
+//
+// Driven over the real binary, because what is being asserted is the process's
+// signal disposition rather than a function's.
+func TestDrain_ASecondSignalDoesNotWaitOutTheDelay(t *testing.T) {
+	// Long enough that waiting it out is unmistakable, and short enough that a
+	// regression fails this test rather than hanging it.
+	cmd, base, stopped := startDrainingServer(t, "60s")
 
 	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		t.Fatalf("signaling: %v", err)
 	}
-	// The drain has begun: the listener is up and answering 503. Waiting for it
-	// is what makes the second signal land during the sleep rather than before
-	// the first one was handled.
+	// The drain has begun: the listener is up and answering 503, so the first
+	// signal has been handled and the repeat window has started.
 	if status, _ := waitDraining(t, base, 10*time.Second); status != http.StatusServiceUnavailable {
 		t.Fatalf("GET /health during the drain = %d, want %d", status, http.StatusServiceUnavailable)
 	}
+	// Past the window, with room for a loaded runner: the window starts before
+	// the 503 can be read, so this is always later than it needs to be.
+	time.Sleep(repeatedSignalWindow + 500*time.Millisecond)
 
-	// Signaled repeatedly rather than once, and that is the property rather than
-	// a workaround. The server restores the default disposition when it handles
-	// the first signal, so a second one sent in the window before that runs is
-	// legitimately swallowed — which on a loaded runner is a window a single
-	// send can land in, and did: this passed locally and failed in CI. What an
-	// operator does is press it again, and what the server owes them is to die
-	// when they do.
 	start := time.Now()
-	deadline := time.After(20 * time.Second)
-	retry := time.NewTicker(500 * time.Millisecond)
-	defer retry.Stop()
-
 	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		t.Fatalf("signaling a second time: %v", err)
 	}
-	for exited := false; !exited; {
-		select {
-		case <-stopped:
-			// The exit status is deliberately not asserted: the second signal
-			// is the default disposition, which terminates the process rather
-			// than letting it return zero, and that is the point.
-			exited = true
-		case <-retry.C:
-			// Signal returns an error once the process is gone, which is the
-			// case the channel above is about to report; ignoring it here keeps
-			// that report the one the test acts on.
-			_ = cmd.Process.Signal(syscall.SIGTERM)
-		case <-deadline:
-			t.Fatal("the second signal was swallowed: the process sat out its drain delay with nobody able to stop it")
+	select {
+	case err := <-stopped:
+		// A death by the signal, as the default action gives, rather than a
+		// clean exit: the shutdown was abandoned, and a supervisor reading the
+		// status should be able to tell.
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) || !strings.Contains(exitErr.String(), "terminated") {
+			t.Errorf("exited with %v, want a death by SIGTERM", err)
 		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("the second signal was swallowed: the process sat out its drain delay with nobody able to stop it")
 	}
-	if elapsed := time.Since(start); elapsed > 20*time.Second {
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
 		t.Errorf("the second signal took %v to end the process", elapsed)
 	}
 }

@@ -13,14 +13,12 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
-	"os/signal"
 	"path"
 	"runtime"
 	"runtime/debug"
 	"slices"
 	"strings"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -51,7 +49,7 @@ import (
 //
 // It sits **below** docker's default grace rather than above it, and that is
 // the correction this value needed: the production context comes from
-// signal.NotifyContext and carries no deadline, so [drainAndShutdown]'s clamp
+// watchStopSignals and carries no deadline, so [drainAndShutdown]'s clamp
 // has nothing to clamp against and the full budget applies. An SSE stream keeps
 // srv.Shutdown waiting until it expires, and srv.Close runs only afterwards — so
 // a budget of fifteen seconds meant docker killing the process at ten, with the
@@ -309,19 +307,13 @@ func mainWithExit() int {
 	}
 
 	// Cancel the root context on the first SIGINT/SIGTERM so both transports can
-	// shut down gracefully; a second signal restores the default behavior.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	// shut down gracefully. A repeat within repeatedStopSignalWindow is the same
+	// request delivered twice (a process group, a cgroup, a launcher's relay)
+	// and is ignored. One after it ends the process at once, so an operator who
+	// has decided not to wait out a drain — up to --drain-delay, which may be
+	// minutes — can say so short of SIGKILL. See stop_signal.go.
+	ctx, stop := watchStopSignals(context.Background())
 	defer stop()
-	// Restored at the first signal rather than at the end of this function,
-	// which is what makes the sentence above true. NotifyContext keeps
-	// intercepting until stop is called, so with the deferred call alone a
-	// second SIGTERM during a drain — up to --drain-delay, which may be minutes
-	// — would be swallowed exactly like the first, and an operator who has
-	// decided not to wait has no way to say so short of SIGKILL.
-	go func() {
-		<-ctx.Done()
-		stop()
-	}()
 
 	// Both refused before anything is served, for the same reason the origin list
 	// is: a deployment that believes it is serving TLS, or that its socket is

@@ -377,6 +377,16 @@ shortest of those, and a `--drain-delay` adds to the same budget, so raise the s
 grace with it. It is a ceiling and never a floor, so a process told it has less closes its listener
 instead of being killed mid-drain.
 
+**The first SIGINT or SIGTERM starts the drain, and a second one after it ends the process at
+once**, drain and all — the way out for an operator who has decided not to wait. A repeat that
+arrives **within one second** of the first is not that: it is the same stop delivered twice, which
+is how a stop usually arrives. A terminal's Ctrl+C reaches the whole foreground process group,
+systemd's default `KillMode=control-group` signals every process in the unit, and the npm
+launcher relays the stop it received, so the copies land milliseconds apart. The server logs
+such a repeat at `DEBUG` and keeps draining, and logs a forced exit at `WARN`. A supervisor that
+signals the whole group therefore gets the drain either way; up to 2.1.0 the second copy ended
+the server before it had begun, and `KillMode=mixed` was the way around it.
+
 ## Closing what has gone idle
 
 Two timeouts, at two layers, and the distinction is the whole of it: one is about a TCP
