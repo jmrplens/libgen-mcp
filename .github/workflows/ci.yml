@@ -500,7 +500,7 @@ jobs:
         run: |
           # The image's builder runs cmd/gen_third_party_notices and the smoke
           # test reads LICENSE, so a change to either is a change to the image.
-          CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.sha }} -- Dockerfile .dockerignore scripts/smoke-test-image.sh LICENSE cmd/gen_third_party_notices cmd/internal/docgen)
+          CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.sha }} -- Dockerfile .dockerignore scripts/smoke-test-image.sh LICENSE cmd/gen_third_party_notices)
           if [ -n "$CHANGED" ]; then
             echo "docker=true" >> "$GITHUB_OUTPUT"
           else

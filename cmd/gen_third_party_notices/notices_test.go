@@ -67,6 +67,14 @@ func fixtureModcache(t *testing.T) string {
 		"example.com/alpha@v1.2.0/README.md":          "# alpha\n",
 		"example.com/alpha@v1.2.0/LICENSE.d/MIT.txt":  "nested, never read\n",
 		"example.com/only-windows@v0.3.0/MIT-LICENSE": "MIT License\nCopyright Windows\n",
+		// A license of its own in a linked package's directory, the shape of
+		// pdfcpu's vendored pkcs7, counts; one in a directory holding only
+		// packages no binary links does not.
+		"example.com/alpha@v1.2.0/pkg/vendored/LICENSE":  "Vendored MIT\nCopyright Vendored\n",
+		"example.com/alpha@v1.2.0/pkg/vendored/doc.go":   "package vendored\n",
+		"example.com/alpha@v1.2.0/internal/fuzz/LICENSE": "never linked, never read\n",
+		"example.com/only-windows@v0.3.0/winapi/COPYING": "winapi terms\n",
+		"example.com/fork@v1.1.0/sub/sub.go":             "package sub\n",
 		// The fork a replace directive points at holds the texts.
 		"example.com/fork@v1.1.0/LICENSE": "BSD 3-Clause License\nCopyright Fork\n",
 		// A module whose cache directory holds no license at all.
@@ -118,6 +126,23 @@ func fixtureBinaries(t *testing.T, infos map[string]*debug.BuildInfo) (dir strin
 	}
 }
 
+// fixtureLister answers for the fixture binaries the way `go list -deps`
+// would: the main module's own package, packages of alpha at its root and in
+// a nested directory, one of the replaced beta, and on windows one of
+// only-windows. toml contributes a module and no listed package.
+func fixtureLister(info *debug.BuildInfo) ([]listedPackage, error) {
+	packages := []listedPackage{
+		{importPath: mainModule + "/cmd/server", modulePath: mainModule},
+		{importPath: "example.com/alpha", modulePath: "example.com/alpha", moduleVersion: "v1.2.0"},
+		{importPath: "example.com/alpha/pkg/vendored", modulePath: "example.com/alpha", moduleVersion: "v1.2.0"},
+		{importPath: "example.com/beta/sub", modulePath: "example.com/beta", moduleVersion: "v1.0.0"},
+	}
+	if target, _ := targetOf(info); target == "windows/amd64" {
+		packages = append(packages, listedPackage{importPath: "example.com/only-windows/winapi", modulePath: "example.com/only-windows", moduleVersion: "v0.3.0"})
+	}
+	return packages, nil
+}
+
 // releaseFixture is the usual case: a linux and a windows binary, the windows
 // one linking one module more.
 func releaseFixture(t *testing.T) (dir string, read infoReader) {
@@ -132,13 +157,18 @@ func releaseFixture(t *testing.T) (dir string, read infoReader) {
 // TestRender_ReproducesEveryTextInLayout pins the whole document for the usual
 // case: the header naming the module, toolchain and builds, the contents, the
 // standard library first, the modules in path order, every text normalized, a
-// replacement and a module linked into one target said so.
+// replacement and a module linked into one target said so, and a license in a
+// linked package's directory reproduced under its import path while one in a
+// directory no binary links code from is not.
 func TestRender_ReproducesEveryTextInLayout(t *testing.T) {
 	t.Parallel()
 
 	dir, read := releaseFixture(t)
 	set, err := collect([]string{filepath.Join(dir, "server-linux-amd64"), filepath.Join(dir, "server-windows-amd64.exe")}, read)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err = set.addPackages(fixtureLister); err != nil {
 		t.Fatal(err)
 	}
 	doc, err := render(set, goEnv{goroot: fixtureGOROOT(t, fixtureGo), modcache: fixtureModcache(t)})
@@ -152,10 +182,12 @@ func TestRender_ReproducesEveryTextInLayout(t *testing.T) {
 		"libgen-mcp is distributed under the MIT License, in the LICENSE file\n" +
 		"that accompanies this one. Its binaries also contain the Go standard\n" +
 		"library and the Go modules listed below, each distributed under its own\n" +
-		"license. Every license, notice and patent file each of them publishes is\n" +
-		"reproduced below in full, read from the module at the version the\n" +
-		"binaries link. cmd/gen_third_party_notices writes this file from the\n" +
-		"build information the binaries record.\n\n" +
+		"license. Every license, notice and patent file each of them publishes,\n" +
+		"at the module's root and in the directory of each package the binaries\n" +
+		"link or of a parent of one, is reproduced below in full, read from the\n" +
+		"module at the version the binaries link. cmd/gen_third_party_notices\n" +
+		"writes this file from the build information the binaries record and the\n" +
+		"packages the toolchain lists for each of them.\n\n" +
 		"The source code of each module is available at the version listed, or\n" +
 		"at the replacement's where one is named, from the Go module proxy: the\n" +
 		"command go mod download -json <module>@<version> fetches it, from\n" +
@@ -174,10 +206,12 @@ func TestRender_ReproducesEveryTextInLayout(t *testing.T) {
 		"\n" + rule + "\nexample.com/alpha v1.2.0\n" +
 		"\n--- LICENSE.md ---\n\nApache License\nVersion 2.0\n" +
 		"\n--- NOTICE ---\n\nAlpha\nCopyright 2026 Alpha Authors\n" +
+		"\n--- LICENSE in example.com/alpha/pkg/vendored ---\n\nVendored MIT\nCopyright Vendored\n" +
 		"\n" + rule + "\nexample.com/beta v1.0.0\nReplaced by: example.com/fork v1.1.0\n" +
 		"\n--- LICENSE ---\n\nBSD 3-Clause License\nCopyright Fork\n" +
 		"\n" + rule + "\nexample.com/only-windows v0.3.0\nLinked into: windows/amd64 only\n" +
 		"\n--- MIT-LICENSE ---\n\nMIT License\nCopyright Windows\n" +
+		"\n--- COPYING in example.com/only-windows/winapi ---\n\nwinapi terms\n" +
 		"\n" + rule + "\ngithub.com/BurntSushi/toml v1.0.0-RC1\n" +
 		"\n--- COPYING ---\n\nThe MIT License (MIT)\nCopyright Toml\n"
 	if got := string(doc); got != want {
@@ -412,6 +446,11 @@ func TestRender_RefusesWhatItCannotShip(t *testing.T) {
 		{"a module the cache lacks", fixtureGOROOT(t, fixtureGo), module("example.com/missing", "v1.0.0", nil), "example.com/missing v1.0.0: "},
 		{"a module with no license", fixtureGOROOT(t, fixtureGo), module("example.com/unlicensed", "v1.0.0", nil), "example.com/unlicensed v1.0.0 publishes no license file in "},
 		{"a local replacement", fixtureGOROOT(t, fixtureGo), module("example.com/beta", "v1.0.0", &debug.Module{Path: "../beta"}), "example.com/beta is replaced by the local directory ../beta, which no module cache holds"},
+		{
+			"a linked package directory the cache lacks", fixtureGOROOT(t, fixtureGo),
+			map[string]*linkedModule{"example.com/alpha": {path: "example.com/alpha", version: "v1.2.0", targets: map[string]bool{"linux/amd64": true}, dirs: map[string]bool{"gone": true}}},
+			filepath.Join("example.com", "alpha@v1.2.0", "gone"),
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -512,5 +551,125 @@ func TestNormalize_GivesUnixLinesAndOneNewline(t *testing.T) {
 				t.Errorf("normalize(%q) = %q, want %q", in, got, want)
 			}
 		})
+	}
+}
+
+// TestAddPackages_RefusesAListingOfAnotherTree covers each way the listed
+// packages can disagree with the binaries: a listing that fails, a module the
+// build information does not name, and a module at another version.
+func TestAddPackages_RefusesAListingOfAnotherTree(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		packages []listedPackage
+		err      error
+		want     string
+	}{
+		{"a listing that fails", nil, errors.New("exit status 1"), "a: exit status 1"},
+		{
+			"a module no binary names",
+			[]listedPackage{{importPath: "example.com/stray/x", modulePath: "example.com/stray", moduleVersion: "v1.0.0"}},
+			nil,
+			"go list reports example.com/stray/x from example.com/stray, which the build information of ",
+		},
+		{
+			"a module at another version",
+			[]listedPackage{{importPath: "example.com/alpha", modulePath: "example.com/alpha", moduleVersion: "v1.3.0"}},
+			nil,
+			"go list reports example.com/alpha at v1.3.0, but the binaries link v1.2.0",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir, read := fixtureBinaries(t, map[string]*debug.BuildInfo{"a": buildInfo("linux", "amd64", fixtureDeps()...)})
+			set, err := collect([]string{filepath.Join(dir, "a")}, read)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = set.addPackages(func(*debug.BuildInfo) ([]listedPackage, error) { return tc.packages, tc.err })
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("addPackages = %v, want an error containing %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestWithParents_ClimbsToTheModuleRoot pins which directories a linked
+// package makes count: its own and each parent short of the module root.
+func TestWithParents_ClimbsToTheModuleRoot(t *testing.T) {
+	t.Parallel()
+
+	for in, want := range map[string]string{
+		"":                 "[]",
+		"pkg":              "[pkg]",
+		"pkg/pdfcpu/pkcs7": "[pkg/pdfcpu/pkcs7 pkg/pdfcpu pkg]",
+	} {
+		t.Run(in, func(t *testing.T) {
+			t.Parallel()
+			if got := fmt.Sprint(withParents(in)); got != want {
+				t.Errorf("withParents(%q) = %s, want %s", in, got, want)
+			}
+		})
+	}
+}
+
+// TestParseListed_ReadsTheListFormat covers the lines go list prints: one
+// per package, blank ones skipped, and a line that is not three fields
+// refused.
+func TestParseListed_ReadsTheListFormat(t *testing.T) {
+	t.Parallel()
+
+	got, err := parseListed([]byte("example.com/a/x\texample.com/a\tv1.0.0\n\nexample.com/m\texample.com/m\t\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []listedPackage{
+		{importPath: "example.com/a/x", modulePath: "example.com/a", moduleVersion: "v1.0.0"},
+		{importPath: "example.com/m", modulePath: "example.com/m"},
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("parseListed = %v, want %v", got, want)
+	}
+	if _, err = parseListed([]byte("example.com/a/x\texample.com/a\n")); err == nil || !strings.Contains(err.Error(), "not a package, a module and a version") {
+		t.Errorf("parseListed of a short line = %v", err)
+	}
+}
+
+// TestGoListPackages_ReportsWhatTheToolchainRefused runs the real go list for
+// a main package that does not exist, under the settings a binary records,
+// and holds the error to naming the package and what go list said.
+func TestGoListPackages_ReportsWhatTheToolchainRefused(t *testing.T) {
+	t.Parallel()
+
+	info := buildInfo("linux", "amd64")
+	info.Path = "example.com/does/not/exist"
+	info.Settings = append(info.Settings, debug.BuildSetting{Key: "-tags", Value: "netgo"}, debug.BuildSetting{Key: "CGO_ENABLED", Value: "0"})
+	_, err := goListPackages(info)
+	if err == nil || !strings.HasPrefix(err.Error(), "go list -deps example.com/does/not/exist: ") {
+		t.Fatalf("goListPackages = %v, want an error naming the package", err)
+	}
+}
+
+// TestNestedLicenses_ReportsADirectoryTheCacheLacks covers a linked package
+// whose directory the module cache does not hold.
+func TestNestedLicenses_ReportsADirectoryTheCacheLacks(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	module := &linkedModule{path: "example.com/m", version: "v1.0.0", dirs: map[string]bool{"gone": true}}
+	if _, err := nestedLicenses(root, module); err == nil || !strings.HasPrefix(err.Error(), "example.com/m v1.0.0: "+filepath.Join(root, "gone")) {
+		t.Fatalf("nestedLicenses = %v, want the module and the missing directory", err)
+	}
+}
+
+// TestWrite_LeavesOutADevelVersion covers the image's build, from a tree with
+// no VCS metadata, whose main module records (devel) rather than a version.
+func TestWrite_LeavesOutADevelVersion(t *testing.T) {
+	t.Parallel()
+
+	set := &linkSet{mainPath: mainModule, mainVersion: "(devel)", goVersion: fixtureGo, targets: map[string]string{"linux/amd64": "a"}}
+	if doc := string(write(set, nil)); !strings.Contains(doc, "\nModule:    "+mainModule+"\nToolchain:") {
+		t.Errorf("the header names a version it does not have:\n%s", doc)
 	}
 }

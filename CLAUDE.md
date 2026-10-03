@@ -1336,7 +1336,10 @@ package `server.json` declares.
 `THIRD_PARTY_NOTICES`.** The binaries link BSD-3-Clause, Apache-2.0 and MPL-2.0
 code whose licences ask for their texts to travel with a binary, and the SBOMs
 name those licences without carrying them. `cmd/gen_third_party_notices` writes
-the notices from the binaries' build information and the module cache; GoReleaser
+the notices from the binaries' build information and the module cache, reading
+each module's root and the directory of every package the binaries link (listed
+per target with `go list -deps`, so it must run inside this module): pdfcpu
+vendors pkcs7 under its own MIT licence in a package directory. GoReleaser
 runs it as an `sboms` entry (`artifacts: any`), the one hook between the builds
 and the signed `checksums.txt`, so the file is a signed release asset and a
 failed generation stops the release. The Dockerfile's builder generates the

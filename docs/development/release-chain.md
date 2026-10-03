@@ -88,7 +88,10 @@ artifact that hands somebody a binary:
 - **`LICENSE`**, read from the repository and held byte for byte to it.
 - **`THIRD_PARTY_NOTICES`**, every license, notice and patent file of each module
   the six binaries link, read from their build information and the module cache
-  by `cmd/gen_third_party_notices`. GoReleaser runs it as an `sboms` entry with
+  by `cmd/gen_third_party_notices`: at each module's root, and in the directory
+  of each package the binaries link (listed per target with `go list -deps`),
+  which is where pdfcpu keeps the MIT licence of the pkcs7 code it vendors.
+  GoReleaser runs it as an `sboms` entry with
   `artifacts: any`, the one hook after the builds and before `checksums.txt` is
   computed and signed, so the file is a release asset covered by the signature
   and the build-provenance attestation like a binary, and a generation that

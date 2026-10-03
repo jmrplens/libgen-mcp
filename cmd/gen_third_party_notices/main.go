@@ -8,24 +8,30 @@ import (
 	"io"
 	"os"
 	"strings"
-
-	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/docgen"
 )
 
 // toolName is how the command names itself in its messages.
 const toolName = "gen_third_party_notices"
 
+// noticesFileMode is the mode the notices are written with: world-readable,
+// unlike the owner-only docgen.GeneratedFileMode the committed generated files
+// use, because this file is a release asset every package and the image hand
+// to whoever installs them, the way GoReleaser writes checksums.txt beside it.
+const noticesFileMode = 0o644
+
 // config is one run: the binaries to read, the file to write, the targets the
 // binaries must cover, where GOROOT and the module cache are when the caller
-// names them, and how build information and `go env` are read.
+// names them, and how build information, the linked packages and `go env` are
+// read.
 type config struct {
-	patterns []string
-	out      string
-	targets  []string
-	goroot   string
-	modcache string
-	readInfo infoReader
-	goEnv    func() ([]byte, error)
+	patterns     []string
+	out          string
+	targets      []string
+	goroot       string
+	modcache     string
+	readInfo     infoReader
+	listPackages packageLister
+	goEnv        func() ([]byte, error)
 }
 
 // exitProcess is [os.Exit] behind a seam, so the code [runMain] decides is a
@@ -57,13 +63,14 @@ func runMain(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	cfg := config{
-		patterns: flags.Args(),
-		out:      *out,
-		targets:  splitList(*targets),
-		goroot:   *goroot,
-		modcache: *modcache,
-		readInfo: buildinfo.ReadFile,
-		goEnv:    runGoEnv,
+		patterns:     flags.Args(),
+		out:          *out,
+		targets:      splitList(*targets),
+		goroot:       *goroot,
+		modcache:     *modcache,
+		readInfo:     buildinfo.ReadFile,
+		listPackages: goListPackages,
+		goEnv:        runGoEnv,
 	}
 	summary, err := run(cfg)
 	if err != nil {
@@ -100,6 +107,9 @@ func run(cfg config) (string, error) {
 	if targetErr := set.requireTargets(cfg.targets); targetErr != nil {
 		return "", targetErr
 	}
+	if listErr := set.addPackages(cfg.listPackages); listErr != nil {
+		return "", listErr
+	}
 	env, err := resolveGoEnv(cfg.goroot, cfg.modcache, cfg.goEnv)
 	if err != nil {
 		return "", err
@@ -108,7 +118,7 @@ func run(cfg config) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if writeErr := os.WriteFile(cfg.out, doc, docgen.GeneratedFileMode); writeErr != nil {
+	if writeErr := os.WriteFile(cfg.out, doc, noticesFileMode); writeErr != nil { //#nosec G306 -- a release asset meant to be read by everyone who installs the binary
 		return "", writeErr
 	}
 	return fmt.Sprintf("%s: %s covers %d modules and the Go standard library for %s",
