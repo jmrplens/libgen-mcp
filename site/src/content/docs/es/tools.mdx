@@ -307,6 +307,14 @@ Un resultado también puede llevar un `venue`: el medio de publicación tal y co
 	<Fragment slot="object">
 		Se usa con `id`: `edition` (por defecto) o `file`.
 	</Fragment>
+	<Fragment slot="related">
+		`references` (obras que cita este registro) o `cited_by` (obras que lo
+		citan, primero las más citadas), de OpenAlex por el DOI del registro.
+		Desactivado por defecto. Consulta [Obras relacionadas](#obras-relacionadas).
+	</Fragment>
+	<Fragment slot="related_limit">
+		Con `related`, cuántas obras listar: de 1 a 25, 10 por defecto.
+	</Fragment>
 	<Fragment slot="cite_as">
 		Estilos de cita adicionales junto a BibTeX y RIS: cualquiera de `apa`,
 		`mla`, `chicago`, `harvard`, `vancouver`, `ieee` y `csl-json`. Desactivado
@@ -329,6 +337,7 @@ Un resultado también puede llevar un `venue`: el medio de publicación tal y co
 
 <SchemaTable name="get_details" part="output">
 	<Fragment slot="next_steps">Llamadas de seguimiento sugeridas para este resultado — p. ej. una llamada a `download` con el `md5` (libro) o `doi` (artículo) de este registro. Presente para guiar al modelo; se puede ignorar.</Fragment>
+	<Fragment slot="related">Presente cuando se fijó `related`: `kind`, el `total` que cuenta OpenAlex, hasta `related_limit` `works` (título, año, DOI, acceso abierto y número de citas) y una `note` cuando la lista está vacía o es parcial. Consulta [Obras relacionadas](#obras-relacionadas).</Fragment>
 	<Fragment slot="citation_match">Presente en una consulta por `citation`: `status` `resolved` con el `doi` y el `title` elegidos, o `unresolved` con el `reason` y hasta cinco `candidates` (título, autores, año, publicación, DOI y puntuación de Crossref), sin `file` ni `edition`.</Fragment>
 	<Fragment slot="file">El registro de archivo (presente en una consulta por `md5`, o una consulta por `id` con `object: file`).</Fragment>
 	<Fragment slot="edition">El registro de edición (presente en la edición relacionada de una consulta por `md5`, o una consulta por `id` con `object: edition`).</Fragment>
@@ -377,6 +386,18 @@ Fija `enrich: true` para añadir un objeto `enrichment` best-effort con datos si
 	el presupuesto de ~6s — antes de que la respuesta se devuelva. No se requiere
 	clave de API; ambas APIs se usan sin clave.
 </Aside>
+
+### Obras relacionadas
+
+Fija `related` en `references` para las obras que cita un registro, o en `cited_by` para las obras que lo citan, y `related_limit` para cuántas (de 1 a 25, 10 por defecto):
+
+```json
+{ "doi": "10.1038/nature12373", "related": "cited_by", "related_limit": 5 }
+```
+
+La lista viene de [OpenAlex](https://openalex.org), primero las más citadas, con el título, el año, el DOI, una marca de acceso abierto y el número de citas de cada obra, y `total` es cuántas hay en total. La obra se localiza por su DOI (una consulta de un único registro, que OpenAlex no cobra) y la lista es una consulta filtrada, así que una llamada cuesta un crédito de la asignación descrita en [`LIBGEN_MCP_OPENALEX_KEY`](/libgen-mcp/es/configuration/#libgen_mcp_openalex_key). Las referencias se ordenan a partir de las 100 primeras que lista una obra, el máximo que puede nombrar una consulta, y `note` lo indica cuando la obra lista más.
+
+El DOI que se usa es el que los [estilos de cita](/libgen-mcp/es/citations/#otros-estilos-de-cita) pueden enviar a doi.org: un DOI que Crossref confirmó, o el DOI de un registro que respondieron Crossref o la agencia de registro. Un registro sin él recibe `related` con una `note` que dice que la lista no está disponible, porque un DOI del catálogo que no superó la comprobación pertenece a otra obra. Cualquier otro fallo (un DOI desconocido, OpenAlex sin responder, la asignación agotada) es también una `note`, nunca un error, y `LIBGEN_MCP_ENRICH=false` desactiva la consulta junto con el resto de metadatos externos.
 
 ## download
 
