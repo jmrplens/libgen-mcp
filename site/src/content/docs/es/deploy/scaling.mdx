@@ -1,6 +1,190 @@
 ---
 title: Escalado y capacidad
 description: "Qué acota un proceso de libgen-mcp, cómo interactúan los límites por llamante y el presupuesto de salida, y cuándo ayudan más réplicas."
+mentions:
+  - name: "Model Context Protocol"
+    wikidata: Q133436854
+chips:
+  - text: "Techos según el límite de descriptores"
+  - text: "Sin estado, sin afinidad"
+  - text: "Repartir el presupuesto de salida"
+  - text: "Modo servidor HTTP"
+    href: "/libgen-mcp/es/http-server-mode/"
+datePublished: "2026-10-03"
+head:
+  - tag: title
+    content: "Escalar libgen-mcp: capacidad, réplicas y gateways"
 ---
 
-Esta página explicará qué acota un proceso — las llamadas y sesiones que puede mantener, derivadas de su límite de descriptores de fichero —, cómo interactúan los límites por llamante y el presupuesto de peticiones salientes, y cuándo ejecutar más de una réplica ayuda y cuándo solo traslada la cola. Las cifras medidas en las que se apoya están en [Lo que cuesta ejecutarlo](/libgen-mcp/es/benchmarks/).
+import { Aside } from "@astrojs/starlight/components";
+
+Un proceso de `libgen-mcp` que sirve HTTP en streaming es un servicio compartido: todos los llamantes comparten un mismo presupuesto de salida, un mismo semáforo de descargas y una misma caché. Esta página explica qué acota ese proceso, qué cambia cuando ejecutas más de uno y qué tiene que hacer bien un balanceador o un gateway MCP colocado delante. Enlaza en lugar de repetir:
+
+- [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/) es la dueña del comportamiento de un proceso: cada límite, rechazo y sonda que se nombra aquí está definido allí.
+- [Detrás de un proxy inverso](/libgen-mcp/es/deploy/reverse-proxy/) y [Contenedores y orquestación](/libgen-mcp/es/deploy/containers/) tienen las configuraciones completas.
+- [Lo que cuesta ejecutarlo](/libgen-mcp/es/benchmarks/) tiene las cifras medidas de memoria, CPU y latencia.
+
+## El cuello de botella es el upstream, no el proceso
+
+Cada petición al catálogo que hace este servidor espera un token de un único cubo por proceso: `LIBGEN_MCP_RATE_RPS` (por defecto `1`, admite valores en `(0, 20]`) que rellena un cubo de `LIBGEN_MCP_RATE_BURST` de profundidad (por defecto `1`). Un `tools/call` que llega al catálogo mantiene abierto su `POST` mientras espera, así que con la tasa de serie dieciséis búsquedas en vuelo tardan unos quince segundos en vaciarse, y mil tardan más de un cuarto de hora. Nada de lo que hace el servidor por su lado se acerca a ese coste.
+
+**Un límite de entrada por encima del cubo de salida solo traslada la cola.** El límite de entrada (`--rate-limit-rps`, por defecto `10` por dirección cobrada) decide si un llamante se rechaza o se admite; una vez admitida, la llamada hace cola para el token de salida como todas las demás. Subir el límite de entrada, o sumar llamantes, alarga la cola sin que se vacíe antes. El benchmark mide exactamente ese par: el escenario `http-8` abre la válvula de salida a `20` peticiones por segundo y `http-8-shipped-rate` la deja en `1`, con los mismos ocho clientes haciendo las mismas llamadas. Compara sus filas de `tools/call` en la [latencia por método](https://github.com/jmrplens/libgen-mcp/blob/main/docs/benchmarks/resource-benchmark.md#latency-per-method) del registro: milisegundos en el primero, segundos en el segundo, y lo que mide el segundo es la cola, no el servidor.
+
+Hay dos cosas que no esperan a ese cubo. Los buscadores más allá del catálogo (`extra_sources`) se ejecutan a la vez, cada uno con su propio limitador, y la transferencia de una descarga ocupa una plaza de `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS` (por defecto `2`) mientras duran los bytes.
+
+Así que antes de añadir una réplica, pregúntate qué recurso falta. Si las llamadas van lentas porque hacen cola para el token de salida, una segunda réplica duplica la tasa que ven los mirrors, no la capacidad que conceden (mira [Lo que ven los mirrors](#lo-que-ven-los-mirrors)). Una réplica solo añade capacidad en lo que de verdad es por proceso: conexiones retenidas, memoria, CPU y plazas de descarga.
+
+## Qué acota un proceso
+
+### Llamadas retenidas y sesiones, a partir del límite de descriptores
+
+El proceso retiene como máximo un número de llamadas derivado de su límite de descriptores de fichero, leído una vez al arrancar, y ningún flag lo mueve. La aritmética es corta:
+
+```text
+llamadas retenidas = (límite - límite/8 - 64) / (2 + buscadores extra)
+sesiones con estado = llamadas retenidas / 2
+```
+
+Un octavo del límite queda libre para el proceso en reposo, `/health` y las conexiones que se están rechazando. Se reservan sesenta y cuatro descriptores para el techo del proceso sobre las llamadas que mueven bytes (`download` y `read`), cada una de las cuales abre un fichero además de su conexión. Lo que queda se divide entre lo máximo que puede costar una llamada retenida, que es un `search` escalado: la conexión del llamante, la petición al catálogo y una conexión por cada uno de los ocho buscadores más allá del catálogo, diez en total. El divisor se cuenta a partir de la lista de proveedores, así que un proveedor añadido en una release baja el techo con él. Ambos resultados valen al menos `1`.
+
+Un ejemplo resuelto, para un contenedor arrancado con `--ulimit nofile=4096`:
+
+```text
+margen      4096 / 8                       =  512
+reserva     64 plazas que mueven bytes     =   64
+resto       4096 - 512 - 64                = 3520
+retenidas   3520 / 10                      =  352
+sesiones    352 / 2                        =  176   (solo cuentan con --stateless=false)
+```
+
+El runtime de Go sube el límite blando al duro antes de `main`, así que la cifra sigue al límite **duro**: 83 llamadas retenidas con 1024, 45868 con los 524288 que recibe un servicio de systemd por defecto. La línea de arranque `process ceilings` dice qué recibió este proceso (`held_calls_per_process`, `descriptor_limit`, `descriptor_limit_source`), y la tabla completa, el rechazo (`503`, `Retry-After: 30`, `This server is busy. Retry later.`) y qué cuenta como llamada retenida están en [Modo servidor HTTP → Qué puede retener el proceso entero](/libgen-mcp/es/http-server-mode/#qué-puede-retener-el-proceso-entero).
+
+Diez descriptores es la cota, no el coste típico: una búsqueda que sigue en cola esperando su token del catálogo solo retiene la conexión de su llamante. Por eso el techo rara vez es lo primero con lo que se topa un despliegue.
+
+### Memoria y CPU
+
+Con un límite de descriptores grande, la memoria llega antes. Una llamada retenida cuesta memoria diga lo que diga el límite, así que el límite de memoria del contenedor (o `MemoryMax=` en una unidad de systemd) es la cota real en una máquina con un límite duro de cientos de miles. El coste medido del proceso en reposo, de cada llamante más con carga y retenido, y la CPU por llamada están en [Lo que cuesta cada persona más que llama](/libgen-mcp/es/benchmarks/#lo-que-cuesta-cada-persona-más-que-llama). Dimensiona el límite de memoria a partir de esas cifras y del número de llamantes que esperas a la vez, no a partir del techo de llamadas retenidas.
+
+### Descargas
+
+`download` y `read` toman una plaza de `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS` (por defecto `2`, admite `[1, 16]`) y hacen cola cuando están todas ocupadas. `--max-inflight-per-client` acota cuántas puede retener una dirección cobrada, y por defecto vale el semáforo entero; por encima de ambos hay un techo de `64` por proceso que ningún flag cambia. El detalle está en [Qué puede retener un llamante](/libgen-mcp/es/http-server-mode/#qué-puede-retener-un-llamante). En un despliegue HTTP `read` no se registra y `download` devuelve un enlace salvo que `LIBGEN_MCP_SERVER_FETCH` diga otra cosa, así que por defecto no se ejecuta ninguna transferencia dentro del proceso.
+
+## Qué se multiplica con las réplicas
+
+Cada límite que aplica este servidor vive en un proceso. El [ADR de un servidor para todos los llamantes](https://github.com/jmrplens/libgen-mcp/blob/main/docs/decisions/2026-09-17-one-server-for-every-caller.md) explica por qué: el limitador de salida, los enfriamientos por fuente, la caché de mirrors y la caché de `read` son campos de objetos que se construyen una vez por proceso, y nada se comparte entre procesos. Con `N` réplicas, cada límite pasa a ser `N` copias independientes:
+
+| Límite                                                                    | Ámbito                             | Con `N` réplicas detrás de un balanceador                  |
+| ------------------------------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------- |
+| `LIBGEN_MCP_RATE_RPS` / `LIBGEN_MCP_RATE_BURST`                           | Por proceso, de salida             | Llega a los mirrors `N` veces la tasa de peticiones        |
+| `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS`                                     | Por proceso                        | `N` veces las transferencias simultáneas                   |
+| `--rate-limit-rps` / `--rate-limit-burst`                                 | Por dirección cobrada, por proceso | Hasta `N` veces por llamante, si el balanceador no lo fija |
+| `--max-inflight-per-client`                                               | Por dirección cobrada, por proceso | Hasta `N` veces por llamante, si el balanceador no lo fija |
+| Llamadas retenidas, sesiones con estado, las 64 llamadas que mueven bytes | Por proceso                        | `N` veces, que es la capacidad que añade una réplica       |
+| La caché de `read`, la caché de mirrors, los enfriamientos por fuente     | Por proceso                        | Cada réplica aprende y descarga por su cuenta              |
+
+### Lo que ven los mirrors
+
+Los mirrors y proveedores a los que llega este servidor los mantienen voluntarios e instituciones públicas, y ven la dirección de salida del despliegue, no sus réplicas. Unas réplicas detrás de un mismo NAT o de una misma salida en la nube son para ellos un único cliente a `N` veces la tasa que enviaría un proceso. Que todos los usuarios compartan la dirección de salida del despliegue es también la razón de que un servidor remoto devuelva enlaces en lugar de descargar los ficheros: un bloqueo provocado por un llamante cae sobre todos ([`LIBGEN_MCP_SERVER_FETCH`](/libgen-mcp/es/configuration/#libgen_mcp_server_fetch)).
+
+**Reparte el presupuesto en lugar de multiplicarlo.** La variable admite fracciones, así que cuatro réplicas que entre todas deban enviar lo que envía un proceso con el valor por defecto se ejecutan con `LIBGEN_MCP_RATE_RPS=0.25`. La cola de cada réplica se vacía entonces cuatro veces más despacio, y esa es la idea: las réplicas te dan conexiones retenidas y memoria, y la tolerancia de los mirrors es la misma pregunten cuantos procesos pregunten.
+
+### Lo que ve un llamante
+
+Los límites de entrada se indexan por la dirección cobrada en cada proceso. Un balanceador que reparte en round-robin las peticiones de un llamante le da un cubo lleno en cada réplica, así que `N` réplicas admiten hasta `N` veces la tasa y `N` veces las descargas en vuelo que dicen los flags. La afinidad por dirección del cliente (`ip_hash` en nginx, `balance source` en HAProxy) mantiene a cada llamante en una réplica, y con ello que los flags signifiquen lo que dicen por llamante.
+
+## Sesiones y afinidad
+
+**El transporte por defecto no necesita afinidad.** Con `--stateless` en su valor por defecto, `true`, no se emite ningún `Mcp-Session-Id` y cada `POST` es autosuficiente, así que cualquier réplica puede atender cualquier petición. Eso incluye una llamada que tiene que preguntarle algo al usuario: en el protocolo `2026-07-28` la pregunta vuelve dentro del resultado de la herramienta y el cliente llama otra vez con la respuesta, así que el reintento lleva todo lo que necesita el handler y puede caer en otra réplica. Ahí la afinidad es una optimización, no un requisito. Mantiene en un sitio el presupuesto de entrada de un llamante y, donde `read` está registrado, deja que la siguiente página de un documento reutilice la copia que ya guarda la [caché de `read`](/libgen-mcp/es/configuration/#libgen_mcp_read_cache_bytes-y-libgen_mcp_read_cache_ttl) en lugar de volver a descargar el fichero entero en otra réplica.
+
+**`--stateless=false` sí la necesita.** El transporte con estado heredado, para clientes con el protocolo `2025-11-25` o anterior, guarda cada sesión en la memoria del proceso que la abrió. Una petición con el id de esa sesión en cualquier otra réplica recibe un `404` con `session not found`, y el cliente tiene que inicializar de nuevo. Fija por dirección del cliente: un hash de la cabecera `Mcp-Session-Id` no sirve, porque el `POST` que abre una sesión no lleva id y se enruta a un sitio distinto de aquel al que el id envía luego sus peticiones.
+
+Dos flags acotan lo que guarda un despliegue con estado, y ambos están definidos en [Cerrar lo que lleva tiempo inactivo](/libgen-mcp/es/http-server-mode/#cerrar-lo-que-lleva-tiempo-inactivo):
+
+- `--session-timeout` (por defecto `30m`, de `0` a `24h`) cierra una sesión cuyo cliente ha dejado de llamar. `0` no cierra ninguna, y el arranque avisa, porque una sesión que nadie borra conserva una de las [plazas de sesión](/libgen-mcp/es/http-server-mode/#sesiones-con-estado) del proceso hasta un reinicio. Se rechaza con el transporte sin estado por defecto.
+- `--http-idle-timeout` (por defecto `0`) cierra una conexión keep-alive inactiva entre peticiones. Importa con cualquier transporte detrás de un balanceador que mantiene conexiones abiertas, porque una conexión inactiva retiene un descriptor del margen que el techo de llamadas retenidas deja libre para `/health`.
+
+Una réplica que se detiene se lleva sus sesiones con estado, así que una actualización progresiva de un despliegue con estado obliga a inicializar de nuevo a todos los clientes de la réplica reiniciada.
+
+## Distinguir a los llamantes detrás de un balanceador
+
+Cada límite por llamante se indexa por la dirección a la que se cobra una petición, y detrás de un balanceador el par de la conexión es el balanceador. Configura el par de proxy de confianza en **todas** las réplicas, con la dirección del balanceador (o cada salto, si hay dos capas de proxies) y la cabecera que rellena:
+
+```bash
+libgen-mcp --http 0.0.0.0:8080 \
+  --public-url https://mcp.example.org \
+  --trusted-proxies 10.0.0.0/24 \
+  --trusted-proxy-header X-Forwarded-For
+```
+
+Los dos flags van juntos. La cabecera solo se cree si viene de un par listado en `--trusted-proxies`, y una cabecera con varios valores como `X-Forwarded-For` se lee **desde la derecha**: el primer salto que no es a su vez un proxy de confianza es el llamante, así que un llamante no puede elegir su propia dirección enviando la cabecera. Un `X-Real-IP` de un solo valor funciona igual.
+
+Sin el par, todos los llamantes se cobran al balanceador: un cubo y una cuenta de llamadas en vuelo para todo el despliegue, un único `user.hash` en la telemetría y, en un listener de loopback o de socket unix, ningún límite de entrada, porque ahí todos los pares son la misma máquina. Las reglas de identidad, y cómo las cambia cada forma de listener, están en [Qué identidad tiene este despliegue](/libgen-mcp/es/http-server-mode/#qué-identidad-tiene-este-despliegue). `--public-url` también va en cada réplica: nombra el `Host` al que responde el servidor detrás de un proxy, y la dirección que publica la tarjeta de descubrimiento.
+
+## Actualizaciones progresivas
+
+Una señal de parada no cierra el listener de inmediato. La secuencia, definida en [Drenar antes de cerrar el listener](/libgen-mcp/es/http-server-mode/#drenar-antes-de-cerrar-el-listener), es:
+
+1. El primer `SIGTERM` o `SIGINT` cambia `GET /health` a `503` con `{"status":"draining"}` y `Cache-Control: no-store`. El endpoint MCP sigue sirviendo.
+2. Pasado `--drain-delay` (por defecto `0`, con un máximo de `5m`) el listener se cierra.
+3. Las peticiones que siguen en curso tienen hasta **8 segundos** para terminar. Los streams que sigan abiertos después se cierran, y el proceso sale.
+
+Una señal repetida **en el segundo siguiente** a la primera se toma como una copia de la misma parada (un grupo de procesos, un cgroup y el lanzador de npm entregan copias con milisegundos de diferencia), así que el drenaje se mantiene. Una señal pasada esa ventana fuerza la salida de inmediato.
+
+Tres ajustes tienen que cuadrar para que una réplica se vaya sin hacer fallar una petición:
+
+- **El balanceador tiene que sondear `/health`.** El cambio solo ayuda a un balanceador que pregunta. nginx de código abierto no tiene comprobación de salud activa: su `max_fails` es pasivo, así que solo retira un upstream después de que fallen peticiones reales. Usa un balanceador que sondee, una readiness probe de Kubernetes, o saca la réplica del upstream y recarga antes de enviarle la señal.
+- **`--drain-delay` es al menos un intervalo de sondeo** de lo que sondee, más lo que tarde en actuar ante una sonda fallida. Por debajo de un intervalo el retraso no hace nada.
+- **El margen del supervisor supera `--drain-delay` más 8 segundos.** `docker stop` espera 10 segundos por defecto y un pod de Kubernetes 30, y después mata el proceso a mitad del drenaje. Sube `--stop-timeout` o `terminationGracePeriodSeconds` junto con el retraso de drenaje.
+
+`/health` responde a cualquier `Host` y no ocupa plaza de llamada, así que un proceso lleno sigue respondiendo a su sonda. El `HEALTHCHECK` propio de la imagen y los manifiestos completos de Compose y Kubernetes están en [Contenedores y orquestación](/libgen-mcp/es/deploy/containers/).
+
+<Aside
+	type="caution"
+	title="Un balanceador solo debe reintentar lo que nunca llegó a una réplica"
+>
+	Todas las herramientas están anotadas como idempotentes, así que un
+	`tools/call` repetido no estropea nada, pero gasta otro token de salida y,
+	para un `download` en un despliegue que descarga, una segunda transferencia.
+	Reintenta ante un fallo de conexión, no ante un timeout después de enviada la
+	petición.
+</Aside>
+
+## Detectar deriva de configuración
+
+Las réplicas detrás de un balanceador tienen que servir el mismo catálogo, o un cliente ve herramientas distintas según a cuál llegue y nada más lo avisa. `GET /health` lleva `config_digest`, doce caracteres hexadecimales sobre los ajustes que deciden la superficie servida: las fuentes configuradas, `extra_sources`, `server_fetch`, `remote_downloads`, `enrich`, `confirm_downloads`, la ruta base, el modo sin estado y los tres límites que cambian lo que devuelve una llamada idéntica. No depende del orden donde el ajuste es un conjunto, y es una huella, no un secreto. Compáralo, junto con `build`, en toda la flota:
+
+```bash
+for replica in 10.0.0.11:8080 10.0.0.12:8080 10.0.0.13:8080; do
+  curl -fsS "http://$replica/health" | jq -r '[.build, .config_digest] | @tsv'
+done | sort -u
+```
+
+Una sola línea de salida significa que las réplicas coinciden. Durante una actualización progresiva se esperan dos líneas, una por build.
+
+**El digest no cubre las credenciales.** `LIBGEN_MCP_UNPAYWALL_EMAIL` y `LIBGEN_MCP_CORE_KEY` habilitan cada una una fuente de descarga, y una fuente sin su credencial no aparece en el enum `source` de `download`. Dos réplicas con la misma configuración donde solo una tiene la clave publican el mismo digest y esquemas de herramienta distintos. La tarjeta enumeradora lo cubre: lleva la salida completa de `tools/list`, y su `ETag` fuerte se calcula sobre sus bytes, así que las réplicas que sirven el mismo catálogo publican el mismo validador.
+
+```bash
+for replica in 10.0.0.11:8080 10.0.0.12:8080 10.0.0.13:8080; do
+  curl -fsSI "http://$replica/.well-known/mcp/server-card.json" | grep -i '^etag'
+done | sort -u
+```
+
+Lo que no cubre ninguno de los dos es la configuración que cambia el comportamiento y no el catálogo: los límites de entrada, el par de proxy de confianza, `LIBGEN_MCP_RATE_RPS` y los ajustes de telemetría. Mantenlos en un único fichero de entorno o un único manifiesto que lean todas las réplicas, en lugar de flags por máquina. La lista de campos y su razonamiento están en [El digest de configuración](/libgen-mcp/es/http-server-mode/#el-digest-de-configuración).
+
+## Telemetría entre réplicas
+
+Cada proceso informa de un `service.instance.id` aleatorio en su recurso, así que dos réplicas que comparten `service.name` se distinguen en el colector sin ajustar nada.
+
+Con `LIBGEN_MCP_TELEMETRY_IDENTITY=pseudonymous`, `user.hash` es un HMAC de la dirección cobrada bajo una clave. Si `LIBGEN_MCP_TELEMETRY_IDENTITY_KEY` no está definida, la clave se genera al arrancar y se pierde con el proceso, así que cada réplica informa de un mismo llamante con un seudónimo distinto y un reinicio empieza de cero. Da a todas las réplicas la misma clave desde un único almacén de secretos y el seudónimo es estable en toda la flota. Un `user.hash` que nunca cambia significa que falta el par de proxy de confianza, como arriba. Ambas cosas están en [La clave decide si las réplicas coinciden](/libgen-mcp/es/telemetry/#la-clave-decide-si-las-réplicas-coinciden).
+
+## Un gateway MCP delante
+
+Un gateway que admite, enruta o cachea tráfico MCP ve el mismo servidor que ve un cliente. Le importan cuatro cosas de este.
+
+**El texto servido es ASCII llano sin punto y coma.** Cada descripción, título, descripción de esquema y argumento de prompt en `tools/list` y `prompts/list`, porque un gateway rechazó a un proyecto hermano por puntos y coma corrientes y un validador que habla de "caracteres inseguros" compara contra una clase de caracteres. Los resultados son datos y no se someten a esa regla. Mira [Compatibilidad → Gateways](/libgen-mcp/es/compatibility/#gateways).
+
+**Ninguna credencial viaja en una cabecera.** Este servidor no autentica a nadie y no lee ninguna cabecera `Authorization`, así que un gateway que inyecte una no cambia nada. Las claves de un despliegue son variables de entorno en cada réplica, lo que es una razón más para dar a todas las réplicas el mismo entorno. La alternativa por llamada, una clave de Anna's Archive o una dirección de contacto de Unpaywall para una descarga, se le pide al usuario por elicitación, se usa en esa petición y nunca se guarda, así que se queda en la interfaz del cliente en lugar de en el contexto del modelo. Un gateway tiene que dejar pasar sin cambios la petición de entrada y el reintento del cliente para que esa pregunta llegue a alguien; si no lo hace, la llamada sigue sin la credencial.
+
+**No hay ningún argumento por el que enrutar.** Ningún argumento de herramienta lleva una anotación `x-mcp-header`, así que ninguna cabecera `Mcp-Param-*` refleja uno. Anotar `md5` haría que `download` y `get_details` no se pudieran llamar desde clientes de navegador, como recoge el [ADR sobre las cabeceras de parámetros](https://github.com/jmrplens/libgen-mcp/blob/main/docs/decisions/2026-07-31-no-param-header-routing.md). En el protocolo `2026-07-28` la cabecera `Mcp-Method` nombra el método, y eso basta para enrutar de forma distinta los listados y las llamadas. Con el transporte sin estado por defecto, un gateway puede mandar cualquier petición a cualquier réplica.
+
+**Lo que puede cachear un gateway.** `tools/list` y `prompts/list` llevan la pista de [SEP-2549](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549) `ttlMs: 3600000` con `cacheScope: "public"`, porque el catálogo solo cambia con una release y a todos los llamantes se les sirve el mismo. Las dos tarjetas de servidor responden `Cache-Control: public, max-age=3600` con un `ETag` fuerte, así que revalidar pasada la hora cuesta un `304`. Los resultados de herramienta no llevan pista y son datos en vivo: nunca cachees un `tools/call`. Una caché compartida delante de réplicas que no coinciden entrega el catálogo de una réplica a los clientes de otra, que es la deriva de arriba fijada durante una hora. Qué tarjeta quiere un escáner o un registro está en [Dos tarjetas, y cuál quiere un escáner](/libgen-mcp/es/http-server-mode/#dos-tarjetas-y-cuál-quiere-un-escáner).
