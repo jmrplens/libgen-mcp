@@ -183,6 +183,8 @@ Bajo cualquier política, con cualquier variable fijada a cualquier valor:
 
 Deja `LIBGEN_MCP_TELEMETRY_IDENTITY_KEY` sin definir y se genera una clave al arrancar que no se escribe en ningún sitio: el seudónimo muere con el proceso, y dos réplicas informan de un mismo llamante como dos. Fíjala y todas las réplicas derivan el mismo digest para un llamante, a través de reinicios — que es lo que quiere un despliegue con varias réplicas, y por lo que la clave nunca rota cuando la suministraste tú (`LIBGEN_MCP_TELEMETRY_IDENTITY_ROTATION` se ignora, con un aviso, en ese caso).
 
+Con `GODEBUG=fips140=only`, una clave configurada debe tener al menos 14 bytes (112 bits), el secreto más corto del que FIPS 140 deja derivar a HKDF. Una más corta es un error de arranque que nombra `LIBGEN_MCP_TELEMETRY_IDENTITY_KEY`; hasta la 2.1.0, la misma clave hacía que el servidor entrara en pánico al arrancar. Una clave generada tiene 32 bytes y no se ve afectada, y por lo demás la derivación es la misma que era: una clave que funcionaba antes produce los mismos seudónimos.
+
 ### Un `user.hash` constante es un síntoma de configuración
 
 El digest se calcula sobre la dirección a la que se **cargó** la petición, que es la misma dirección sobre la que se lleva cada presupuesto por llamante. Tres formas de despliegue, tres resultados:

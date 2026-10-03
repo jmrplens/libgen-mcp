@@ -290,7 +290,14 @@ func resolveIdentity(cfg *config.Config) (identityChoice, error) {
 
 	keys, err := telemetry.NewKeyring(cfg.TelemetryIdentityKey, cfg.TelemetryIdentityRotation)
 	if err != nil {
-		return identityChoice{}, fmt.Errorf("%s: %w", config.EnvName("TELEMETRY_IDENTITY_ROTATION"), err)
+		// A configured key is judged before the rotation and ignores it, so a
+		// refusal with a key set is about the key: under GODEBUG=fips140=only,
+		// one shorter than 14 bytes (112 bits) cannot be derived from.
+		variable := "TELEMETRY_IDENTITY_ROTATION"
+		if cfg.TelemetryIdentityKey != "" {
+			variable = "TELEMETRY_IDENTITY_KEY"
+		}
+		return identityChoice{}, fmt.Errorf("%s: %w", config.EnvName(variable), err)
 	}
 	if keys.Configured() && cfg.TelemetryIdentityRotation > 0 {
 		// Said rather than silently obeyed or silently ignored. An operator who

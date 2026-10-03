@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"os/exec"
 	"slices"
 	"strings"
 	"sync"
@@ -317,6 +319,42 @@ func TestResolveIdentityRefusesARotationOutOfRange(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), config.EnvName("TELEMETRY_IDENTITY_ROTATION")) {
 		t.Errorf("the refusal does not name the variable: %v", err)
+	}
+}
+
+// fips140IdentityHelperEnv marks the copy of this test binary that
+// TestResolveIdentityNamesTheKeyWhenTheKeyIsRefused starts under
+// GODEBUG=fips140=only.
+const fips140IdentityHelperEnv = "SERVER_IDENTITY_FIPS140_HELPER"
+
+// TestResolveIdentityNamesTheKeyWhenTheKeyIsRefused covers the one refusal a
+// configured key can draw: under GODEBUG=fips140=only, HKDF will not derive
+// from a secret shorter than 112 bits. The refusal has to name the key, not
+// the rotation interval, which a configured key ignores and the operator may
+// not have set at all. The mode is read when the process starts, so the
+// assertion runs in a copy of this test binary started with it.
+func TestResolveIdentityNamesTheKeyWhenTheKeyIsRefused(t *testing.T) {
+	if os.Getenv(fips140IdentityHelperEnv) == "1" {
+		_, err := resolveIdentity(&config.Config{TelemetryIdentityKey: "13 bytes long"})
+		if err == nil {
+			t.Fatal("resolveIdentity accepted a 104-bit key under fips140=only")
+		}
+		if !strings.Contains(err.Error(), config.EnvName("TELEMETRY_IDENTITY_KEY")+":") ||
+			strings.Contains(err.Error(), config.EnvName("TELEMETRY_IDENTITY_ROTATION")) {
+			t.Errorf("the refusal names the wrong variable: %v", err)
+		}
+		return
+	}
+
+	// #nosec G204 G702 -- the program is this test binary, started again under a GODEBUG the running process cannot take on
+	cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^"+t.Name()+"$", "-test.count=1", "-test.v")
+	cmd.Env = append(os.Environ(), "GODEBUG=fips140=only", fips140IdentityHelperEnv+"=1", "GOCOVERDIR="+t.TempDir())
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("the fips140=only helper failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "--- PASS: "+t.Name()) {
+		t.Fatalf("the fips140=only helper did not run the test:\n%s", out)
 	}
 }
 
