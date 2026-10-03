@@ -2,7 +2,7 @@
 
 **Reference** — for a contributor about to change `.github/workflows/release.yml`.
 
-A tag publishes to seven places. The workflow that does it is fourteen jobs, and
+A tag publishes to seven places. The workflow that does it is fifteen jobs, and
 almost every edge between them is a failure somebody already had: the shape is
 not convenience, and a `needs:` removed to make a re-run faster puts one of those
 failures back.
@@ -33,7 +33,8 @@ internally consistent.
 
 ```text
 preflight ─┬─ transport-e2e ─┬─ docker ── sign-attest ─┐
-           └─ race ──────────┘                         │
+           ├─ race ──────────┤                         │
+           └─ binary-vulns ──┘                         │
                                                        ▼
                                                     release ─┬─ npm ───┐
                                                              ├─ pypi ──┼─ verify-published ─┬─ mcp-registry ─┐
@@ -42,16 +43,48 @@ preflight ─┬─ transport-e2e ─┬─ docker ── sign-attest ─┐
                                                              └─ winget  (skipped on a dispatch)
 ```
 
-**The gate is `transport-e2e` plus `race`, and it is in front of everything a tag
-sets in motion.** Nothing used to stand between a tag push and published
+**The gate is `transport-e2e`, `race` and `binary-vulns`, and it is in front of
+everything a tag sets in motion.** Nothing used to stand between a tag push and published
 binaries. The live end-to-end suite cannot fill that slot — it depends on
 third-party mirrors a release runner may not reach — but the transport suites
 depend on nothing external, so they can. The gate cannot stop the *tag*: the
 workflow triggers on the tag push, so by the time it runs the tag exists. What it
 stops is everything the tag would have produced.
 
-That gate job deliberately declares `contents: read` and takes no secrets. **A
+Each gate job deliberately declares `contents: read` and takes no secrets. **A
 gate that fails must not be able to leak what the jobs behind it hold.**
+
+**`binary-vulns` is the third gate, and it asks the scanners' question.**
+`make govulncheck` asks whether this module's code reaches a vulnerable symbol.
+Trivy, Grype, osv-scanner and every consumer of the SBOMs this release attaches
+ask whether any module a binary's build information names carries an advisory,
+reached or not. `make check-binary-vulns` builds the six targets `.goreleaser.yml`
+declares from the tagged tree and asks that, failing on a finding
+`cmd/audit_binary_vulns/declarations.go` does not accept and on a declaration no
+finding needs any more. CI runs it on every pull request; it runs again here
+because an advisory published after the commit's CI passed is exactly what a tag
+cut days later would ship. It declares `contents: read` and takes no secrets,
+like the other two.
+
+## What the GoReleaser job checks before anything leaves the draft
+
+Two steps run right after GoReleaser, on the bytes it wrote, while the release is
+still a draft and before the bundle, the attestations, the un-drafting and every
+publisher:
+
+- **Every linux binary is standalone.** `scripts/check_elf_standalone.py` reads
+  the program headers of every ELF file under `dist/` and refuses any that is not
+  ELF64 or carries a `PT_INTERP`, which is what `-buildmode=pie` adds (see
+  `CLAUDE.md`, *The binaries are standalone*). The Dockerfile, `validate-npm.mjs`
+  and `validate_pypi.py` each grep their own channel's bytes for a loader name;
+  this is the one check every channel inherits, the loose assets, the `.mcpb`,
+  NuGet and Homebrew included.
+- **The module-grain gate again, on these exact binaries.** `make
+  check-binary-vulns BINARIES='dist/libgen-mcp_*/libgen-mcp*'` scans GoReleaser's
+  output in place. The binaries are named by the platform their build information
+  records and must be the configuration's six targets, each once, so a glob that
+  missed one, or caught the universal darwin binary, fails instead of passing
+  short.
 
 ## Three rules that hold it together
 

@@ -866,6 +866,8 @@ make check-mcpb                                            # only if you touched
 make check-npm-launcher                                    # only if you touched npm/libgen-mcp/cli.js
 make check-homebrew-tap                                    # only if you touched scripts/update-homebrew-tap.sh
 make check-ci-scripts                                      # only if you touched the PR description gate or the site audit
+make check-binary-vulns                                    # only if you touched go.mod or .goreleaser.yml (needs network)
+make check-elf-standalone                                  # only if you touched scripts/check_elf_standalone.py
 make audit-site-deps                                       # only if you touched site/package.json or its lockfile (needs network)
 make check-pr-description                                  # once the pull request is open: its title and body land on main
 make check-server-json-packages                            # only if you touched server.json (needs network; CI runs it on push)
@@ -1270,7 +1272,7 @@ version, tagging, or publishing to the MCP registry, npm or LobeHub.
 
 **The chain's shape is a page rather than the skill**, because changing
 `release.yml` and cutting a release are different jobs:
-`docs/development/release-chain.md` has the fourteen jobs, why each edge exists,
+`docs/development/release-chain.md` has the fifteen jobs, why each edge exists,
 the digest handover that stops a tag from being pinned beside the previous
 release's image, and what a rehearsal cannot prove. The settings it depends on
 and CI cannot see — the branch ruleset, the three trusted publishers and their
@@ -1603,6 +1605,48 @@ interpreter path is a literal string in the ELF: the `Dockerfile` greps the
 binary it just built and fails the build, and `validate-npm.mjs` greps the
 *packed* linux bytes and fails the release. Adding the flag back therefore breaks
 loudly at build time instead of quietly on somebody's Alpine host.
+
+Those guards each cover one channel, so one check covers them all:
+`scripts/check_elf_standalone.py` (`make elf-standalone`) parses the program
+headers of every ELF under `dist/` and refuses one that is not ELF64 or carries a
+`PT_INTERP`. It runs in the GoReleaser job right after GoReleaser, before the
+`.mcpb`, NuGet, Homebrew and the loose assets are built from those bytes, and on
+every pull request over a snapshot build (CI's `Release binaries` job). **It
+parses, it does not grep**: `PT_INTERP` is what the kernel reads, and a string
+search is a proxy for it. `make check-elf-standalone` holds the script to a
+`-buildmode=pie` build, which it must refuse. Do not confuse it with gitlab-mcp-server's
+`check_elf_interp.py`, which *requires* an interpreter, because that project
+ships PIE on purpose.
+
+### What a scanner sees in the release binaries
+
+`make govulncheck` asks whether this module's code reaches a vulnerable symbol.
+Every scanner a user runs on a binary or its SBOM asks a coarser question: does
+any module the binary's build information names carry an advisory? `make
+check-binary-vulns` (`cmd/audit_binary_vulns`) asks that one, over the six
+targets `.goreleaser.yml` declares, through `golang.org/x/vuln/scan` at the
+version `go.mod` pins. It runs in CI's `Release binaries` job on every pull
+request, in the release's `binary-vulns` gate before `docker`, and on
+GoReleaser's own output before anything leaves the draft.
+
+A finding fails unless `cmd/audit_binary_vulns/declarations.go` accepts it,
+keyed `"<advisory> <module>"`, with a category (`not-linked`,
+`fix-not-yet-adoptable`, `not-reachable`) and a reason a reviewer can check. **A
+declaration no finding needs fails the run too**, so the table cannot outlive
+what it excused: the day a dependency bump fixes an advisory, the entry has to go
+in the same change. Two things about it are easy to get wrong:
+
+- **Do not add a declaration to make a red pull request green without measuring
+  it.** `not-linked` means a symbol-level scan of an unstripped build shows none
+  of the advisory's packages; `not-reachable` means the symbols are linked, the
+  source scan reaches none, and no release on the module's current minor line is
+  fixed. A fix on the line the module is on is an upgrade to make, not an entry
+  to write.
+- **The configuration is read strictly.** Any build key the command does not
+  read (`tags`, `buildmode`, `ignore`, a global `env`, a `gomod` section, a
+  before hook other than `go mod download`) is refused rather than guessed at,
+  and `-binaries` must match the configuration's targets exactly, each once.
+  Adding a key to `.goreleaser.yml` means teaching the command about it first.
 
 ## Commit & PR Conventions
 

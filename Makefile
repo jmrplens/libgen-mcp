@@ -6,7 +6,7 @@
 .PHONY: all build build-probe build-all run version \
         coverage-conditions coverage-mutants check-coverage-recipes \
         test test-short test-race test-e2e test-e2e-http test-e2e-stdio test-e2e-collector eval coverage cover-check \
-        lint golangci-lint govulncheck analyze analyze-fix fmt tidy vet \
+        lint golangci-lint govulncheck check-binary-vulns analyze analyze-fix fmt tidy vet \
         format-md-tables check-md-tables check-doc-links \
         godoc-audit godoc-check \
         gen-llms check-llms gen-lhm-manifest check-lhm-manifest \
@@ -21,7 +21,7 @@
         validate-http-stateless \
         install-tools release-check check-manifests check-stamper \
         check-server-json-packages check-supply-chain check-verify-published check-mcpb check-npm-launcher \
-        check-homebrew-tap \
+        check-homebrew-tap elf-standalone check-elf-standalone \
         check-pr-description audit-site-deps check-ci-scripts \
         mcpb gen-npm sync-npm-version validate-npm validate-npm-local \
         publish-npm-dry publish-npm \
@@ -331,6 +331,17 @@ govulncheck: ## Scan for known vulnerabilities (govulncheck)
 	@echo "=== govulncheck ==="
 	govulncheck -tags $(GO_ANALYSIS_TAGS) $(GO_ANALYSIS_PKGS)
 
+# The scanners' question rather than ours: govulncheck above asks whether this
+# module's code reaches a vulnerable symbol, while Trivy, Grype, osv-scanner and
+# every SBOM consumer report any advisory against any module a binary's build
+# information names. This builds the six targets .goreleaser.yml declares and
+# holds each one to that question, failing on a finding the table in
+# cmd/audit_binary_vulns/declarations.go does not accept and on a declaration no
+# finding needs. BINARIES=<glob> scans binaries already built instead (one per
+# target), which is how the release holds GoReleaser's own output to it.
+check-binary-vulns: ## Fail when a release binary carries an undeclared advisory at module grain (needs network)
+	go run ./cmd/audit_binary_vulns/ $(if $(BINARIES),-binaries '$(BINARIES)')
+
 fmt: ## Apply formatters (goimports, gofumpt, gci)
 	golangci-lint fmt
 
@@ -565,6 +576,18 @@ check-npm-launcher: ## Exercise the npm launcher against a stand-in and the real
 
 check-homebrew-tap: ## Render the Homebrew formula from a fixture checksums.txt and check what it installs (offline)
 	python3 -m unittest discover -s scripts -p 'update_homebrew_tap_sh_test.py'
+
+# Every linux ELF under DIST is ELF64 with no PT_INTERP program header: the
+# property the "binaries are standalone" rule is about, read from the program
+# headers rather than grepped for. The release runs it over GoReleaser's dist/
+# before anything ships; check-elf-standalone drives the script itself against
+# a -buildmode=pie build (refused) and the release's build (accepted).
+DIST ?= dist
+elf-standalone: ## Fail unless every linux ELF under DIST (default dist/) is standalone: ELF64, no PT_INTERP
+	python3 scripts/check_elf_standalone.py $(DIST)
+
+check-elf-standalone: ## Exercise the standalone-ELF check against PIE and static fixture builds (needs go)
+	python3 -m unittest discover -s scripts -p 'check_elf_standalone_test.py'
 
 check-supply-chain: ## Every action pinned, no run-time-resolved code in a credentialed job, cooldowns stated
 	go run ./cmd/audit_supply_chain/

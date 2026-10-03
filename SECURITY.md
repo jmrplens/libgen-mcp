@@ -158,6 +158,12 @@ wanted:
 - CI runs `govulncheck`, `golangci-lint`, `go vet`, the race detector and a
   SonarCloud quality gate on every change; dependencies are updated by
   Dependabot.
+- The release binaries themselves are scanned the way a user's scanner reads
+  them: every advisory against any module their build information names, on
+  every pull request and again at release before anything is published. One
+  that ships does so only with a reviewed reason in
+  `cmd/audit_binary_vulns/declarations.go`, and that file, at a release's tag,
+  is the list of what a scanner will report against its binaries and why.
 - Release binaries are built by GitHub Actions from a tagged commit, and the
   container image runs as a non-root user.
 
