@@ -272,6 +272,10 @@ type citeAuthors struct {
 	etAl   bool
 }
 
+// etAlTail is what follows the named authors when a style cuts the list
+// short, before the style's own closing punctuation.
+const etAlTail = ", et al"
+
 // etAlSuffix matches an "et al." that ends a name or stands as one, in the
 // spellings catalogs use ("et al.", "et al", "et. al.", "Et Al").
 var etAlSuffix = regexp.MustCompile(`(?i)(^|[\s,;]+)et\.?\s*al\.?$`)
@@ -454,7 +458,7 @@ func localAPA(f citeFields) string {
 	if authors.etAl && len(names) > 0 {
 		// The record names only some of the authors, so there is no last one
 		// to put "&" before.
-		head = strings.Join(names, ", ") + ", et al."
+		head = strings.Join(names, ", ") + etAlTail + "."
 	}
 	title := f.title
 	if ed := editionText(f.edition); ed != "" && !f.isArticle {
@@ -480,13 +484,13 @@ func localMLA(f citeFields) string {
 	var head string
 	switch {
 	case authors.etAl && len(people) > 0:
-		head = people[0].inverted() + ", et al"
+		head = people[0].inverted() + etAlTail
 	case len(people) == 1:
 		head = people[0].inverted()
 	case len(people) == 2:
 		head = people[0].inverted() + serialAnd + people[1].natural()
 	case len(people) > 2:
-		head = people[0].inverted() + ", et al"
+		head = people[0].inverted() + etAlTail
 	}
 	if f.isArticle {
 		var vol string
@@ -521,7 +525,7 @@ func chicagoNames(authors citeAuthors) string {
 		}
 	}
 	if authors.etAl && len(names) > 0 {
-		return strings.Join(names, ", ") + ", et al"
+		return strings.Join(names, ", ") + etAlTail
 	}
 	return joinSerial(names, ", ", serialAnd, " and ")
 }
