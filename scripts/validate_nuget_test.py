@@ -181,6 +181,55 @@ class PackedLayoutTest(PackedFixture):
                 self.assertTrue(any(want in p for p in problems), problems)
 
 
+class ValidatePackagesLayoutTest(unittest.TestCase):
+    """validate_packages runs the layout check over every package it is given,
+    so a package the signing would rewrite fails the release before the push."""
+
+    VERSION = "1.0.0"
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="validate-nuget-packages-")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.out = os.path.join(self.tmp, "dist")
+        os.makedirs(self.out)
+        digests = {}
+        for plat_key, rid in build_nuget.RIDS.items():
+            binary = os.path.join(self.tmp, "libgen-mcp-" + plat_key)
+            with open(binary, "wb") as fh:
+                fh.write(plat_key.encode() * 64)
+            with open(binary, "rb") as fh:
+                digests[plat_key] = hashlib.sha256(fh.read()).hexdigest()
+            build_nuget.build_rid_package(self.out, self.VERSION, plat_key, rid, binary)
+        server_doc = build_nuget.mcp_server_json(
+            {"name": build_nuget.SERVER_NAME, "packages": [
+                {"registryType": "nuget", "identifier": build_nuget.PKG_ID, "version": "0"}]},
+            self.VERSION,
+        )
+        self.pointer = build_nuget.build_pointer(
+            self.out, self.VERSION, "README " + build_nuget.MCP_NAME_TOKEN, None, server_doc)
+        with open(os.path.join(self.out, validate_nuget.VERIFIED_MANIFEST), "w", encoding="utf-8") as fh:
+            fh.write('{{"version": "{}", "verified": true, "binaries": {}}}'.format(
+                self.VERSION, str(digests).replace("'", '"')))
+
+    def layout_problems(self):
+        """layout_problems runs validate_packages and keeps the layout findings."""
+        problems = validate_nuget.validate_packages(self.out, self.VERSION)
+        return [p for p in problems if "archive comment" in p or "data descriptor" in p]
+
+    def test_packed_packages_report_no_layout_problem(self):
+        self.assertEqual(self.layout_problems(), [])
+
+    def test_a_package_with_an_archive_comment_is_reported(self):
+        path = os.path.join(self.out, self.pointer)
+        with open(path, "rb") as fh:
+            blob = rewrite(fh.read(), comment=b"built by hand")
+        with open(path, "wb") as fh:
+            fh.write(blob)
+        problems = self.layout_problems()
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn(self.pointer + ": 13 byte(s) of archive comment", problems[0])
+
+
 class SignableLayoutTest(unittest.TestCase):
     """check_signable_layout over hand-damaged bytes, one record at a time.
 
