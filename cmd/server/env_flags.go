@@ -99,7 +99,7 @@ func registerEnvBackedFlags() {
 		entry := &envBackedFlags[i]
 		entry.value = flag.String(entry.flagName, "", entry.usage)
 	}
-	mirrorFlag = flag.String(mirrorFlagName, "", "Pin a single mirror, e.g. https://libgen.li, and skip auto-discovery")
+	mirrorFlag = flag.String(mirrorFlagName, "", "Try this mirror first, e.g. https://libgen.li; the discovered ones remain the fallback")
 	envFileFlag = flag.String(envFileFlagName, "", "Load settings from this dotenv file in addition to ~/"+config.EnvFileName+
 		". Give an absolute path: a relative one is resolved against the working directory, which the MCP client chooses and changes with every workspace it opens. A .env in the working directory is never loaded")
 }

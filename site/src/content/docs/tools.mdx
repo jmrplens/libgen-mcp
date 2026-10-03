@@ -294,7 +294,7 @@ A hit may also carry a `venue`: the publication venue exactly as the provider st
 	<Fragment slot="next_steps">Suggested follow-up tool calls given this result — e.g. a `download` call using this record's `md5` (book) or `doi` (article). Present to guide the model; safe to ignore.</Fragment>
 	<Fragment slot="file">The file record (present for an `md5` lookup, or an `id` lookup with `object: file`).</Fragment>
 	<Fragment slot="edition">The edition record (present for an `md5` lookup's related edition, or an `id` lookup with `object: edition`).</Fragment>
-	<Fragment slot="citations">`{"bibtex": ..., "ris": ...}` — a ready-to-paste BibTeX and RIS export built from the record's metadata. Omitted when the record has no title (the minimum needed for a usable citation). Empty metadata fields are dropped rather than emitted blank, and the export carries no ISBN field at all.</Fragment>
+	<Fragment slot="citations">`{"bibtex": ..., "ris": ..., "doi_status": ..., "provenance": ...}` — a ready-to-paste BibTeX and RIS export built from the record's metadata, with `doi_status` (`confirmed`, `unverified` or `mismatch` against Crossref, and only a confirmed DOI is written into the entries) and `provenance` (where each field came from, to relay with the citation). Omitted when the record has no title (the minimum needed for a usable citation). Empty metadata fields are dropped rather than emitted blank, and the export carries no ISBN field at all.</Fragment>
 	<Fragment slot="enrichment">Best-effort external metadata (Crossref/OpenLibrary), present when `enrich` was requested and something was found — and on the Crossref fallback below, which returns it whether or not you asked. See [Metadata enrichment](#metadata-enrichment).</Fragment>
 </SchemaTable>
 

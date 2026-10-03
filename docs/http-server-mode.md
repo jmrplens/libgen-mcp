@@ -278,7 +278,8 @@ Ten is the bound, not the typical cost: a search still queued for its catalog to
 the caller's connection. The ceiling is sized so that it cannot be outrun, which is why it is
 counted at the worst case.
 
-Windows has no such limit to read and is sized as 1024. **No flag moves it**, for the reason the
+Elsewhere than Linux and macOS (Windows, the BSDs) the server reads no limit and sizes the
+process as 1024. **No flag moves it**, for the reason the
 ceiling of 64 has none: an operator who could raise it could configure away the one bound that
 keeps the process answering. Raising the descriptor limit (`ulimit -n`, `LimitNOFILE=` on a
 systemd unit, `--ulimit nofile=` for a container) raises it together with what it protects.
@@ -366,12 +367,14 @@ Kubernetes readiness probe each have their own. It is capped at five minutes; pa
 not a handover but a shutdown that appears to hang, and every supervisor kills the process long
 before it elapses.
 
-The graceful phase after the listener closes is bounded at **15 seconds**, and the bracket is
+The graceful phase after the listener closes is bounded at **8 seconds**, and the bracket is
 tight from both sides. Below it sit the things a request may legitimately still be doing — a
 resolve inside `LIBGEN_MCP_RESOLVE_BUDGET`, a transfer inside
 `LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT`. Above it sits the supervisor's own grace: ten seconds for
 `docker stop`, thirty for a Kubernetes pod, after which the process is killed and the budget is
-academic. It is a ceiling and never a floor, so a process told it has less closes its listener
+academic. Eight leaves room for closing the remaining connections and exiting inside the
+shortest of those, and a `--drain-delay` adds to the same budget, so raise the supervisor's
+grace with it. It is a ceiling and never a floor, so a process told it has less closes its listener
 instead of being killed mid-drain.
 
 ## Closing what has gone idle
@@ -709,6 +712,10 @@ setting that appears to be in force and is not:
 | A negative `--max-request-body-bytes`                                         | It would lift the cap entirely                                                          |
 | A `LIBGEN_MCP_*` value that does not parse                                    | Falling back to the default in silence is how a mismatched deployment survives          |
 | A non-socket file, or a live socket, at the `--http` path                     | Replacing it is not this program's call, and stealing a live endpoint is worse          |
+
+Every refusal exits with status 1, and the last record the server writes is the reason, at
+`ERROR`. Up to 2.0.1 that record went out at `INFO`, so a log filter for errors showed nothing
+about why the process died.
 
 The first one deserves a note, because the container case is easy to miss: the image's default
 listener binds `0.0.0.0:8080`, which is exactly the shape the refusal is about, even when the

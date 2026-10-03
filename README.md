@@ -445,6 +445,7 @@ You can restrict which sources participate with `LIBGEN_MCP_SOURCES`; the chain 
 - **Mirror failover** — mirrors are auto-discovered, cached, and rotated; a failed request transparently retries the next live mirror.
 - **Retry with backoff** — transient HTTP failures are retried up to `LIBGEN_MCP_RETRY_ATTEMPTS` times with exponential backoff.
 - **Rate limiting** — outbound requests are throttled (`LIBGEN_MCP_RATE_RPS` / `LIBGEN_MCP_RATE_BURST`) to stay polite to mirrors.
+- **Bounded under load** — an HTTP deployment holds no more calls and stateful sessions than its descriptor limit allows, and refuses the next one (`This server is busy. Retry later.`, or a `503` with `Retry-After`) instead of running out of descriptors. The figures are in [HTTP server mode](docs/http-server-mode.md#what-the-whole-process-may-hold).
 - **Graceful shutdown** — in-flight work is allowed to drain on termination signals; tool panics are recovered so the stdio session never dies.
 
 </details>
@@ -523,7 +524,7 @@ In HTTP mode the server publishes **two server cards**, one per location, becaus
 Library Genesis mirrors occasionally change their HTML layout or routes. Two tools help you detect and confirm those changes:
 
 - **Live diagnostic** — `go run ./cmd/probe` hits a live mirror and reports whether each route and parser still works. Run it if searches or downloads start failing.
-- **Opt-in end-to-end test** — `go test -tags e2e ./test/e2e/` queries the real site and asserts the results still parse. It is gated behind the `e2e` build tag, so it never runs under a plain `go test ./...`.
+- **Opt-in end-to-end test** — `go test -tags e2e ./test/e2e/` queries the real site and asserts the results still parse. It is gated behind the `e2e` build tag **and** `LIBGEN_E2E=1` (`LIBGEN_E2E=1 go test -tags e2e ./test/e2e/`, or `make test-e2e`), so it never runs under a plain `go test ./...`.
 
 ## Responsible use
 

@@ -35,9 +35,9 @@ it.
   invoke something to see — and the chain's *shape*, which a contributor
   changing a workflow needs and a release-cutter does not, is
   [release-chain.md](release-chain.md).
-- **`docs/superpowers/`.** A historical tree of plans and specifications, kept
-  for the record and superseded by design. It is not maintained and not held to
-  the documentation gates.
+- **`docs/superpowers/`.** A local tree of plans and specifications, gitignored
+  and therefore not in the repository. A checkout that has one keeps it outside
+  the documentation gates, which skip the path.
 
 ## The short version
 
