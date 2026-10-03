@@ -81,10 +81,16 @@ func (p *PubMedProvider) Name() string { return "pubmed" }
 // degrades to an empty result with no error, so a failing provider never sinks a
 // federated search. Only a context cancellation or deadline propagates as an error.
 func (p *PubMedProvider) Search(ctx context.Context, query string, limit int) ([]DiscoveryResult, error) {
+	return p.SearchYears(ctx, query, limit, YearRange{})
+}
+
+// SearchYears is Search bounded to the publication years in years, which esearch
+// takes as mindate and maxdate on the publication date. Its contract is Search's.
+func (p *PubMedProvider) SearchYears(ctx context.Context, query string, limit int, years YearRange) ([]DiscoveryResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 
-	searchBody, err := p.get(ctx, p.esearchURL(query, limit))
+	searchBody, err := p.get(ctx, p.esearchURL(query, limit, years))
 	if err != nil || searchBody == nil {
 		return nil, err
 	}
@@ -126,11 +132,19 @@ func (p *PubMedProvider) get(ctx context.Context, rawURL string) ([]byte, error)
 // output, the clamped hit ceiling on retmax, and relevance ordering (esearch defaults
 // to newest-first, which for a topical query buries the standard references under
 // last week's papers).
-func (p *PubMedProvider) esearchURL(query string, limit int) string {
+func (p *PubMedProvider) esearchURL(query string, limit int, years YearRange) string {
 	params := p.commonParams()
 	params.Set("term", query)
 	params.Set("retmax", strconv.Itoa(clampPubMedLimit(limit)))
 	params.Set("sort", "relevance")
+	if !years.IsZero() {
+		// E-utilities takes the two dates together or not at all, so an open side
+		// is filled from the bounds the search tool accepts.
+		from, to := years.Bounds()
+		params.Set("datetype", "pdat")
+		params.Set("mindate", strconv.Itoa(from))
+		params.Set("maxdate", strconv.Itoa(to))
+	}
 	return pubmedBase + "/esearch.fcgi?" + params.Encode()
 }
 

@@ -455,6 +455,16 @@
           ]
         },
         {
+          "name": "year_from",
+          "type": "integer",
+          "required": false
+        },
+        {
+          "name": "year_to",
+          "type": "integer",
+          "required": false
+        },
+        {
           "name": "extra_sources",
           "type": "string",
           "required": false,
@@ -510,6 +520,11 @@
           "name": "has_more",
           "type": "boolean",
           "required": true
+        },
+        {
+          "name": "year_filtered",
+          "type": "integer",
+          "required": false
         },
         {
           "name": "mirror",

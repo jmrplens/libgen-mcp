@@ -85,6 +85,13 @@ func (p *OpenAlexProvider) Name() string { return "openalex" }
 // federated result, which has several others. The download chain's single-entity
 // lookup is free and unlimited, so the guard is not what protects it.
 func (p *OpenAlexProvider) Search(ctx context.Context, query string, limit int) ([]DiscoveryResult, error) {
+	return p.SearchYears(ctx, query, limit, YearRange{})
+}
+
+// SearchYears is Search bounded to the publication years in years, which OpenAlex
+// takes as a publication_year filter beside the search. Its contract, and its
+// budget guard, are Search's.
+func (p *OpenAlexProvider) SearchYears(ctx context.Context, query string, limit int, years YearRange) ([]DiscoveryResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 
@@ -96,7 +103,7 @@ func (p *OpenAlexProvider) Search(ctx context.Context, query string, limit int) 
 		p.refund(charged)
 		return nil, ctx.Err()
 	}
-	body, ok, err := p.get(ctx, p.searchURL(query, limit), charged)
+	body, ok, err := p.get(ctx, p.searchURL(query, limit, years), charged)
 	if err != nil {
 		return nil, err
 	}
@@ -150,11 +157,15 @@ func (p *OpenAlexProvider) refund(charged bool) {
 // OpenAlex retired its mailto polite pool in February 2026 and ignores the
 // parameter, so the User-Agent is the identification and the key is the only
 // thing that changes the allowance.
-func (p *OpenAlexProvider) searchURL(query string, limit int) string {
+func (p *OpenAlexProvider) searchURL(query string, limit int, years YearRange) string {
 	params := url.Values{}
 	params.Set("search", query)
 	params.Set("per_page", strconv.Itoa(clampOpenAlexLimit(limit)))
 	params.Set("select", openAlexSelect)
+	if !years.IsZero() {
+		from, to := years.Bounds()
+		params.Set("filter", "publication_year:"+strconv.Itoa(from)+"-"+strconv.Itoa(to))
+	}
 	return strings.TrimRight(openAlexBase, "/") + "/works?" + params.Encode()
 }
 

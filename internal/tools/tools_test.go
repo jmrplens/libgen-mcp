@@ -5261,3 +5261,219 @@ func TestUnresolvedCitationSteps(t *testing.T) {
 		t.Errorf("a lookup not by citation got steps %q", got)
 	}
 }
+
+// TestSearchHandler_RefusesABadYearRange checks a year range that cannot be
+// searched is refused before anything is fetched: the handler is built with no
+// catalog client at all, so reaching one would panic.
+func TestSearchHandler_RefusesABadYearRange(t *testing.T) {
+	cfg := &config.Config{ExtraSources: config.ExtraSourcesAlways}
+	handler := searchHandler(nil, cfg, nil)
+	cases := []struct {
+		name    string
+		in      SearchInput
+		wantErr string
+	}{
+		{name: "reversed", in: SearchInput{Query: "q", YearFrom: 2020, YearTo: 2010}, wantErr: "year_from (2020) is after year_to (2010)"},
+		{name: "too early", in: SearchInput{Query: "q", YearFrom: 12}, wantErr: "year_from must be a year between"},
+		{name: "too late", in: SearchInput{Query: "q", YearTo: 30000}, wantErr: "year_to must be a year between"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, err := handler(context.Background(), nil, tc.in)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("handler error = %v, want one containing %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+// TestSearchHandler_FiltersTheCatalogPageByYear runs the handler against the
+// catalog fixture twice, unbounded and then from a year inside the fixture's
+// spread, and checks the bounded page is the unbounded one minus exactly the
+// records the range excludes, with that number reported and the catalog's own
+// counts left as they were.
+func TestSearchHandler_FiltersTheCatalogPageByYear(t *testing.T) {
+	searchHTML := mustReadFile(t, "../libgen/testdata/search_books.html")
+	catalog := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(searchHTML)
+	}))
+	t.Cleanup(catalog.Close)
+	cfg := &config.Config{
+		DownloadDir: t.TempDir(), Timeout: 10 * time.Second, RateRPS: 1000, RateBurst: 100,
+		RetryAttempts: 1, ExtraSources: config.ExtraSourcesNever,
+	}
+	handler := searchHandler(libgen.New(staticMirrors{catalog.URL}, cfg), cfg, nil)
+
+	_, all, err := handler(context.Background(), nil, SearchInput{Query: "golang"})
+	if err != nil {
+		t.Fatalf("unbounded search: %v", err)
+	}
+	var years []int
+	for _, r := range all.Results {
+		if y, ok := discovery.ParseYear(r.Year); ok {
+			years = append(years, y)
+		}
+	}
+	if len(years) < 2 || slices.Min(years) == slices.Max(years) {
+		t.Fatalf("the fixture needs records from at least two years, got %v", years)
+	}
+	from := slices.Max(years)
+	wantKept := 0
+	for _, y := range years {
+		if y >= from {
+			wantKept++
+		}
+	}
+
+	_, bounded, err := handler(context.Background(), nil, SearchInput{Query: "golang", YearFrom: from})
+	if err != nil {
+		t.Fatalf("bounded search: %v", err)
+	}
+	if len(bounded.Results) != wantKept || bounded.YearFiltered != len(all.Results)-wantKept {
+		t.Errorf("kept %d and reported %d filtered, want %d kept of %d", len(bounded.Results), bounded.YearFiltered, wantKept, len(all.Results))
+	}
+	if bounded.TotalFiles != all.TotalFiles || bounded.HasMore != all.HasMore {
+		t.Errorf("the catalog's counts moved: total %q has_more %v, want %q %v", bounded.TotalFiles, bounded.HasMore, all.TotalFiles, all.HasMore)
+	}
+	if !strings.Contains(strings.Join(bounded.NextSteps, " "), "left out") {
+		t.Errorf("next steps do not explain the filter: %v", bounded.NextSteps)
+	}
+}
+
+// TestKeepCatalogYears covers the catalog filter on its own: a zero range keeps
+// the page untouched, and a bounded one drops out-of-range and undated records and
+// counts them.
+func TestKeepCatalogYears(t *testing.T) {
+	page := []libgen.Result{{Title: "a", Year: "2001"}, {Title: "b", Year: "2015"}, {Title: "c"}}
+	cases := []struct {
+		name        string
+		years       discovery.YearRange
+		wantTitles  string
+		wantDropped int
+	}{
+		{name: "zero range", years: discovery.YearRange{}, wantTitles: "a,b,c"},
+		{name: "from 2010", years: discovery.YearRange{From: 2010}, wantTitles: "b", wantDropped: 2},
+		{name: "up to 2010", years: discovery.YearRange{To: 2010}, wantTitles: "a", wantDropped: 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			kept, dropped := keepCatalogYears(page, tc.years)
+			var titles []string
+			for _, r := range kept {
+				titles = append(titles, r.Title)
+			}
+			if got := strings.Join(titles, ","); got != tc.wantTitles || dropped != tc.wantDropped {
+				t.Errorf("kept %q dropped %d, want %q and %d", got, dropped, tc.wantTitles, tc.wantDropped)
+			}
+		})
+	}
+}
+
+// TestSearchNextSteps_OpenAccessOnlyIsNotAnEmptySearch pins the shape of a rescued
+// search: the catalog list is empty and the open-access list is not, which must
+// be answered with open-access guidance and never with "nothing was found".
+func TestSearchNextSteps_OpenAccessOnlyIsNotAnEmptySearch(t *testing.T) {
+	out := SearchOutput{OpenAccess: []discovery.DiscoveryResult{{Origin: "openalex", DOI: "10.1/x", OpenAccess: true}}}
+	joined := strings.Join(searchNextSteps(out, true, config.ExtraSourcesAuto), " ")
+	for _, banned := range []string{"No matches", "nothing was found", "also returned nothing"} {
+		t.Run(banned, func(t *testing.T) {
+			if strings.Contains(joined, banned) {
+				t.Errorf("steps for an open-access-only result say %q: %s", banned, joined)
+			}
+		})
+	}
+	if !strings.Contains(joined, "open_access") {
+		t.Errorf("steps do not point at the open_access list: %s", joined)
+	}
+}
+
+// TestYearFilterStep checks the step appears only when the range left something
+// out, and offers the next page only when one may exist.
+func TestYearFilterStep(t *testing.T) {
+	cases := []struct {
+		name     string
+		out      SearchOutput
+		want     string
+		wantNext bool
+	}{
+		{name: "nothing left out", out: SearchOutput{}, want: ""},
+		{name: "left out on a full page", out: SearchOutput{YearFiltered: 3, HasMore: true, Page: 2}, want: "left out 3", wantNext: true},
+		{name: "left out on the last page", out: SearchOutput{YearFiltered: 1, Page: 1}, want: "left out 1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := yearFilterStep(tc.out)
+			if tc.want == "" {
+				if got != "" {
+					t.Errorf("yearFilterStep() = %q, want nothing", got)
+				}
+				return
+			}
+			if !strings.Contains(got, tc.want) || strings.Contains(got, "Request page 3") != tc.wantNext {
+				t.Errorf("yearFilterStep() = %q", got)
+			}
+		})
+	}
+}
+
+// TestSearchNextSteps_RangeEmptiedCatalogRescued checks a catalog page the year
+// range emptied, rescued by open-access hits, is described as having no match in
+// the range rather than no match at all.
+func TestSearchNextSteps_RangeEmptiedCatalogRescued(t *testing.T) {
+	out := SearchOutput{YearFiltered: 5, OpenAccess: []discovery.DiscoveryResult{{Origin: "arxiv", PDFURL: "https://arxiv.org/pdf/1"}}}
+	joined := strings.Join(searchNextSteps(out, true, config.ExtraSourcesAuto), " ")
+	if !strings.Contains(joined, "no match in the year range") {
+		t.Errorf("steps = %s", joined)
+	}
+}
+
+// TestEmptySearchVerdictStep checks a range-emptied page with more pages points
+// at the next page instead of telling the user nothing was found.
+func TestEmptySearchVerdictStep(t *testing.T) {
+	cases := []struct {
+		name string
+		out  SearchOutput
+		want string
+	}{
+		{name: "range emptied a full page", out: SearchOutput{YearFiltered: 25, HasMore: true, Page: 1}, want: "request page 2"},
+		{name: "range emptied the last page", out: SearchOutput{YearFiltered: 3, Page: 4}, want: "Tell the user nothing was found"},
+		{name: "no range", out: SearchOutput{HasMore: true}, want: "Tell the user nothing was found"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := emptySearchVerdictStep(tc.out); !strings.Contains(got, tc.want) {
+				t.Errorf("emptySearchVerdictStep() = %q, want it to contain %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestEmptySearchSteps_YearFilterReplacesNoMatches checks that when the range is
+// what emptied the page, the guidance says so instead of claiming no matches.
+func TestEmptySearchSteps_YearFilterReplacesNoMatches(t *testing.T) {
+	joined := strings.Join(emptySearchSteps(SearchOutput{YearFiltered: 4}, false, config.ExtraSourcesAuto), " ")
+	if strings.Contains(joined, "No matches") || !strings.Contains(joined, "left out 4") {
+		t.Errorf("steps = %s", joined)
+	}
+}
+
+// TestSearchInputSchema_BoundsTheYears checks both year arguments carry the range
+// YearRange.Validate enforces, so a client can refuse a bad year before calling.
+func TestSearchInputSchema_BoundsTheYears(t *testing.T) {
+	schema := searchInputSchema()
+	for _, name := range []string{"year_from", "year_to"} {
+		t.Run(name, func(t *testing.T) {
+			prop := schema.Properties[name]
+			if prop == nil || prop.Minimum == nil || prop.Maximum == nil {
+				t.Fatalf("%s has no bounds: %+v", name, prop)
+			}
+			if *prop.Minimum != discovery.MinYear || *prop.Maximum != discovery.MaxYear {
+				t.Errorf("%s bounds = [%v, %v], want [%d, %d]", name, *prop.Minimum, *prop.Maximum, discovery.MinYear, discovery.MaxYear)
+			}
+		})
+	}
+	setIntegerRange(schema, "absent", 1, 2)
+	if schema.Properties["absent"] != nil {
+		t.Error("setIntegerRange invented a property")
+	}
+}

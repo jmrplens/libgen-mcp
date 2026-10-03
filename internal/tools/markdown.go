@@ -115,10 +115,15 @@ func resultLinks(r libgen.Result) string {
 
 // renderSearchMarkdown renders a search result page as a Markdown summary plus a
 // results table (or a no-results note), followed by the next-steps block.
+//
+// An empty catalog list still renders the open-access table: escalation runs when
+// the catalog finds nothing, so that table is the whole answer of a rescued search.
 func renderSearchMarkdown(out SearchOutput) string {
 	var b strings.Builder
 	if len(out.Results) == 0 {
-		fmt.Fprintf(&b, "No results (mirror %s).\n", out.Mirror)
+		fmt.Fprintf(&b, "No catalog results (mirror %s).\n", out.Mirror)
+		writeYearFiltered(&b, out.YearFiltered)
+		writeOpenAccess(&b, out.OpenAccess)
 		writeNextSteps(&b, out.NextSteps)
 		return b.String()
 	}
@@ -126,7 +131,9 @@ func renderSearchMarkdown(out SearchOutput) string {
 	if out.TotalFiles != "" {
 		fmt.Fprintf(&b, " of %s reported", out.TotalFiles)
 	}
-	fmt.Fprintf(&b, " (mirror %s).\n\n", out.Mirror)
+	fmt.Fprintf(&b, " (mirror %s).\n", out.Mirror)
+	writeYearFiltered(&b, out.YearFiltered)
+	b.WriteString("\n")
 	// The file name sits beside the year because it is so often the year's stand-in:
 	// the catalog leaves year empty on most standards and many scans, and the name
 	// the file was uploaded under is what says which revision a row is.
@@ -143,6 +150,17 @@ func renderSearchMarkdown(out SearchOutput) string {
 	writeOpenAccess(&b, out.OpenAccess)
 	writeNextSteps(&b, out.NextSteps)
 	return b.String()
+}
+
+// writeYearFiltered says how many catalog records on the page the year range left
+// out, and that the count is of this page, not of the catalog. It writes nothing
+// when the range left nothing out.
+func writeYearFiltered(b *strings.Builder, filtered int) {
+	if filtered == 0 {
+		return
+	}
+	fmt.Fprintf(b, "The year range left out %d catalog records on this page (outside it or undated). "+
+		"The catalog cannot filter by year, so the reported totals are unfiltered.\n", filtered)
 }
 
 // writeOpenAccess appends an "Open access" table for the federated beyond-catalog
