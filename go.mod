@@ -8,8 +8,8 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/ledongthuc/pdf v0.0.0-20260907135840-6c8c28e0e8a0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
-	github.com/pdfcpu/pdfcpu v0.15.0
-	github.com/shirou/gopsutil/v4 v4.26.8
+	github.com/pdfcpu/pdfcpu v0.16.0
+	github.com/shirou/gopsutil/v4 v4.26.9
 	github.com/tiktoken-go/tokenizer v0.8.1
 	go.opentelemetry.io/contrib/bridges/otelslog v0.20.1
 	go.opentelemetry.io/otel v1.46.0

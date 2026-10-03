@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 )
 
 // TestPdfOutline_ContextCancelledDirect verifies pdfOutline's own entry guard:
@@ -80,17 +78,11 @@ func TestOutline_PDFBookmarks(t *testing.T) {
 // caller's home that the installation page does not list, and would panic
 // instead on the read-only root filesystem the published images have.
 //
-// It asserts both halves on purpose. The directory check is the behavior, but
-// on its own it could pass for the wrong reason: model.NewDefaultConfiguration
-// memoizes the configuration it loaded, so had anything installed one earlier
-// in this binary under the real home, the call below would be served from that
-// cache and write nothing here. Pinning ConfigPath says the switch is off,
-// whatever ran first, and that is what keeps the cache from ever being filled.
+// The reader hands pdfcpu a stateless configuration, which never consults
+// model.NewDefaultConfiguration's memoized default, so the directory check
+// below cannot pass merely because something earlier in this binary had
+// already installed a configuration under the real home.
 func TestOutline_PDFLeavesNoConfigDirectory(t *testing.T) {
-	if model.ConfigPath != "disable" {
-		t.Errorf("pdfcpu's config dir must be disabled for this package, got ConfigPath %q", model.ConfigPath)
-	}
-
 	// os.UserConfigDir reads a different variable per platform: XDG_CONFIG_HOME
 	// or HOME on Linux, HOME on macOS, AppData on Windows. All of them point at
 	// a directory that has to stay empty for the assertion below to mean

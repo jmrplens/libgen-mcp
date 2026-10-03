@@ -19,12 +19,13 @@ const noPDFOutlineReason = "no embedded table of contents (none found, or it cou
 	"the text layer is readable, so read the text sequentially or use find"
 
 // pdfcpu installs a configuration directory the first time anything asks it for
-// a configuration: model.NewDefaultConfiguration writes a config.yml, a certs
-// directory and a Roboto font under os.UserConfigDir, or under os.TempDir when
-// no config directory can be resolved. This package asks for one on every
-// outline read, and it is the only thing in this module that touches pdfcpu.
+// its default configuration: model.NewDefaultConfiguration writes a config.yml,
+// a certs directory and a Roboto font under os.UserConfigDir, or under
+// os.TempDir when no config directory can be resolved. This package reads an
+// outline on every call, and it is the only thing in this module that touches
+// pdfcpu.
 //
-// Disabling it is both a correctness fix and a courtesy. The courtesy: reading
+// Avoiding it is both a correctness fix and a courtesy. The courtesy: reading
 // somebody's PDF is not a reason to leave a directory in their home, and the
 // installation page's list of what this server writes on a machine does not
 // name one. The correctness: when the write fails — a read-only root
@@ -33,11 +34,13 @@ const noPDFOutlineReason = "no embedded table of contents (none found, or it cou
 // comes back with "no embedded table of contents" for a reason that has
 // nothing to do with the document.
 //
-// api.DisableConfigDir is pdfcpu's own switch for this (the command line spells
-// it -conf disable) and makes model.NewDefaultConfiguration return the
-// compiled-in defaults instead. What it costs is user fonts, which are for
+// So every read hands pdfcpu a stateless configuration of its own:
+// model.NewStatelessConfiguration is the compiled-in defaults, built without
+// touching the disk or the memoized default, and api.Bookmarks uses the
+// configuration it is given rather than looking one up. Up to pdfcpu 0.15 this
+// was a process-wide api.DisableConfigDir in an init, which 0.16 deprecates in
+// favor of the stateless mode. What it costs is user fonts, which are for
 // stamping text into a PDF; this package only reads bookmarks out of one.
-func init() { api.DisableConfigDir() }
 
 // pdfOutline reads a PDF's embedded bookmarks best-effort via pdfcpu and returns
 // them as a flat, in-order OutlineResult. pdfcpu can panic or error on malformed
@@ -54,7 +57,7 @@ func pdfOutline(ctx context.Context, filePath string) (OutlineResult, error) {
 	if err := ctx.Err(); err != nil {
 		return OutlineResult{}, err
 	}
-	entries := pdfBookmarkEntries(filePath)
+	entries := pdfBookmarkEntries(ctx, filePath)
 	if len(entries) > 0 {
 		return OutlineResult{Format: "pdf", Extractable: true, Entries: entries}, nil
 	}
@@ -66,14 +69,14 @@ func pdfOutline(ctx context.Context, filePath string) (OutlineResult, error) {
 // errors or panics — yields no entries rather than a diagnosis of its own: the
 // text-layer probe that follows produces one, in the same words the text path
 // would use for the same file.
-func pdfBookmarkEntries(filePath string) []OutlineEntry {
+func pdfBookmarkEntries(ctx context.Context, filePath string) []OutlineEntry {
 	f, err := os.Open(filePath)
 	if err != nil {
 		return nil
 	}
 	defer func() { _ = f.Close() }()
 
-	bms, ok := readBookmarks(f)
+	bms, ok := readBookmarks(ctx, f)
 	if !ok || len(bms) == 0 {
 		return nil
 	}
@@ -104,14 +107,15 @@ func pdfNoOutlineResult(ctx context.Context, filePath string) (OutlineResult, er
 
 // readBookmarks calls pdfcpu's bookmark reader inside a recover()-guarded
 // closure so a panic on malformed input becomes ok=false ("no outline") rather
-// than a crash. A non-nil pdfcpu error is likewise reported as ok=false.
-func readBookmarks(f *os.File) (bms []pdfcpu.Bookmark, ok bool) {
+// than a crash. A non-nil pdfcpu error is likewise reported as ok=false, and so
+// is a read the caller's context ended.
+func readBookmarks(ctx context.Context, f *os.File) (bms []pdfcpu.Bookmark, ok bool) {
 	defer func() {
 		if recover() != nil {
 			bms, ok = nil, false
 		}
 	}()
-	got, err := api.Bookmarks(f, model.NewDefaultConfiguration())
+	got, err := api.Bookmarks(ctx, f, model.NewStatelessConfiguration())
 	if err != nil {
 		return nil, false
 	}
