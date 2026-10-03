@@ -57,7 +57,33 @@ func startHelper(t *testing.T, env ...string) *processHandle {
 	if err != nil {
 		t.Fatalf("looking up the helper: %v", err)
 	}
+	awaitExeced(t, handle)
 	return handle
+}
+
+// awaitExeced waits until the helper's command line can be read, which is when
+// its environment can be read too.
+//
+// cmd.Start returns as soon as the exec has passed the point of no return: Go
+// learns it from a close-on-exec pipe, and the kernel closes those early in the
+// exec, before it writes the new image's arguments and environment onto its
+// stack. In that window /proc/<pid>/cmdline and /proc/<pid>/environ both read
+// empty, so a case that asked straight away saw a peer with no command line,
+// gave it the default grace, and never printed the "waiting up to" line. That
+// was a flake on CI's ubuntu runner. Both files are set by the same step of the
+// exec, so a non-empty command line means the environment is readable as well.
+func awaitExeced(t *testing.T, handle *processHandle) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if args, err := handle.CmdlineSlice(); err == nil && len(args) > 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the helper's command line never became readable")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 }
 
 // withProcessList replaces the process listing for one test.
