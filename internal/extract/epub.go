@@ -9,6 +9,7 @@ import (
 	"io"
 	"path"
 	"strings"
+	"unicode/utf8"
 
 	"golang.org/x/net/html"
 )
@@ -90,13 +91,31 @@ func extractEPUB(ctx context.Context, d document, r Req) (Chunk, error) {
 // whether any spine document was clipped at the per-entry maxTextFileBytes cap,
 // so its remaining text is unavailable.
 func readEPUBText(ctx context.Context, zr *zip.Reader) (text string, truncated bool, err error) {
+	st, err := readSpine(ctx, zr, false)
+	return st.text, st.truncated, err
+}
+
+// spineText is an EPUB's reading-order text. When anchors were asked for, it
+// also records where each content document and each id inside one starts in
+// that text, as a rune offset: the key is the document's archive name, or the
+// name plus "#id". Rune offsets are what every other EPUB position in this
+// package counts in, so an anchor can be handed to paginateChars as is.
+type spineText struct {
+	text      string
+	truncated bool
+	anchors   map[string]int
+}
+
+// readSpine is readEPUBText's work, with the anchor map filled when
+// withAnchors is set. The text is identical either way.
+func readSpine(ctx context.Context, zr *zip.Reader, withAnchors bool) (spineText, error) {
 	opf, err := opfPath(zr)
 	if err != nil {
-		return "", false, err
+		return spineText{}, err
 	}
 	pkg, err := parseOPF(zr, opf)
 	if err != nil {
-		return "", false, err
+		return spineText{}, err
 	}
 
 	hrefByID := make(map[string]string, len(pkg.Items))
@@ -105,27 +124,66 @@ func readEPUBText(ctx context.Context, zr *zip.Reader) (text string, truncated b
 	}
 	baseDir := path.Dir(opf)
 
+	var st spineText
+	if withAnchors {
+		st.anchors = make(map[string]int)
+	}
 	var sb strings.Builder
+	runes := 0
 	for _, ref := range pkg.Spine.ItemRefs {
 		if e := ctx.Err(); e != nil {
-			return "", false, e
+			return spineText{}, e
 		}
-		href, ok := hrefByID[ref.IDRef]
-		if !ok || href == "" {
+		name, data, clipped, ok := readSpineEntry(zr, baseDir, hrefByID[ref.IDRef])
+		if !ok {
 			continue
 		}
-		name := path.Join(baseDir, href)
-		data, clipped, rerr := readZipEntry(zr, name)
-		if rerr != nil {
-			continue
-		}
-		if clipped {
-			truncated = true
-		}
-		sb.WriteString(htmlToText(strings.NewReader(string(data))))
+		st.truncated = st.truncated || clipped
+		text := htmlText(strings.NewReader(string(data)), st.anchorRecorder(name, runes))
+		sb.WriteString(text)
 		sb.WriteByte('\n')
+		runes += utf8.RuneCountInString(text) + 1
 	}
-	return sb.String(), truncated, nil
+	st.text = sb.String()
+	return st, nil
+}
+
+// anchorRecorder returns the callback htmlText reports ids to, recording each
+// at base plus its offset in the document, or nil when no anchors are kept. The
+// document's own start is recorded here too. A document the spine lists twice,
+// or an id repeated, keeps its first position, which is where a reader
+// following the link lands.
+func (st *spineText) anchorRecorder(name string, base int) func(id string, at int) {
+	if st.anchors == nil {
+		return nil
+	}
+	if _, seen := st.anchors[name]; !seen {
+		st.anchors[name] = base
+	}
+	return func(id string, at int) {
+		key := name + "#" + id
+		if _, seen := st.anchors[key]; !seen {
+			st.anchors[key] = base + at
+		}
+	}
+}
+
+// readSpineEntry reads the content document a spine item's href names, and
+// reports the archive name it was read under. The href is decoded first, since
+// it is a URL; an archive that stored the name with its escapes intact is read
+// under the href as written. ok is false when the item names nothing readable,
+// which the spine walk skips.
+func readSpineEntry(zr *zip.Reader, baseDir, href string) (name string, data []byte, clipped, ok bool) {
+	if href == "" {
+		return "", nil, false, false
+	}
+	for _, candidate := range []string{archiveName(baseDir, href), path.Join(baseDir, href)} {
+		body, cut, err := readZipEntry(zr, candidate)
+		if err == nil {
+			return candidate, body, cut, true
+		}
+	}
+	return "", nil, false, false
 }
 
 // opfPath returns the OPF package path referenced by META-INF/container.xml.
@@ -190,35 +248,88 @@ func readZipEntry(zr *zip.Reader, name string) (data []byte, clipped bool, err e
 	return data, clipped, nil
 }
 
-// htmlToText tokenizes an XHTML document and returns its visible text,
-// skipping the contents of <script> and <style> elements.
-func htmlToText(r io.Reader) string {
-	z := html.NewTokenizer(r)
-	var sb strings.Builder
-	skipDepth := 0
+// htmlText tokenizes an XHTML document and returns its visible text, skipping
+// the contents of the elements isSkippedTag names. When onAnchor is non-nil it
+// also reports every element id (and every <a name>, the older spelling of a
+// link target) together with the rune offset in the returned text where that
+// element starts. An outline link's fragment names one of these, and the
+// offset is where the entry's text begins.
+func htmlText(r io.Reader, onAnchor func(id string, at int)) string {
+	w := textWalk{z: html.NewTokenizer(r), onAnchor: onAnchor}
 	for {
-		switch z.Next() {
+		switch tt := w.z.Next(); tt {
 		case html.ErrorToken:
-			return sb.String()
-		case html.StartTagToken:
-			if name, _ := z.TagName(); isSkippedTag(name) {
-				skipDepth++
-			}
+			return w.sb.String()
+		case html.StartTagToken, html.SelfClosingTagToken:
+			w.startTag(tt == html.StartTagToken)
 		case html.EndTagToken:
-			if name, _ := z.TagName(); isSkippedTag(name) && skipDepth > 0 {
-				skipDepth--
-			}
+			w.endTag()
 		case html.TextToken:
-			if skipDepth == 0 {
-				sb.Write(z.Text())
-			}
+			w.text()
+		}
+	}
+}
+
+// textWalk is htmlText's state: the text so far, its length in runes, and how
+// deep inside skipped elements the tokenizer is.
+type textWalk struct {
+	z         *html.Tokenizer
+	onAnchor  func(id string, at int)
+	sb        strings.Builder
+	runes     int
+	skipDepth int
+}
+
+// startTag reports the tag's anchors and enters a skipped element. A
+// self-closing tag has no content to skip.
+func (w *textWalk) startTag(opens bool) {
+	name, hasAttr := w.z.TagName()
+	if hasAttr && w.onAnchor != nil {
+		reportAnchors(w.z, string(name) == "a", w.runes, w.onAnchor)
+	}
+	if opens && isSkippedTag(name) {
+		w.skipDepth++
+	}
+}
+
+// endTag leaves a skipped element.
+func (w *textWalk) endTag() {
+	if name, _ := w.z.TagName(); isSkippedTag(name) && w.skipDepth > 0 {
+		w.skipDepth--
+	}
+}
+
+// text keeps a text token unless it is inside a skipped element.
+func (w *textWalk) text() {
+	if w.skipDepth > 0 {
+		return
+	}
+	t := w.z.Text()
+	w.sb.Write(t)
+	w.runes += utf8.RuneCount(t)
+}
+
+// reportAnchors hands the current tag's id to onAnchor at the given offset, and
+// its name too when the tag is an <a>: a name on any other element (a <meta>,
+// a form control) is not a link target.
+func reportAnchors(z *html.Tokenizer, isLink bool, at int, onAnchor func(id string, at int)) {
+	for {
+		key, val, more := z.TagAttr()
+		if k := string(key); (k == "id" || (isLink && k == "name")) && len(val) > 0 {
+			onAnchor(string(val), at)
+		}
+		if !more {
+			return
 		}
 	}
 }
 
 // isSkippedTag reports whether the tag's text content should be excluded from
-// extracted output.
+// extracted output. A document's <title> is metadata in its head, not text on
+// the page, and an EPUB often repeats the book's title in every chapter file:
+// kept, it lands in front of each chapter's heading, and a section read that
+// ends where the next chapter starts would end on the next file's title.
 func isSkippedTag(name []byte) bool {
 	s := string(name)
-	return s == "script" || s == "style"
+	return s == "script" || s == "style" || s == "title"
 }

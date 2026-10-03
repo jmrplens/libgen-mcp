@@ -316,6 +316,10 @@ func TestReadModes_ReturnWithinTheBudget(t *testing.T) {
 	if err != nil || toc.Extractable || toc.Reason != unresponsiveReadReason {
 		t.Errorf("outline mode: want %q, got %+v (err %v)", unresponsiveReadReason, toc, err)
 	}
+	sec, err := Section(context.Background(), openFile(t, "testdata/sections.pdf"), SectionRef{Index: 1}, Req{})
+	if err != nil || sec.Extractable || sec.Reason != unresponsiveReadReason || sec.Format != "pdf" {
+		t.Errorf("section mode: want %q, got %+v (err %v)", unresponsiveReadReason, sec.Chunk, err)
+	}
 	awaitNoStuckReads(t)
 }
 

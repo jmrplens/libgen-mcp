@@ -109,36 +109,53 @@ type pdfScan struct {
 // The ledongthuc/pdf reader can panic on malformed or encrypted input, so the
 // whole read is guarded by recover(): a panic becomes a not-extractable Chunk
 // rather than a crash. A canceled ctx yields the context error.
-func extractPDF(ctx context.Context, d document, r Req) (chunk Chunk, err error) {
+func extractPDF(ctx context.Context, d document, r Req) (Chunk, error) {
+	return readPDFRange(ctx, d, pdfRange{start: r.StartPage, maxPages: r.MaxPages, maxChars: r.MaxChars})
+}
+
+// pdfRange is the page window one PDF read covers. last bounds the read at that
+// page, as the end of a section does, and 0 means the document's last page.
+// A non-positive start, maxPages or maxChars takes the package default.
+type pdfRange struct {
+	start    int
+	last     int
+	maxPages int
+	maxChars int
+}
+
+// withDefaults fills the fields a caller left non-positive.
+func (pr pdfRange) withDefaults() pdfRange {
+	if pr.start <= 0 {
+		pr.start = defaultStartPage
+	}
+	if pr.maxPages <= 0 {
+		pr.maxPages = defaultMaxPages
+	}
+	if pr.maxChars <= 0 {
+		pr.maxChars = defaultMaxChars
+	}
+	return pr
+}
+
+// readPDFRange reads one page window of a PDF behind recover(): the
+// ledongthuc/pdf reader can panic on malformed or encrypted input, and a panic
+// becomes a not-extractable Chunk rather than a crash.
+func readPDFRange(ctx context.Context, d document, pr pdfRange) (chunk Chunk, err error) {
 	if e := ctx.Err(); e != nil {
 		return Chunk{}, e
 	}
-	startPage := r.StartPage
-	if startPage <= 0 {
-		startPage = defaultStartPage
-	}
-	maxPages := r.MaxPages
-	if maxPages <= 0 {
-		maxPages = defaultMaxPages
-	}
-	maxChars := r.MaxChars
-	if maxChars <= 0 {
-		maxChars = defaultMaxChars
-	}
-
 	defer func() {
 		if rec := recover(); rec != nil {
 			chunk = Chunk{Format: "pdf", Reason: malformedPDFReason(rec)}
 			err = nil
 		}
 	}()
-
-	return readPDFPages(ctx, d, startPage, maxPages, maxChars)
+	return readPDFPages(ctx, d, pr.withDefaults())
 }
 
 // readPDFPages parses the PDF, scans the requested page range and assembles the
 // final Chunk, including no-text-layer detection.
-func readPDFPages(ctx context.Context, d document, startPage, maxPages, maxChars int) (Chunk, error) {
+func readPDFPages(ctx context.Context, d document, pr pdfRange) (Chunk, error) {
 	r, err := pdf.NewReader(d.r, d.size)
 	if err != nil {
 		return Chunk{Format: "pdf", Reason: invalidPDFReason(err)}, nil
@@ -149,18 +166,22 @@ func readPDFPages(ctx context.Context, d document, startPage, maxPages, maxChars
 	}
 
 	total := r.NumPage()
-	if total > 0 && startPage > total {
+	if total > 0 && pr.start > total {
 		return Chunk{
 			Format:     "pdf",
 			TotalPages: total,
-			Reason:     fmt.Sprintf("start page %d is beyond the document's last page (%d pages)", startPage, total),
+			Reason:     fmt.Sprintf("start page %d is beyond the document's last page (%d pages)", pr.start, total),
 		}, nil
 	}
+	if pr.last <= 0 || pr.last > total {
+		pr.last = total
+	}
 
-	scan, err := scanPDFPages(ctx, r, total, startPage, maxPages, maxChars)
+	scan, err := scanPDFPages(ctx, r, pr)
 	if err != nil {
 		return Chunk{}, err
 	}
+	startPage := pr.start
 
 	if strings.TrimSpace(scan.text) == "" {
 		return Chunk{
@@ -184,17 +205,19 @@ func readPDFPages(ctx context.Context, d document, startPage, maxPages, maxChars
 	return chunk, nil
 }
 
-// scanPDFPages iterates pages from startPage, accumulating plain text without
-// ever splitting a page. It stops before a page when MaxChars is already
-// reached (marking Truncated) or after MaxPages pages have been read, and
-// checks ctx between pages.
-func scanPDFPages(ctx context.Context, r *pdf.Reader, total, startPage, maxPages, maxChars int) (pdfScan, error) {
+// scanPDFPages iterates pages from pr.start to pr.last, accumulating plain text
+// without ever splitting a page. It stops before a page when maxChars is
+// already reached (marking Truncated) or after maxPages pages have been read,
+// and checks ctx between pages. Nothing past pr.last counts as more: that is
+// where the caller's window ends, whether or not the document does.
+func scanPDFPages(ctx context.Context, r *pdf.Reader, pr pdfRange) (pdfScan, error) {
 	var sb strings.Builder
 	var s pdfScan
 	pagesRead := 0
 	charCount := 0
+	maxPages, maxChars := pr.maxPages, pr.maxChars
 
-	for i := startPage; i <= total; i++ {
+	for i := pr.start; i <= pr.last; i++ {
 		if e := ctx.Err(); e != nil {
 			return pdfScan{}, e
 		}
@@ -215,7 +238,7 @@ func scanPDFPages(ctx context.Context, r *pdf.Reader, total, startPage, maxPages
 		s.pageEnd = i
 		if pagesRead >= maxPages {
 			s.nextPage = i + 1
-			s.hasMore = i < total
+			s.hasMore = i < pr.last
 			break
 		}
 	}

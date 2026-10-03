@@ -922,3 +922,234 @@ func TestReadEmitsProgressNotifications(t *testing.T) {
 		t.Errorf("final progress = %v, want the full payload size %d", last, len(payload))
 	}
 }
+
+// sectionsPDFPath and sectionsEPUBPath are the extract package's outline
+// fixtures, reached through the AllowedReadDirs readTestCfg names.
+const (
+	sectionsPDFPath  = "../extract/testdata/sections.pdf"
+	sectionsEPUBPath = "../extract/testdata/sections.epub"
+)
+
+// TestReadTool_OutlineNumbersItsEntries verifies outline mode carries each
+// entry's number in the structured result and in the Markdown, and that
+// max_depth keeps the numbers of the whole outline, so a trimmed listing still
+// names the entry section reads.
+func TestReadTool_OutlineNumbersItsEntries(t *testing.T) {
+	h := readHandler(nil, readTestCfg())
+	res, out, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{Path: sectionsPDFPath, Outline: true, MaxDepth: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []int
+	for _, e := range out.Outline {
+		got = append(got, e.Index)
+	}
+	if want := []int{1, 2, 5, 9, 10}; !slices.Equal(got, want) {
+		t.Errorf("indexes = %v, want %v", got, want)
+	}
+	md := textContent(res)
+	if !strings.Contains(md, "- [5] Chapter 2 Methods (p.5)\n") {
+		t.Errorf("Markdown should number each entry, got %q", md)
+	}
+	if !strings.Contains(strings.Join(out.NextSteps, "\n"), "section set to its number") {
+		t.Errorf("next_steps should point to section, got %v", out.NextSteps)
+	}
+}
+
+// TestReadTool_SectionPDF verifies a section read of a PDF returns the pages
+// from the entry to the start of the next entry at its level, records that
+// extent, renders it in the Markdown header, and says where the section ends.
+func TestReadTool_SectionPDF(t *testing.T) {
+	h := readHandler(nil, readTestCfg())
+	res, out, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{Path: sectionsPDFPath, Section: "2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Section == nil || out.Section.Index != 2 || out.Section.PageStart != 2 || out.Section.PageEnd != 5 {
+		t.Fatalf("section = %+v, want entry 2 over pages 2-5", out.Section)
+	}
+	if out.HasMore || out.Cursor != "" || out.PageStart != 2 || out.PageEnd != 5 {
+		t.Errorf("chunk pages %d-%d has_more=%v cursor=%q, want the whole section", out.PageStart, out.PageEnd, out.HasMore, out.Cursor)
+	}
+	if !strings.Contains(out.Text, "Page two") || !strings.Contains(out.Text, "Page five") || strings.Contains(out.Text, "Page six") {
+		t.Errorf("text = %q, want pages two to five only", out.Text)
+	}
+	md := textContent(res)
+	if !strings.Contains(md, "Section 2: Chapter 1 Foundations (pages 2-5).\n") {
+		t.Errorf("Markdown should name the section and its pages, got %q", md)
+	}
+	steps := strings.Join(out.NextSteps, "\n")
+	if !strings.Contains(steps, "end of section 2") || !strings.Contains(steps, "Page 5 is where the next entry starts") {
+		t.Errorf("next_steps should say the section ended on the next entry's page, got %q", steps)
+	}
+}
+
+// TestReadTool_SectionByTitleEPUB verifies a title addresses an EPUB entry
+// case-insensitively, and the result carries the section's character extent.
+func TestReadTool_SectionByTitleEPUB(t *testing.T) {
+	h := readHandler(nil, readTestCfg())
+	res, out, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{Path: sectionsEPUBPath, Section: "chapter 1 BEGINNINGS"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Section == nil || out.Section.Index != 4 || out.Section.CharEnd <= out.Section.CharStart {
+		t.Fatalf("section = %+v, want entry 4 with a character extent", out.Section)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(out.Text), "Chapter 1 Beginnings") || strings.Contains(out.Text, "Middles") {
+		t.Errorf("text = %q, want the first chapter alone", out.Text)
+	}
+	if !strings.Contains(textContent(res), "Section 4: Chapter 1 Beginnings (chars ") {
+		t.Errorf("Markdown should name the section and its characters, got %q", textContent(res))
+	}
+	if strings.Contains(strings.Join(out.NextSteps, "\n"), "where the next entry starts") {
+		t.Errorf("an EPUB section ends exactly, so no boundary-page note, got %v", out.NextSteps)
+	}
+}
+
+// TestReadTool_SectionCursorStopsAtTheSectionEnd verifies a long section pages
+// on with the cursor alone, which carries the section, and stops at the
+// section's last page with has_more false although the document continues.
+func TestReadTool_SectionCursorStopsAtTheSectionEnd(t *testing.T) {
+	h := readHandler(nil, readTestCfg())
+	in := ReadInput{Path: sectionsPDFPath, Section: "Chapter 2 Methods", MaxPages: 1}
+	var pages []int
+	// sequential: each call continues from the previous call's cursor.
+	for range 5 {
+		_, out, err := h(context.Background(), &mcp.CallToolRequest{}, in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pages = append(pages, out.PageStart)
+		if !out.HasMore {
+			if !strings.Contains(strings.Join(out.NextSteps, "\n"), "end of section 5") {
+				t.Errorf("last chunk should say the section ended, got %v", out.NextSteps)
+			}
+			break
+		}
+		if !strings.Contains(strings.Join(out.NextSteps, "\n"), "rest of section 5") {
+			t.Errorf("a chunk with more should say how to continue, got %v", out.NextSteps)
+		}
+		in = ReadInput{Path: sectionsPDFPath, Cursor: out.Cursor, MaxPages: 1}
+	}
+	if !slices.Equal(pages, []int{5, 6, 7}) {
+		t.Errorf("pages read = %v, want [5 6 7]", pages)
+	}
+}
+
+// TestReadTool_SectionRefusals verifies the requests a section read cannot
+// answer are tool errors naming what to do instead: an ambiguous title lists
+// the candidates by number, and a document with no outline points to start_page.
+func TestReadTool_SectionRefusals(t *testing.T) {
+	h := readHandler(nil, readTestCfg())
+	testCases := []struct {
+		name string
+		in   ReadInput
+		want string
+	}{
+		{name: "ambiguous title", in: ReadInput{Path: sectionsPDFPath, Section: "summary"}, want: `4 "Summary" (p.4), 8 "Summary" (p.6)`},
+		{name: "number past the end", in: ReadInput{Path: sectionsPDFPath, Section: "11"}, want: "outline has 10 entries"},
+		{name: "no outline", in: ReadInput{Path: "../extract/testdata/sample.pdf", Section: "1"}, want: "start_page"},
+		{name: "zero", in: ReadInput{Path: sectionsPDFPath, Section: "0"}, want: "starting at 1"},
+		{name: "bad cursor", in: ReadInput{Path: sectionsPDFPath, Section: "1", Cursor: "!!"}, want: "invalid cursor"},
+		{name: "unreadable file", in: ReadInput{Path: filepath.Join(t.TempDir(), "missing.pdf"), Section: "1"}, want: "missing.pdf"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, err := h(context.Background(), &mcp.CallToolRequest{}, tc.in)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("err = %v, want it to contain %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestReadTool_SectionOfAScannedPDF verifies a section read of a file with no
+// text is the ordinary not-extractable result, with no section recorded.
+func TestReadTool_SectionOfAScannedPDF(t *testing.T) {
+	h := readHandler(nil, readTestCfg())
+	res, out, err := h(context.Background(), &mcp.CallToolRequest{}, ReadInput{Path: "../extract/testdata/scanned.pdf", Section: "1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Extractable || out.Section != nil || res.IsError {
+		t.Errorf("got extractable=%v section=%+v, want a not-extractable result and no section", out.Extractable, out.Section)
+	}
+}
+
+// TestValidateSectionInput verifies section is refused beside the arguments it
+// would silently override, and accepted alone or beside a cursor.
+func TestValidateSectionInput(t *testing.T) {
+	testCases := []struct {
+		name string
+		in   ReadInput
+		want string
+	}{
+		{name: "alone", in: ReadInput{Section: "3"}},
+		{name: "with a cursor", in: ReadInput{Section: "3", Cursor: "x"}},
+		{name: "blank section is no section", in: ReadInput{Section: " ", Outline: true}},
+		{name: "with outline", in: ReadInput{Section: "3", Outline: true}, want: "outline"},
+		{name: "with find", in: ReadInput{Section: "3", Find: "x"}, want: "find"},
+		{name: "with start_page", in: ReadInput{Section: "3", StartPage: 2}, want: "start_page"},
+		{name: "with offset", in: ReadInput{Section: "3", Offset: 2}, want: "offset"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateSectionInput(tc.in)
+			if tc.want == "" {
+				if err != nil {
+					t.Errorf("err = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("err = %v, want it to name %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestParseSectionRef verifies digits are an entry number and anything else a
+// title, including a title that starts with a number.
+func TestParseSectionRef(t *testing.T) {
+	testCases := []struct {
+		in      string
+		want    extract.SectionRef
+		wantErr bool
+	}{
+		{in: " 12 ", want: extract.SectionRef{Index: 12}},
+		{in: "1 Introduction", want: extract.SectionRef{Title: "1 Introduction"}},
+		{in: "2.1", want: extract.SectionRef{Title: "2.1"}},
+		{in: "0", wantErr: true},
+		{in: "99999999999999999999999", wantErr: true},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.in, func(t *testing.T) {
+			got, err := parseSectionRef(tc.in)
+			if (err != nil) != tc.wantErr || got != tc.want {
+				t.Errorf("parseSectionRef(%q) = %+v, %v, want %+v (error %v)", tc.in, got, err, tc.want, tc.wantErr)
+			}
+		})
+	}
+}
+
+// TestSectionCursor verifies only a well-formed cursor a section read issued
+// names a section.
+func TestSectionCursor(t *testing.T) {
+	testCases := map[string]struct {
+		cursor string
+		want   int
+	}{
+		"none":            {cursor: "", want: 0},
+		"malformed":       {cursor: "!!", want: 0},
+		"sequential":      {cursor: encodeCursor(readCursor{Page: 3}), want: 0},
+		"from a section":  {cursor: encodeCursor(readCursor{Page: 3, Sec: 7}), want: 7},
+		"find match only": {cursor: encodeCursor(readCursor{Match: 2}), want: 0},
+	}
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			if got := sectionCursor(tc.cursor); got != tc.want {
+				t.Errorf("sectionCursor = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}

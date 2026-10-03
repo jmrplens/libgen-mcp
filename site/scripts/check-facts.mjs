@@ -293,7 +293,7 @@ function enumGaps() {
 		for (const [tool, sections] of Object.entries(schema.tools)) {
 			for (const [section, rows] of Object.entries(sections)) {
 				const table = new RegExp(
-					`<SchemaTable name="${tool}" section="${section}">([\\s\\S]*?)</SchemaTable>`,
+					`<SchemaTable name="${tool}" part="${section}">([\\s\\S]*?)</SchemaTable>`,
 				).exec(text);
 				if (!table) continue;
 				for (const row of rows) {

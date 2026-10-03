@@ -7,6 +7,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"io"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -15,14 +16,24 @@ import (
 	"golang.org/x/net/html"
 )
 
-// OutlineEntry is a single table-of-contents entry. Level is 0 for a top-level
-// entry and increases by one per nesting depth. Page is the 1-based PDF page (0
-// for EPUB); CharOffset is reserved for EPUB precise jumps (0 for now).
+// OutlineEntry is a single table-of-contents entry. Index is its 1-based
+// position in the whole flattened outline, which is what Section addresses it
+// by. Level is 0 for a top-level entry and increases by one per nesting depth.
+// Page is the 1-based PDF page (0 for EPUB). CharOffset is reserved for EPUB
+// precise jumps (0 for now).
 type OutlineEntry struct {
+	Index      int    `json:"index" jsonschema:"entry number, 1-based, to pass as section"`
 	Title      string `json:"title" jsonschema:"the table-of-contents entry title"`
 	Level      int    `json:"level" jsonschema:"nesting depth: 0 for a top-level entry, increasing by one per level"`
 	Page       int    `json:"page,omitempty" jsonschema:"1-based PDF page the entry points to (0 for EPUB)"`
 	CharOffset int    `json:"char_offset,omitempty" jsonschema:"rune offset for EPUB precise jumps (0 when not applicable)"`
+
+	// target is where an EPUB entry points: the archive name of the content
+	// document, unescaped, with the fragment after a '#' when the link names one.
+	// It is empty for a PDF entry and for an EPUB entry with no link. It stays
+	// unexported because it is an archive path, which is how this package finds
+	// the entry's text and nothing a caller can use.
+	target string
 }
 
 // OutlineResult is the outcome of an Outline call. When Extractable is false,
@@ -45,6 +56,9 @@ type ncxNavPoint struct {
 	Label struct {
 		Text string `xml:"text"`
 	} `xml:"navLabel"`
+	Content struct {
+		Src string `xml:"src,attr"`
+	} `xml:"content"`
 	Points []ncxNavPoint `xml:"navPoint"`
 }
 
@@ -73,9 +87,21 @@ func Outline(ctx context.Context, f *os.File) (OutlineResult, error) {
 	return res, err
 }
 
-// outlineChecked is Outline's work: dispatch on format. It is separate so the
-// watchdog has a single function to run.
+// outlineChecked is Outline's work: dispatch on format, then number the
+// entries. It is separate so the watchdog has a single function to run, and it
+// is the one place entries are numbered, so the index outline mode shows and the
+// index Section resolves are the same count.
 func outlineChecked(ctx context.Context, d document) (OutlineResult, error) {
+	res, err := outlineByFormat(ctx, d)
+	for i := range res.Entries {
+		res.Entries[i].Index = i + 1
+	}
+	return res, err
+}
+
+// outlineByFormat routes d to the outline reader for its format, identifying an
+// extensionless file by its bytes.
+func outlineByFormat(ctx context.Context, d document) (OutlineResult, error) {
 	if err := ctx.Err(); err != nil {
 		return OutlineResult{}, err
 	}
@@ -208,7 +234,8 @@ func navEntries(ctx context.Context, zr *zip.Reader, pkg opfPackage, baseDir str
 	if href == "" {
 		return nil, nil
 	}
-	data := entryBytes(zr, path.Join(baseDir, href))
+	name := archiveName(baseDir, href)
+	data := entryBytes(zr, name)
 	if data == nil {
 		return nil, nil
 	}
@@ -222,11 +249,47 @@ func navEntries(ctx context.Context, zr *zip.Reader, pkg opfPackage, baseDir str
 	if ol == nil {
 		return nil, nil
 	}
-	var entries []OutlineEntry
-	if werr := walkOL(ctx, ol, 0, &entries); werr != nil {
+	// A nav link is relative to the nav document, not to the package.
+	w := navWalk{dir: path.Dir(name)}
+	if werr := w.walkOL(ctx, ol, 0); werr != nil {
 		return nil, werr
 	}
-	return entries, nil
+	return w.entries, nil
+}
+
+// archiveName resolves a manifest or navigation href against the directory of
+// the document it appears in and returns the archive entry it names. The
+// fragment is dropped and percent-escapes are decoded, because an href is a URL
+// and an archive name is not: "part%20one.xhtml" is the entry "part one.xhtml".
+// An href whose escapes do not decode is joined as written.
+func archiveName(dir, href string) string {
+	p, _, _ := strings.Cut(href, "#")
+	if dec, err := url.PathUnescape(p); err == nil {
+		p = dec
+	}
+	return path.Join(dir, p)
+}
+
+// linkTarget resolves an outline entry's href to the target Section looks up:
+// the archive name of the content document, plus "#fragment" when the href
+// names one. An empty href has no target.
+func linkTarget(dir, href string) string {
+	href = strings.TrimSpace(href)
+	if href == "" {
+		return ""
+	}
+	name := archiveName(dir, href)
+	if _, frag, ok := strings.Cut(href, "#"); ok && frag != "" {
+		return name + "#" + frag
+	}
+	return name
+}
+
+// navWalk flattens an EPUB3 nav list, resolving each link against the nav
+// document's directory.
+type navWalk struct {
+	dir     string
+	entries []OutlineEntry
 }
 
 // entryBytes reads the named archive entry, returning nil when it is absent so
@@ -252,7 +315,7 @@ func navHref(pkg opfPackage) string {
 
 // walkOL appends one OutlineEntry per <li> in ol at the given level, recursing
 // into any nested <ol> at level+1 to flatten the tree in document order.
-func walkOL(ctx context.Context, ol *html.Node, level int, out *[]OutlineEntry) error {
+func (w *navWalk) walkOL(ctx context.Context, ol *html.Node, level int) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -260,7 +323,7 @@ func walkOL(ctx context.Context, ol *html.Node, level int, out *[]OutlineEntry) 
 		if li.Type != html.ElementNode || li.Data != "li" {
 			continue
 		}
-		if err := appendLI(ctx, li, level, out); err != nil {
+		if err := w.appendLI(ctx, li, level); err != nil {
 			return err
 		}
 	}
@@ -269,28 +332,39 @@ func walkOL(ctx context.Context, ol *html.Node, level int, out *[]OutlineEntry) 
 
 // appendLI appends the <li>'s own title (if any) then recurses into its nested
 // <ol> children at level+1.
-func appendLI(ctx context.Context, li *html.Node, level int, out *[]OutlineEntry) error {
-	if title := liTitle(li); title != "" {
-		*out = append(*out, OutlineEntry{Title: title, Level: level})
+func (w *navWalk) appendLI(ctx context.Context, li *html.Node, level int) error {
+	if title, href := liLabel(li); title != "" {
+		w.entries = append(w.entries, OutlineEntry{Title: title, Level: level, target: linkTarget(w.dir, href)})
 	}
 	for child := li.FirstChild; child != nil; child = child.NextSibling {
 		if child.Type != html.ElementNode || child.Data != "ol" {
 			continue
 		}
-		if err := walkOL(ctx, child, level+1, out); err != nil {
+		if err := w.walkOL(ctx, child, level+1); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// liTitle returns the trimmed text of the first <a> or <span> child of li, which
-// is the entry's label; nested list content is ignored because it lives under
-// the li's <ol> children, not its <a>/<span>.
-func liTitle(li *html.Node) string {
+// liLabel returns the trimmed text of the first <a> or <span> child of li, which
+// is the entry's label, and the href of that child when it is a link (a <span>
+// is a heading with no destination of its own). Nested list content is ignored
+// because it lives under the li's <ol> children, not its <a>/<span>.
+func liLabel(li *html.Node) (title, href string) {
 	for c := li.FirstChild; c != nil; c = c.NextSibling {
 		if c.Type == html.ElementNode && (c.Data == "a" || c.Data == "span") {
-			return strings.TrimSpace(nodeText(c))
+			return strings.TrimSpace(nodeText(c)), attr(c, "href")
+		}
+	}
+	return "", ""
+}
+
+// attr returns the value of n's attribute key, or "" when n has none.
+func attr(n *html.Node, key string) string {
+	for _, a := range n.Attr {
+		if a.Namespace == "" && a.Key == key {
+			return a.Val
 		}
 	}
 	return ""
@@ -382,7 +456,8 @@ func ncxEntries(ctx context.Context, zr *zip.Reader, pkg opfPackage, baseDir str
 	if href == "" {
 		return nil, nil
 	}
-	data := entryBytes(zr, path.Join(baseDir, href))
+	name := archiveName(baseDir, href)
+	data := entryBytes(zr, name)
 	if data == nil {
 		return nil, nil
 	}
@@ -390,7 +465,8 @@ func ncxEntries(ctx context.Context, zr *zip.Reader, pkg opfPackage, baseDir str
 	var doc ncxDoc
 	_ = xml.Unmarshal(data, &doc)
 	var entries []OutlineEntry
-	if ferr := flattenNCX(ctx, doc.NavPoints, 0, &entries); ferr != nil {
+	// A content src is relative to the NCX document, not to the package.
+	if ferr := flattenNCX(ctx, doc.NavPoints, 0, path.Dir(name), &entries); ferr != nil {
 		return nil, ferr
 	}
 	return entries, nil
@@ -416,16 +492,17 @@ func ncxHref(pkg opfPackage) string {
 }
 
 // flattenNCX appends one OutlineEntry per navPoint at the given level, recursing
-// into nested navPoints at level+1 to flatten the tree in document order.
-func flattenNCX(ctx context.Context, points []ncxNavPoint, level int, out *[]OutlineEntry) error {
+// into nested navPoints at level+1 to flatten the tree in document order. dir
+// is the NCX document's directory, which every content src is relative to.
+func flattenNCX(ctx context.Context, points []ncxNavPoint, level int, dir string, out *[]OutlineEntry) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	for _, p := range points {
 		if title := strings.TrimSpace(p.Label.Text); title != "" {
-			*out = append(*out, OutlineEntry{Title: title, Level: level})
+			*out = append(*out, OutlineEntry{Title: title, Level: level, target: linkTarget(dir, p.Content.Src)})
 		}
-		if err := flattenNCX(ctx, p.Points, level+1, out); err != nil {
+		if err := flattenNCX(ctx, p.Points, level+1, dir, out); err != nil {
 			return err
 		}
 	}

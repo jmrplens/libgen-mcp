@@ -227,7 +227,7 @@ export function toMarkdown(source, labels, schema, chain) {
 		/<SchemaTable([^>]*)>([\s\S]*?)<\/SchemaTable>/g,
 		(whole, tag, body) => {
 			const name = attr(tag, "name");
-			const section = attr(tag, "section");
+			const section = attr(tag, "part");
 			// The column headings are the locale's, like every other string the
 			// components print: a Spanish page's Markdown copy should not be
 			// headed in English.

@@ -79,15 +79,15 @@ func TestRenderReadLists_ACodeSpanInAValueShowsNoBackslash(t *testing.T) {
 	})
 	renderOutline(&b, ReadOutput{
 		Format:  "pdf",
-		Outline: []extract.OutlineEntry{{Title: value, Page: 4}, {Title: value, Level: 1}},
+		Outline: []extract.OutlineEntry{{Index: 1, Title: value, Page: 4}, {Index: 2, Title: value, Level: 1}},
 	})
 	md := b.String()
 
 	testCases := []struct{ name, want string }{
 		{name: "a paged snippet", want: "- p.3 (offset 0): use a`|`b here\n"},
 		{name: "an offset-only snippet", want: "- offset 0: use a`|`b here\n"},
-		{name: "a paged outline entry", want: "- use a`|`b here (p.4)\n"},
-		{name: "a nested outline entry", want: "  - use a`|`b here\n"},
+		{name: "a paged outline entry", want: "- [1] use a`|`b here (p.4)\n"},
+		{name: "a nested outline entry", want: "  - [2] use a`|`b here\n"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -102,20 +102,25 @@ func TestRenderReadLists_ACodeSpanInAValueShowsNoBackslash(t *testing.T) {
 }
 
 // TestRenderOutline_AnEntryOpeningWithAMarkerStaysAnEntry verifies an extracted
-// table-of-contents title is written as text at the start of its bullet: one
-// opening with a heading, list, quote or fence marker used to become that
-// block inside the list instead of an entry of it.
+// table-of-contents title is written as text in its bullet: one opening with a
+// heading, list, quote or fence marker used to become that block inside the
+// list instead of an entry of it. The entry number now leads the bullet, and
+// the title is still escaped, so a renderer that dropped the number would not
+// reopen the hole.
 func TestRenderOutline_AnEntryOpeningWithAMarkerStaysAnEntry(t *testing.T) {
 	var b strings.Builder
 	renderOutline(&b, ReadOutput{
 		Format: "pdf",
 		Outline: []extract.OutlineEntry{
-			{Title: "# Part One", Page: 1}, {Title: "1. Intro", Level: 1}, {Title: "> Note"}, {Title: "```"},
+			{Index: 1, Title: "# Part One", Page: 1},
+			{Index: 2, Title: "1. Intro", Level: 1},
+			{Index: 3, Title: "> Note"},
+			{Index: 4, Title: "```"},
 		},
 	})
 	md := b.String()
 
-	for _, want := range []string{"- \\# Part One (p.1)\n", "  - 1\\. Intro\n", "- \\> Note\n", "- \\```\n"} {
+	for _, want := range []string{"- [1] \\# Part One (p.1)\n", "  - [2] 1\\. Intro\n", "- [3] \\> Note\n", "- [4] \\```\n"} {
 		t.Run(want, func(t *testing.T) {
 			if !strings.Contains(md, want) {
 				t.Errorf("outline = %q, want it to contain %q", md, want)
@@ -133,12 +138,12 @@ func TestRenderOutline_NoPageEntry(t *testing.T) {
 		Format:           "epub",
 		OutlineRequested: true,
 		Outline: []extract.OutlineEntry{
-			{Title: "Preface", Level: 0, Page: 0},
-			{Title: "Chapter 1", Level: 1, Page: 12},
+			{Index: 1, Title: "Preface", Level: 0, Page: 0},
+			{Index: 2, Title: "Chapter 1", Level: 1, Page: 12},
 		},
 	})
 	md := b.String()
-	if !strings.Contains(md, "- Preface\n") {
+	if !strings.Contains(md, "- [1] Preface\n") {
 		t.Errorf("page-less entry should render without a page suffix, got:\n%s", md)
 	}
 	if strings.Contains(md, "Preface (p.") {
