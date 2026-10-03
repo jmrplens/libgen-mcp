@@ -160,7 +160,7 @@ jobs:
     env:
       RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
     permissions:
-      contents: write # create the release, upload the .mcpb, un-draft it
+      contents: write # create the release, upload the .mcpb bundles, un-draft it
       id-token: write # cosign's blob signature, and the npm/PyPI/NuGet OIDC exchanges
       attestations: write # actions/attest-build-provenance over the assets
     steps:
@@ -259,17 +259,24 @@ jobs:
               done
           ls -1 dist/
 
-      # Built in a rehearsal too — packing the bundle is the part that can
-      # break, and it is the file server.json's hash is taken from — and
-      # uploaded only when there is a release to attach it to.
-      - name: Build the .mcpb Claude Desktop bundle
-        run: bash scripts/build-mcpb.sh "${RELEASE_TAG#v}"
+      # Built in a rehearsal too — packing the bundles is the part that can
+      # break, and they are the files server.json's hashes are taken from — and
+      # uploaded only when there is a release to attach them to. One run packs
+      # four: one per operating system, which server.json declares, and the
+      # universal libgen-mcp.mcpb, kept under its old name for the links that
+      # already point at it. The script writes each one's size to the job
+      # summary.
+      - name: Build the .mcpb Claude Desktop bundles
+        run: |
+          set -euo pipefail
+          bash scripts/build-mcpb.sh "${RELEASE_TAG#v}"
+          sha256sum dist/*.mcpb
 
-      - name: Upload the .mcpb bundle to the release
+      - name: Upload the .mcpb bundles to the release
         if: env.REHEARSAL != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "v${RELEASE_TAG#v}" dist/libgen-mcp.mcpb --clobber
+        run: gh release upload "v${RELEASE_TAG#v}" dist/*.mcpb --clobber
 
       # SLSA build provenance for every asset this release ships, stored in
       # GitHub's attestation store — no release asset changes and nothing is
@@ -282,10 +289,11 @@ jobs:
       # checksums.txt, so the binaries, the seven SBOMs and THIRD_PARTY_NOTICES
       # are covered in one step and a name that is not in that file cannot be
       # smuggled in. The
-      # .mcpb needs its own step: it is built after GoReleaser, so appending it
-      # to checksums.txt would invalidate the signature over that file — the
-      # same reason the stamper hashes the bundle itself rather than reading it
-      # from there.
+      # .mcpb bundles need their own step: they are built after GoReleaser, so
+      # appending them to checksums.txt would invalidate the signature over that
+      # file — the same reason the stamper hashes each bundle itself rather than
+      # reading it from there. One glob attests all four, so a bundle added to
+      # the build is attested without an edit here.
       #
       # Verify: gh attestation verify <file> -R jmrplens/libgen-mcp --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
       - name: Attest build provenance (release assets)
@@ -294,14 +302,14 @@ jobs:
         with:
           subject-checksums: dist/checksums.txt
 
-      - name: Attest build provenance (Claude Desktop extension)
+      - name: Attest build provenance (Claude Desktop extensions)
         if: env.REHEARSAL != 'true'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
-          subject-path: dist/libgen-mcp.mcpb
+          subject-path: dist/*.mcpb
 
       # Every asset — binaries, checksums.txt and its signature, the SBOMs,
-      # THIRD_PARTY_NOTICES and the .mcpb above — is attached before the release
+      # THIRD_PARTY_NOTICES and the .mcpb bundles above — is attached before the release
       # becomes visible, so no
       # installer or updater ever observes a partial one. GoReleaser creates it
       # as a draft (.goreleaser.yml: draft: true) and this is the flip.
@@ -318,8 +326,9 @@ jobs:
       # A rehearsal hands its build to every job downstream the way a release
       # hands them the published assets: the staged binaries, checksums.txt,
       # THIRD_PARTY_NOTICES (which every package carries and the fetch
-      # requires) and the bundle, which fetch-release-assets.sh unpacks and
-      # checks in place of downloading. One tar rather than the files, so the
+      # requires) and the four bundles, which fetch-release-assets.sh unpacks
+      # and checks in place of downloading. libgen-mcp-* takes the per-OS
+      # bundles with the binaries. One tar rather than the files, so the
       # executable bits survive the trip.
       #
       # Without it those jobs would have nothing to run on at all: they produce
@@ -708,7 +717,7 @@ jobs:
     permissions:
       contents: read # download the published release assets
       id-token: write # mcp-publisher login github-oidc
-      attestations: read # verify the .mcpb provenance before hashing it
+      attestations: read # verify each .mcpb's provenance before hashing it
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -722,19 +731,23 @@ jobs:
         with:
           name: rehearsal-assets
           path: ${{ runner.temp }}/rehearsal
-      # Only the bundle and the checksums: this job stamps server.json and
-      # publishes it, and the binaries are not its business.
+      # Only the three per-OS bundles server.json declares and the checksums:
+      # this job stamps server.json and publishes it, and the binaries and the
+      # universal bundle are not its business.
       - name: Fetch and verify release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REHEARSAL_ARCHIVE: ${{ env.REHEARSAL == 'true' && format('{0}/rehearsal/rehearsal-assets.tar', runner.temp) || '' }}
-        run: bash scripts/fetch-release-assets.sh "${RELEASE_TAG#v}" dist "libgen-mcp.mcpb"
+        run: bash scripts/fetch-release-assets.sh "${RELEASE_TAG#v}" dist libgen-mcp-darwin.mcpb libgen-mcp-windows.mcpb libgen-mcp-linux.mcpb
 
       # Runs in a rehearsal too, and that is the point: this is where the
       # stamper meets a real digest and a real bundle, and a rehearsal that
       # skipped it could not catch the one thing the stamper's refusals exist
       # for. The working tree only — the commit to main is a separate job with
-      # a separate credential.
+      # a separate credential. The stamp writes one mcpb entry per bundle
+      # given, so the single universal entry main declared before the first
+      # per-OS release becomes three, and refuses a set that does not serve
+      # darwin, win32 and linux once each.
       - name: Pin server.json version and SHA256 hashes
         env:
           OCI_DIGEST: ${{ needs.docker.outputs.digest }}
@@ -742,7 +755,8 @@ jobs:
           set -euo pipefail
           VERSION="${RELEASE_TAG#v}"
           bash scripts/update-server-json-sha.sh dist/checksums.txt "${VERSION}" \
-            dist/libgen-mcp.mcpb "${OCI_DIGEST}"
+            dist/libgen-mcp-darwin.mcpb,dist/libgen-mcp-windows.mcpb,dist/libgen-mcp-linux.mcpb \
+            "${OCI_DIGEST}"
           # Prove the pin landed before anything is published. mcp-publisher reads
           # server.json, so a pin that silently no-opped would publish the previous
           # version — and the duplicate-version guard below would then report that
@@ -853,7 +867,7 @@ jobs:
       RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
     permissions:
       contents: read # download the published release assets; the push uses the deploy key
-      attestations: read # verify the .mcpb provenance before hashing it
+      attestations: read # verify each .mcpb's provenance before hashing it
     steps:
       # main, not the tag: main is what the commit lands on, so this job runs
       # main's scripts against this release's assets. A change to a script this
@@ -875,7 +889,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REHEARSAL_ARCHIVE: ${{ env.REHEARSAL == 'true' && format('{0}/rehearsal/rehearsal-assets.tar', runner.temp) || '' }}
-        run: bash scripts/fetch-release-assets.sh "${RELEASE_TAG#v}" dist "libgen-mcp.mcpb"
+        run: bash scripts/fetch-release-assets.sh "${RELEASE_TAG#v}" dist libgen-mcp-darwin.mcpb libgen-mcp-windows.mcpb libgen-mcp-linux.mcpb
 
       - name: Commit pinned server.json back to main
         if: ${{ env.REHEARSAL != 'true' && github.event.repository.private == false }}
@@ -908,11 +922,15 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           # The script is idempotent and reads checksums.txt, the version and
-          # the bundle — all of which were checked against this release's
-          # cosign-signed manifest by the fetch step above — so running it here
-          # on current main produces the same fields the registry job stamped.
+          # the three bundles — checked against this release's cosign-signed
+          # manifest and their own attestations by the fetch step above — so
+          # running it here on current main produces the same fields the
+          # registry job stamped. It rebuilds the mcpb entries from the
+          # bundles, so the first release that builds per-OS bundles turns
+          # main's single universal entry into three.
           bash scripts/update-server-json-sha.sh dist/checksums.txt "${VERSION}" \
-            dist/libgen-mcp.mcpb "${OCI_DIGEST}"
+            dist/libgen-mcp-darwin.mcpb,dist/libgen-mcp-windows.mcpb,dist/libgen-mcp-linux.mcpb \
+            "${OCI_DIGEST}"
           # Every manifest the script stamps, not just the two it stamped first;
           # `if` rather than `[ -f … ] &&`, whose non-zero status would abort the
           # step under `set -e` the day a manifest is renamed away.

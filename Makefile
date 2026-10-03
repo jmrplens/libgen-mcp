@@ -549,11 +549,12 @@ check-verify-published: ## Exercise the published-package verifier and the NuGet
 	python3 -m unittest discover -s scripts -p 'verify_published_packages_test.py'
 	python3 -m unittest discover -s scripts -p 'validate_nuget_test.py'
 
-check-mcpb: ## Exercise the Claude Desktop bundle: its manifest, its Linux launcher and its packer (offline)
+check-mcpb: ## Exercise the Claude Desktop bundles: the manifests, the Linux launcher, the packer, the fetch and the registry check (offline)
 	python3 -m unittest discover -s scripts -p 'mcpb_manifest_test.py'
 	python3 -m unittest discover -s scripts -p 'mcpb_launch_sh_test.py'
 	python3 -m unittest discover -s scripts -p 'build_mcpb_sh_test.py'
 	python3 -m unittest discover -s scripts -p 'fetch_release_assets_sh_test.py'
+	python3 -m unittest discover -s scripts -p 'validate_server_json_packages_sh_test.py'
 
 # One case runs the real server, to show a Ctrl+C through the launcher keeps
 # its --drain-delay, so the binary is built first into a directory removed after.
@@ -585,7 +586,7 @@ check-ci-scripts: ## Exercise the PR description gate, the site audit's outage r
 	python3 -m unittest discover -s scripts -p 'audit_site_deps_sh_test.py'
 	python3 -m unittest discover -s scripts -p 'smoke_test_image_sh_test.py'
 
-mcpb: ## Build the .mcpb Claude Desktop bundle (needs GoReleaser artifacts in dist/)
+mcpb: ## Build the .mcpb Claude Desktop bundles, one per OS and the universal one (needs GoReleaser artifacts in dist/)
 	bash scripts/build-mcpb.sh $(VERSION)
 
 # ─── npm distribution ───────────────────────────────────────────────────────

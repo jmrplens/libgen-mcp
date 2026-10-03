@@ -9,8 +9,8 @@
 #   <version>          release version without the leading v (e.g. 1.7.3)
 #   <dest-dir>         directory the assets are downloaded into (created)
 #   [asset-pattern]    gh release download --pattern globs; default: every
-#                      libgen-mcp-* binary and THIRD_PARTY_NOTICES, which every
-#                      package carries beside the binaries and which the
+#                      libgen-mcp-<os>-* binary and THIRD_PARTY_NOTICES, which
+#                      every package carries beside the binaries and which the
 #                      default therefore requires
 #
 # Requires GH_TOKEN with read access to the repository's releases, and cosign
@@ -56,9 +56,13 @@ PATTERNS=("$@")
 NOTICES="THIRD_PARTY_NOTICES"
 REQUIRE_NOTICES=0
 if [ ${#PATTERNS[@]} -eq 0 ] && [ "$CHECKSUMS_ONLY" -eq 0 ]; then
-	# The jobs that take the default package the binaries with the notices, so a
-	# release short of them stops here rather than in each packager.
-	PATTERNS=("libgen-mcp-*" "$NOTICES")
+	# One pattern per operating system rather than libgen-mcp-*, which would
+	# also match the per-OS Claude Desktop bundles (libgen-mcp-linux.mcpb and
+	# the others): the jobs that take the default package the binaries and have
+	# no use for some 45 MB of bundles, nor for the attestation round trips
+	# below. They package the notices with the binaries, so a release short of
+	# them stops here rather than in each packager.
+	PATTERNS=("libgen-mcp-darwin-*" "libgen-mcp-linux-*" "libgen-mcp-windows-*" "$NOTICES")
 	REQUIRE_NOTICES=1
 fi
 
@@ -142,25 +146,29 @@ verified=$(grep -c ": OK$" "$DEST/sha256-check.log" || true)
 rm -f "$DEST/sha256-check.log"
 echo "Verified ${verified} asset(s) against checksums.txt"
 
-# The .mcpb is built after GoReleaser, so it is absent from checksums.txt and is
-# the one asset a job can legitimately fetch on its own. Its integrity comes
-# from the build-provenance attestation instead, and it counts towards the
-# "something was actually verified" floor below. A rehearsal attests nothing,
-# and the bundle it unpacked was built by a job of the same run.
+# The .mcpb bundles are built after GoReleaser, so they are absent from
+# checksums.txt and are the one kind of asset a job can legitimately fetch on
+# its own. Their integrity comes from the build-provenance attestation instead,
+# one per bundle, and each counts towards the "something was actually verified"
+# floor below: every bundle in <dest-dir> is checked, the per-OS ones the
+# registry jobs fetch and the universal one alike, so a bundle nobody attested
+# fails here whichever pattern brought it. A rehearsal attests nothing, and the
+# bundles it unpacked were built by a job of the same run.
 #
 # The attestation is held to the same signer as checksums.txt above: the
 # release workflow at this release's tag. --repo alone accepts an attestation
-# any workflow of the repository minted, at any ref, and this bundle is the one
-# whose hash goes into server.json.
-if [ -f "$DEST/libgen-mcp.mcpb" ]; then
+# any workflow of the repository minted, at any ref, and these bundles are the
+# ones whose hashes go into server.json.
+for bundle in "$DEST"/*.mcpb; do
+	[ -f "$bundle" ] || continue
 	if [ -n "$ARCHIVE" ]; then
-		echo "Rehearsal: the .mcpb came from this run's own build; its attestation is minted at release"
+		echo "Rehearsal: $(basename "$bundle") came from this run's own build; its attestation is minted at release"
 	else
-		echo "Verifying the .mcpb build-provenance attestation"
-		gh attestation verify "$DEST/libgen-mcp.mcpb" --repo "$REPO" --cert-identity "$SIGNER_IDENTITY"
+		echo "Verifying the build-provenance attestation of $(basename "$bundle")"
+		gh attestation verify "$bundle" --repo "$REPO" --cert-identity "$SIGNER_IDENTITY"
 	fi
 	verified=$((verified + 1))
-fi
+done
 
 if [ "$verified" -eq 0 ]; then
 	echo "ERROR: nothing here could be verified — checksums.txt matched no file and no bundle was found" >&2

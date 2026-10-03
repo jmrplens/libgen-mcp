@@ -151,9 +151,10 @@ Add the server to your project's `.mcp.json` (or run `claude mcp add`):
 
 The easiest path is the one-click **`.mcpb`** desktop extension from the
 [latest release](https://github.com/jmrplens/libgen-mcp/releases/latest) (macOS, Windows
-and Linux, no Docker): download it and open it with Claude Desktop, then confirm the
-settings. On Linux, install it from **Extensions > Install Extension…**, since the Linux app
-does not open `.mcpb` files itself.
+and Linux, no Docker): download the bundle for your system (see
+[the installation guide](installation.md#claude-desktop-mcpb)) and open it with Claude
+Desktop, then confirm the settings. On Linux, install it from **Extensions > Install
+Extension…**, since the Linux app does not open `.mcpb` files itself.
 
 To wire it up by hand instead, edit `claude_desktop_config.json`
 (`~/Library/Application Support/Claude/` on macOS,

@@ -1347,20 +1347,37 @@ image's own from the image's binary. Each channel section below says how its
 validator holds the two files; `docs/development/release-chain.md` has the whole
 list.
 
-### The Claude Desktop bundle
+### The Claude Desktop bundles
 
-`scripts/build-mcpb.sh` packs `libgen-mcp.mcpb` from `mcpb/manifest.json`, the
-icon, `mcpb/linux/launch.sh` and four GoReleaser builds: the macOS universal
-binary, Windows amd64, and Linux amd64 **and** arm64. Claude Desktop has a Linux
-beta on both architectures, and the manifest picks a file per operating system,
-never per architecture, so the `linux` override runs
+`scripts/build-mcpb.sh` packs four bundles from `mcpb/manifest.json`, the icon,
+`mcpb/linux/launch.sh` and four GoReleaser builds (the macOS universal binary,
+Windows amd64, and Linux amd64 **and** arm64): one per operating system,
+`libgen-mcp-darwin.mcpb`, `libgen-mcp-windows.mcpb` and `libgen-mcp-linux.mcpb`,
+and the universal `libgen-mcp.mcpb` carrying all of them. Claude Desktop has a
+Linux beta on both architectures, and a manifest picks a file per operating
+system, never per architecture, so the Linux command is
 `/bin/sh ${__dirname}/server/linux/launch.sh`, which picks the binary by
-`uname -m`. Listing `linux` with only one Linux binary is a bundle that installs
+`uname -m`. Serving `linux` with only one Linux binary is a bundle that installs
 on the other architecture and never starts.
 
-Four things hold it together. The packer checks the first three on the
-archive it wrote and removes a bundle that fails, and `make check-mcpb`'s
-launcher test checks the fourth:
+**`server.json` declares the three per-OS bundles and never the universal
+one.** A registry entry has no platform field, so each system must be served by
+exactly one declared bundle; the stamper refuses any other set before it writes,
+and `check-server-json-packages` holds the declared entries to the same rule.
+The universal bundle is still uploaded, for the links that already point at it.
+The per-OS bundles exist because directories stop reading a bundle past 50 MiB
+(256 MiB unpacked), and the single bundle sat within 5 MiB of that; the packer
+reports every bundle's size and warns on a declared one past either figure. The
+entries are written by `update-server-json-sha.sh` from the bundles it is given
+(a comma-separated third argument), never by hand. Each per-OS manifest is
+derived by `mcpb/platform.jq`: only its own platform listed, that platform's
+command promoted to the base command, no override, and the same `name`, so all
+four are one extension to Desktop. `docs/development/release-chain.md` § *One
+bundle per operating system* has the rest.
+
+Four things hold every bundle together. The packer checks the first three on
+each archive it wrote and removes the whole set when one fails, and
+`make check-mcpb`'s launcher test checks the fourth:
 
 - **No override declares `env`.** In Desktop an override's `env` replaces the
   base one rather than merging, which would drop `LIBGEN_MCP_CORE_KEY` and every
@@ -1368,19 +1385,23 @@ launcher test checks the fourth:
 - **Every executable is stored `-rwxr-xr-x unx`.** Desktop extracts every file
   0600 and gives back the execute bit only to entries whose zip mode has it.
 - **Every `${__dirname}/…` path the manifest names is in the archive**, every
-  override is listed in `compatibility.platforms`, and every listed platform
-  but `darwin` has an override. `darwin` runs the base command, the universal
-  binary, so it needs none.
+  override is listed in `compatibility.platforms`, every listed platform but the
+  one the base command serves has an override, and the list names exactly the
+  platforms the archive carries a server for. In the universal bundle the base
+  command is the macOS binary, so `darwin` needs no override; a per-OS bundle
+  lists one platform and carries no override at all.
 - **The launcher never writes to stdout and ends in `exec`.** Desktop reads
   stdout as JSON-RPC, and stops a server by signalling the one PID it started.
 
 `make check-mcpb` (CI's `server.json` job) drives the launcher under every POSIX
-shell the runner has, and the packer over the release job's real `dist/`
-layout. On Linux the app registers no handler for `.mcpb` files, so the docs
-send Linux users to **Extensions > Install Extension…**.
+shell the runner has, the packer over the release job's real `dist/` layout,
+the per-OS derivation, the fetch's attestation of each bundle and the registry
+check's one-bundle-per-system rule. On Linux the app registers no handler for
+`.mcpb` files, so the docs send Linux users to **Extensions > Install
+Extension…**.
 
-The bundle also packs `LICENSE` and `dist/THIRD_PARTY_NOTICES` at its root, both
-in the exact entry list the packer checks. A `dist/` without the notices, or with
+Every bundle also packs `LICENSE` and `dist/THIRD_PARTY_NOTICES` at its root,
+both in the exact entry list the packer checks. A `dist/` without the notices, or with
 a file that does not open with the generator's header, is refused before
 anything is packed, and `make check-mcpb` drives both refusals.
 

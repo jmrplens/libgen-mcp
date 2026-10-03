@@ -117,7 +117,7 @@ version to be replaced, and a mutable GitHub release is the one place where an
 asset and the `checksums.txt` that vouches for it can be swapped together.
 
 **Draft-then-publish is its precondition, not a separate nicety.** An immutable
-release cannot grow an asset afterwards, and the `.mcpb` bundle is uploaded after
+release cannot grow an asset afterwards, and the `.mcpb` bundles are uploaded after
 GoReleaser has created the release — so GoReleaser creates it with `draft: true`
 and the workflow flips it only once every asset is attached. Reversing those two
 steps does not produce a release with a late asset; it produces a release that
