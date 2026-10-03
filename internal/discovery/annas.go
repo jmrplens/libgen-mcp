@@ -77,17 +77,24 @@ type AnnasProvider struct {
 	mirrors MirrorLister
 	// http is the client used for search requests; when nil, http.DefaultClient.
 	http *http.Client
-	// now is a seam so a test can move time without sleeping. The window it is
-	// read against lives in annasRefusals, not here: a provider is built per
-	// search, so a window kept on the value would be forgotten by the next one.
+	// now is a seam so a test can move time without sleeping.
 	now func() time.Time
+	// refusals is the window the cooldown is kept in. Nil, as NewAnnas leaves
+	// it, means the process-wide annasRefusals: a provider is built per search,
+	// so a window kept on the value would be forgotten by the next one. A test
+	// that meets a challenge passes its own so it silences no other test.
+	refusals *refusalWindows
 }
 
-// annasRefusals remembers, for the life of the process, the Anna's mirrors that
-// served a browser challenge. A challenge opens a window on every mirror the
-// search was given, because they are one deployment behind one anti-bot provider,
-// and a search is quiet when any of its mirrors is inside a window.
+// annasRefusals remembers, for the life of the process, that Anna's Archive
+// served a browser challenge. One window covers every mirror, because they are
+// one deployment behind one anti-bot provider, and it is keyed by the provider
+// rather than by mirror so it can be read before the mirror list is asked for,
+// which may itself fetch.
 var annasRefusals refusalWindows
+
+// annasRefusalKey is the one key annasRefusals is read and written under.
+const annasRefusalKey = "annas"
 
 // NewAnnas builds a provider searching the given Anna's Archive mirrors, equipped
 // with its own bounded http.Client (via newDiscoveryClient) so a stalled mirror can
@@ -105,34 +112,28 @@ func (p *AnnasProvider) clock() time.Time {
 	return p.now()
 }
 
-// quiet reports whether a challenge on any of these mirrors is still being
-// waited out, so no request is made at all.
-func (p *AnnasProvider) quiet(mirrors []string) bool {
-	now := p.clock()
-	for _, m := range mirrors {
-		if annasRefusals.quiet(annasMirrorKey(m), now) {
-			return true
-		}
+// window returns the refusal window this provider reads and writes.
+func (p *AnnasProvider) window() *refusalWindows {
+	if p.refusals != nil {
+		return p.refusals
 	}
-	return false
+	return &annasRefusals
 }
 
-// beQuiet opens the cooldown on every mirror of this search and reports whether
-// any window was a fresh one, so the reason is logged once per window rather
-// than per search. The ordering rules (a deadline only ever moves later) are
-// refusalWindows'.
-func (p *AnnasProvider) beQuiet(mirrors []string) bool {
-	now := p.clock()
-	fresh := false
-	for _, m := range mirrors {
-		if annasRefusals.open(annasMirrorKey(m), now) {
-			fresh = true
-		}
-	}
-	return fresh
+// quiet reports whether a challenge is still being waited out, so no request is
+// made at all, the mirror list's own included.
+func (p *AnnasProvider) quiet() bool {
+	return p.window().quiet(annasRefusalKey, p.clock())
 }
 
-// annasMirrorKey normalizes a mirror base the way Search does before using it.
+// beQuiet opens the cooldown and reports whether the window is a fresh one, so
+// the reason is logged once per window rather than per search. The ordering
+// rules (a deadline only ever moves later) are refusalWindows'.
+func (p *AnnasProvider) beQuiet() bool {
+	return p.window().open(annasRefusalKey, p.clock())
+}
+
+// annasMirrorKey normalizes a mirror base before a request is built on it.
 func annasMirrorKey(mirror string) string {
 	return strings.TrimRight(strings.TrimSpace(mirror), "/")
 }
@@ -145,24 +146,24 @@ func (p *AnnasProvider) Name() string { return "annas" }
 // none answers, so a federated search is never failed by this provider. Only a
 // context error propagates.
 func (p *AnnasProvider) Search(ctx context.Context, query string, limit int) ([]DiscoveryResult, error) {
+	// Nothing is asked while a challenge is being waited out, not even the mirror
+	// list, which can fetch the mirror directory. It is the half that matters
+	// for traffic: giving up within one call still left every later search
+	// asking again and being refused again.
+	if p.quiet() {
+		return nil, nil
+	}
+
 	// Bound the whole call the same way arXiv/Crossref/OpenLibrary do, so trying
 	// several mirrors in sequence can never outlive the discovery budget.
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 
-	// Nothing is asked while a challenge is being waited out. It is the half
-	// that matters for traffic: giving up within one call still left every
-	// later search asking again and being refused again.
-	mirrors := p.mirrors.Mirrors(ctx)
-	if p.quiet(mirrors) {
-		return nil, nil
-	}
-
 	httpClient := p.http
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
-	for _, mirror := range mirrors {
+	for _, mirror := range p.mirrors.Mirrors(ctx) {
 		base := annasMirrorKey(mirror)
 		body, err := p.fetch(ctx, httpClient, base, query)
 		if err != nil {
@@ -176,7 +177,7 @@ func (p *AnnasProvider) Search(ctx context.Context, query string, limit int) ([]
 			// because otherwise this is indistinguishable from "nothing matched"
 			// — and the two call for completely different reactions.
 			if errors.Is(err, errChallenged) {
-				if p.beQuiet(mirrors) {
+				if p.beQuiet() {
 					slog.Warn("annas search: mirror is serving a browser challenge, asking nothing for "+challengeCooldown.String(),
 						"mirror", base, "hint", "search needs the HTML site, which no API key unlocks; a configured "+
 							"member key still serves download through the member API")
