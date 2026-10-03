@@ -34,16 +34,16 @@
     "@astrojs/starlight": "^0.42.4",
     "astro": "^7.3.5",
     "mermaid": "^12.0.0",
-    "sharp": "^0.35.4"
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
-    "@typescript-eslint/eslint-plugin": "^8.70.1",
-    "@typescript-eslint/parser": "^8.70.1",
+    "@typescript-eslint/eslint-plugin": "^8.71.0",
+    "@typescript-eslint/parser": "^8.71.0",
     "eslint": "^10.11.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-astro": "^3.2.1",
-    "html-validate": "^11.16.0",
+    "html-validate": "^11.16.1",
     "htmlhint": "^1.9.2",
     "js-yaml": "4.3.2",
     "pa11y-ci": "^4.1.1",
