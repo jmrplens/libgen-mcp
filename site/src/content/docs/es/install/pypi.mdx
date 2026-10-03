@@ -26,8 +26,8 @@ Seis wheels por release, una por plataforma, con la etiqueta `py3-none-<platform
 | ------------------- | -------------------------------------------------------------------------- |
 | Linux x86_64        | `manylinux_2_17_x86_64`, `manylinux2014_x86_64`, `musllinux_1_1_x86_64`    |
 | Linux aarch64       | `manylinux_2_17_aarch64`, `manylinux2014_aarch64`, `musllinux_1_1_aarch64` |
-| macOS Intel         | `macosx_11_0_x86_64`                                                       |
-| macOS Apple Silicon | `macosx_11_0_arm64`                                                        |
+| macOS Intel         | `macosx_13_0_x86_64`                                                       |
+| macOS Apple Silicon | `macosx_13_0_arm64`                                                        |
 | Windows x64         | `win_amd64`                                                                |
 | Windows arm64       | `win_arm64`                                                                |
 
@@ -219,6 +219,7 @@ pipx uninstall libgen-mcp
 ## Notas por plataforma
 
 - **Alpine** instala la misma wheel de Linux que Debian, a través de su etiqueta `musllinux`.
+- **macOS** necesita la 13 (Ventura) o posterior, el mínimo que la cadena de Go escribe en el binario. Las wheels llevan la etiqueta `macosx_13_0`, así que pip en un sistema más antiguo no encuentra wheel en vez de instalar una. Hasta la 2.1.0 llevaban `macosx_11_0`, y pip en macOS 11 o 12 instalaba una orden que no podía arrancar.
 - **Windows** deja `libgen-mcp.exe` en el directorio `Scripts\` del entorno. Un cliente arrancado fuera de ese entorno necesita la ruta completa.
 - **Una plataforma sin soporte** (32 bits, FreeBSD, Linux en otra arquitectura) recibe «no matching distribution». Compílalo desde el código fuente con [`go install`](/libgen-mcp/es/install/binary/#compilar-desde-el-código-fuente).
 

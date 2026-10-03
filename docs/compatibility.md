@@ -68,7 +68,7 @@ What each channel carries per platform:
 | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Release  | `libgen-mcp-{linux,darwin,windows}-{amd64,arm64}` (`.exe` on Windows), plus the universal `libgen-mcp` for macOS, all listed in the cosign-signed `checksums.txt`                        |
 | npm      | The launcher `@jmrp.io/libgen-mcp` and one optional package per platform: `-linux-x64`, `-linux-arm64`, `-darwin-x64`, `-darwin-arm64`, `-win32-x64`, `-win32-arm64`                     |
-| PyPI     | One `py3-none` wheel per platform: `manylinux_2_17` + `manylinux2014` + `musllinux_1_1` for each Linux architecture, `macosx_11_0_x86_64`, `macosx_11_0_arm64`, `win_amd64`, `win_arm64` |
+| PyPI     | One `py3-none` wheel per platform: `manylinux_2_17` + `manylinux2014` + `musllinux_1_1` for each Linux architecture, `macosx_13_0_x86_64`, `macosx_13_0_arm64`, `win_amd64`, `win_arm64` |
 | NuGet    | The pointer package `libgen-mcp` and one package per runtime identifier: `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`, `win-x64`, `win-arm64`                                      |
 | Homebrew | One formula that picks the release asset by `on_macos`/`on_linux` and `on_arm`/`on_intel`                                                                                                |
 | Docker   | One multi-architecture image, `ghcr.io/jmrplens/libgen-mcp` and `docker.io/jmrplens/libgen-mcp`, for `linux/amd64` and `linux/arm64`                                                     |
@@ -76,9 +76,9 @@ What each channel carries per platform:
 
 Notes that matter when a platform is on the edge:
 
-- **The PyPI macOS wheels are tagged `macosx_11_0`, but the binary inside needs macOS 13.** pip
-  on macOS 11 or 12 installs the wheel, and the command then fails to start. Use macOS 13 or
-  newer whatever the tag says.
+- **The PyPI macOS wheels need macOS 13.** They are tagged `macosx_13_0`, the minimum the Go
+  toolchain writes into the binary. Up to 2.1.0 they were tagged `macosx_11_0`, so pip on
+  macOS 11 or 12 installed a wheel whose command then failed to start.
 - **Windows on Arm and Claude Desktop.** The `.mcpb` bundle for Windows carries the amd64
   executable, which Windows on Arm runs under emulation. Every other channel that serves
   Windows has a native `arm64` build.

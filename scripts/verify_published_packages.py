@@ -84,12 +84,17 @@ NPM_ASSETS = {
 
 # Wheel platform tag fragment -> release asset name. The linux wheels carry
 # compressed tag sets (manylinux and musllinux in one filename), so the fragment
-# is matched anywhere in the name rather than compared whole.
+# is matched anywhere in the name rather than compared whole. The macOS wheels
+# were tagged macosx_11_0 through 2.1.0 and macosx_13_0 after it, the minimum
+# the Go toolchain's darwin binaries declare, and both spellings are listed
+# because this script audits releases older and newer than the checkout.
 WHEEL_ASSETS = {
     "manylinux_2_17_x86_64": "libgen-mcp-linux-amd64",
     "manylinux_2_17_aarch64": "libgen-mcp-linux-arm64",
     "macosx_11_0_x86_64": "libgen-mcp-darwin-amd64",
     "macosx_11_0_arm64": "libgen-mcp-darwin-arm64",
+    "macosx_13_0_x86_64": "libgen-mcp-darwin-amd64",
+    "macosx_13_0_arm64": "libgen-mcp-darwin-arm64",
     "win_amd64": "libgen-mcp-windows-amd64.exe",
     "win_arm64": "libgen-mcp-windows-arm64.exe",
 }
