@@ -67,9 +67,9 @@ cliente MCP (Claude Desktop, Claude Code, Cursor, VS Code, …) y los mirrors
 públicos de Library Genesis. No necesita **ninguna cuenta, ningún token y ninguna
 credencial**. Esta política describe qué datos maneja el software y a dónde van.
 
-Hay una vía distinta, descrita aparte más abajo: el endpoint público hospedado en
+Hay una vía distinta, descrita aparte más abajo: el endpoint público alojado en
 `mcp.jmrp.io/libgen`, donde el software se ejecuta en la máquina de otra persona y
-no en la tuya. Ver [Endpoint hospedado](#endpoint-hospedado).
+no en la tuya. Ver [Endpoint alojado](#endpoint-alojado).
 
 ## Qué recopilamos
 
@@ -82,7 +82,7 @@ información de uso, porque nada se envía jamás a ningún sitio que el mantene
 controle.
 
 Esa última frase habla del software y se cumple lo ejecutes donde lo ejecutes. No
-habla del [endpoint hospedado](#endpoint-hospedado), donde ese mismo software corre
+habla del [endpoint alojado](#endpoint-alojado), donde ese mismo software corre
 en una máquina que opera el mantenedor.
 
 ### OpenTelemetry, si lo activas
@@ -277,7 +277,7 @@ es igualmente opcional y está sin definir por defecto.
   fichero `.part` en el directorio de destino para que una llamada posterior
   pueda reanudarla.
 
-## Endpoint hospedado
+## Endpoint alojado
 
 Hay una instancia pública de este servidor en `https://mcp.jmrp.io/libgen`. Usarla
 es opcional y nunca es lo predeterminado: nada la instala, y ninguna configuración

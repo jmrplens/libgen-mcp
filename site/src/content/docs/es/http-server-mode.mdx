@@ -53,7 +53,7 @@ Hay tres formas de despliegue y dan tres respuestas distintas. Averigua cuál es
 
 ### Un listener TCP detrás de un proxy
 
-Es la forma habitual, es la que recomienda [Primeros pasos](/libgen-mcp/es/getting-started/#remoto-http-en-streaming), y es la que corre el endpoint hospedado en `mcp.jmrp.io/libgen`.
+Es la forma habitual, es la que recomienda [Primeros pasos](/libgen-mcp/es/getting-started/#remoto-http-en-streaming), y es la que corre el endpoint alojado en `mcp.jmrp.io/libgen`.
 
 Sin `--trusted-proxies`, **todas las peticiones llegan desde el proxy**, así que todos los llamantes son el mismo llamante: el límite de tasa es un solo cubo para el mundo entero, el techo de llamadas en vuelo es un segundo techo de proceso disfrazado de techo por llamante, y `user.hash` es una constante. No hay nada sutil ni raro en ello: es el resultado por defecto de la forma que se recomienda.
 
@@ -109,22 +109,9 @@ Una vez sabes en qué forma estás, tres comportamientos se siguen de ella:
 
 Quien despliegue detrás de un proxy y lea solo el párrafo del socket concluirá que nada de esto le afecta, que es justo lo contrario de la verdad.
 
-## El endpoint hospedado, escrito entero
+## El endpoint alojado, escrito entero
 
-La instancia pública en `https://mcp.jmrp.io/libgen` es la primera forma: tres contenedores que abren cada uno `0.0.0.0:8080`, publicados en el loopback del host, alcanzados por un nginx en otra máquina. Su configuración es el ejemplo trabajado:
-
-```bash
-libgen-mcp \
-  --http 0.0.0.0:8080 \
-  --public-url https://mcp.jmrp.io/libgen \
-  --trusted-proxies 172.19.0.1/32 \
-  --trusted-proxy-header X-Real-IP \
-  --rate-limit-rps 60
-```
-
-`172.19.0.1/32` es **la pasarela del bridge de Docker de este despliegue** — la dirección que ven estos contenedores cuando el proxy los alcanza por un puerto publicado en loopback. No es un valor para copiar: en una máquina normal el peer es `127.0.0.1`, en el bridge de otra máquina es otro `/32`, y pegar este en un despliegue sin contenedores da una cabecera que se ignora en silencio. Léela de tu propio despliegue, como describe la tabla de arriba.
-
-El resto se traslada sin cambios, y coincide con lo que lleva el servidor hermano del mismo dominio, de modo que los dos endpoints responden igual: una URL pública declarada, un proxy nombrado, `X-Real-IP` y un límite de tasa puesto a conciencia en vez de dejado por defecto.
+La instancia pública en `https://mcp.jmrp.io/libgen` es la primera forma: tres contenedores que abren cada uno `0.0.0.0:8080`, publicados en el loopback del host, alcanzados por un nginx en otra máquina, con `--public-url`, los dos flags del proxy nombrando la pasarela de su bridge de Docker y `X-Real-IP`, y `--rate-limit-rps 60`. La orden exacta, por qué la dirección de la pasarela no es para copiar y la única variable de entorno que aparta su superficie de herramientas del valor por defecto están en [Endpoint alojado → Monta lo mismo por tu cuenta](/libgen-mcp/es/hosted/#monta-lo-mismo-por-tu-cuenta).
 
 ## Qué puede pedir un llamante
 

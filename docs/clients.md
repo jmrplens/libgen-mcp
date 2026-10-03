@@ -11,8 +11,9 @@ field. This page has one complete entry per client, in two forms:
   saves the file to your disk.
 - **Remote, over streamable HTTP.** The client connects to a server somebody already runs —
   the public endpoint at `https://mcp.jmrp.io/libgen`, or your own `--http` deployment. Nothing
-  is installed, but `read` is not registered there and `download` returns a link instead of
-  a file. [What changes on a remote server](#what-changes-on-a-remote-server) says why.
+  is installed, but `download` returns a link instead of a file, and `read` is present only
+  where the operator has turned it on, as the public endpoint has.
+  [What changes on a remote server](#what-changes-on-a-remote-server) says why.
 
 Every entry below names the server `libgen`. The name is yours to choose; it only changes
 how the client labels the tools.
@@ -98,16 +99,18 @@ A remote server is configured by whoever runs it, not by your client: there is n
 block to send, and the keys above are the deployment's. Two differences follow from the
 server not being on your machine:
 
-- **`read` is not registered.** It is absent from `tools/list` rather than present and
-  failing, so the client sees three tools.
 - **`download` returns a link** — a `resource_link` plus a `resolved` object — instead of
-  writing a file, and your client or browser fetches the bytes.
+  writing a file, and your client or browser fetches the bytes. That holds on every remote
+  deployment, whatever it is configured with: the server cannot write to your disk.
+- **`read` is absent by default.** `LIBGEN_MCP_SERVER_FETCH` is off by default on an HTTP
+  deployment, so that the server's shared egress address never carries file bodies, and with
+  it off `read` is not registered: it is absent from `tools/list` rather than present and
+  failing, and the client sees three tools. An operator who sets it to `1` brings `read` back
+  — `download` stays link-only — and the public endpoint does: it serves all four tools, with
+  `read` taking an `md5` or a `doi` but no `path`.
 
-Both come from `LIBGEN_MCP_SERVER_FETCH`, which is off by default on an HTTP deployment so
-that the server's shared egress address never carries file bodies; see
-[`LIBGEN_MCP_SERVER_FETCH`](configuration.md#libgen_mcp_server_fetch) and
-[Where the file goes](tools.md#where-the-file-goes-local-vs-remote). An operator who sets it
-to `1` on their own deployment gets both back.
+See [`LIBGEN_MCP_SERVER_FETCH`](configuration.md#libgen_mcp_server_fetch) and
+[Where the file goes](tools.md#where-the-file-goes-local-vs-remote).
 
 The URL is the endpoint itself: `https://mcp.jmrp.io/libgen` for the public instance
 ([Hosted endpoint](hosted.md) describes it), or the address your own deployment serves, where

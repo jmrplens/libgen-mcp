@@ -21,7 +21,7 @@ import { Tabs, TabItem, Aside } from "@astrojs/starlight/components";
 Cada cliente MCP guarda una lista de servidores, y cada uno la escribe de forma un poco distinta: otro archivo, otra clave de primer nivel, otro nombre para el campo de la URL. Esta página trae una entrada completa por cliente, en dos formas:
 
 - **Local, por stdio.** El cliente arranca el servidor como proceso hijo y habla con él por la entrada y la salida estándar. Es el servidor completo: las cuatro herramientas, y `download` guarda el archivo en tu disco.
-- **Remoto, por HTTP en streaming.** El cliente se conecta a un servidor que ya ejecuta alguien: el endpoint público en `https://mcp.jmrp.io/libgen` o tu propio despliegue con `--http`. No se instala nada, pero allí `read` no está registrada y `download` devuelve un enlace en lugar de un archivo. [Qué cambia en un servidor remoto](#qué-cambia-en-un-servidor-remoto) explica por qué.
+- **Remoto, por HTTP en streaming.** El cliente se conecta a un servidor que ya ejecuta alguien: el endpoint público en `https://mcp.jmrp.io/libgen` o tu propio despliegue con `--http`. No se instala nada, pero `download` devuelve un enlace en lugar de un archivo, y `read` solo está donde el operador la ha activado, como en el endpoint público. [Qué cambia en un servidor remoto](#qué-cambia-en-un-servidor-remoto) explica por qué.
 
 Todas las entradas de abajo llaman al servidor `libgen`. El nombre lo eliges tú; solo cambia cómo etiqueta el cliente las herramientas.
 
@@ -80,12 +80,12 @@ Un cliente local que admite elicitation de MCP también puede recibir la petici�
 
 Un servidor remoto lo configura quien lo ejecuta, no tu cliente: no hay bloque `env` que enviar, y las claves de arriba son las del despliegue. Que el servidor no esté en tu máquina trae dos diferencias:
 
-- **`read` no está registrada.** Falta en `tools/list` en lugar de aparecer y fallar, así que el cliente ve tres herramientas.
-- **`download` devuelve un enlace** (un `resource_link` más un objeto `resolved`) en lugar de escribir un archivo, y es tu cliente o tu navegador quien descarga los bytes.
+- **`download` devuelve un enlace** (un `resource_link` más un objeto `resolved`) en lugar de escribir un archivo, y es tu cliente o tu navegador quien descarga los bytes. Eso vale en cualquier despliegue remoto, con la configuración que tenga: el servidor no puede escribir en tu disco.
+- **`read` falta por defecto.** `LIBGEN_MCP_SERVER_FETCH` está desactivada por defecto en un despliegue HTTP, para que la dirección de salida compartida del servidor nunca transporte el contenido de los archivos, y con ella desactivada `read` no se registra: falta en `tools/list` en lugar de aparecer y fallar, y el cliente ve tres herramientas. Un operador que la pone a `1` recupera `read` — `download` sigue devolviendo solo enlaces — y el endpoint público lo hace: sirve las cuatro herramientas, con `read` aceptando un `md5` o un `doi` pero no un `path`.
 
-Las dos vienen de `LIBGEN_MCP_SERVER_FETCH`, que está desactivada por defecto en un despliegue HTTP para que la dirección de salida compartida del servidor nunca transporte el contenido de los archivos; consulta [`LIBGEN_MCP_SERVER_FETCH`](/libgen-mcp/es/configuration/#libgen_mcp_server_fetch) y [Dónde acaba el archivo](/libgen-mcp/es/tools/#dónde-acaba-el-archivo-local-vs-remoto). Un operador que la pone a `1` en su propio despliegue recupera ambas cosas.
+Consulta [`LIBGEN_MCP_SERVER_FETCH`](/libgen-mcp/es/configuration/#libgen_mcp_server_fetch) y [Dónde acaba el archivo](/libgen-mcp/es/tools/#dónde-acaba-el-archivo-local-vs-remoto).
 
-La URL es el propio endpoint: `https://mcp.jmrp.io/libgen` para la instancia pública ([Endpoint hospedado](/libgen-mcp/es/hosted/) la describe), o la dirección que sirva tu propio despliegue, donde el punto de montaje y su alias `/mcp` son el mismo endpoint. Cómo ejecutar uno está en [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/). El transporte es HTTP en streaming sin estado; un cliente que solo ofrece el antiguo transporte SSE no puede conectarse.
+La URL es el propio endpoint: `https://mcp.jmrp.io/libgen` para la instancia pública ([Endpoint alojado](/libgen-mcp/es/hosted/) la describe), o la dirección que sirva tu propio despliegue, donde el punto de montaje y su alias `/mcp` son el mismo endpoint. Cómo ejecutar uno está en [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/). El transporte es HTTP en streaming sin estado; un cliente que solo ofrece el antiguo transporte SSE no puede conectarse.
 
 ## Instalación en un clic
 
