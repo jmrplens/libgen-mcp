@@ -304,11 +304,11 @@ by registering the tools and prompts for real and walking the tree, and
 | Discovery providers      |     8 |
 | `LIBGEN_MCP_*` variables |    57 |
 | Go packages              |    52 |
-| Test files               |   267 |
+| Test files               |   268 |
 
 | Test surface         | Files |
 | -------------------- | ----: |
-| unit (internal)      |   108 |
+| unit (internal)      |   109 |
 | unit (cmd)           |   102 |
 | HTTP end-to-end      |    33 |
 | stdio end-to-end     |    11 |
