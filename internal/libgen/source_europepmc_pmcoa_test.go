@@ -94,10 +94,33 @@ func pmcOAListingOf(prefixes ...string) []byte {
 	return []byte(b.String())
 }
 
-// pmcOAMetaOf renders a version's metadata JSON with the three fields read.
-func pmcOAMetaOf(version string, manuscript, retracted bool) []byte {
-	return []byte(`{"pmcid":"PMC4991899","is_manuscript":` + strconv.FormatBool(manuscript) +
-		`,"is_retracted":` + strconv.FormatBool(retracted) +
+// pmcOAVersionFlags are the metadata flags a rendered version carries.
+type pmcOAVersionFlags struct {
+	// manuscript sets is_manuscript.
+	manuscript bool
+	// retracted sets is_retracted.
+	retracted bool
+	// closed clears is_pmc_openaccess, which is set otherwise.
+	closed bool
+}
+
+// The version shapes the selection tests combine.
+var (
+	// pmcOAPublished is a published open-access version.
+	pmcOAPublished = pmcOAVersionFlags{}
+	// pmcOAManuscript is an open-access author manuscript.
+	pmcOAManuscript = pmcOAVersionFlags{manuscript: true}
+	// pmcOARetracted is a published version flagged retracted.
+	pmcOARetracted = pmcOAVersionFlags{retracted: true}
+	// pmcOAClosed is a published version outside the Open Access Subset.
+	pmcOAClosed = pmcOAVersionFlags{closed: true}
+)
+
+// pmcOAMetaOf renders a version's metadata JSON with the fields read.
+func pmcOAMetaOf(version string, f pmcOAVersionFlags) []byte {
+	return []byte(`{"pmcid":"PMC4991899","is_manuscript":` + strconv.FormatBool(f.manuscript) +
+		`,"is_retracted":` + strconv.FormatBool(f.retracted) +
+		`,"is_pmc_openaccess":` + strconv.FormatBool(!f.closed) +
 		`,"pdf_url":"s3://pmc-oa-opendata/` + version + `/` + version + `.pdf?md5=00"}`)
 }
 
@@ -141,10 +164,13 @@ func TestPDFURL_TakesTheRecordedVersion(t *testing.T) {
 	}
 }
 
-// TestPDFURL_PrefersThePublishedVersion pins the selection order. NCBI says a
-// higher version number is not a more recent one, and the usual pair is an author
-// manuscript beside the published article, so the published one wins whatever its
-// number, and a retracted version is never offered at all.
+// TestPDFURL_PrefersThePublishedVersion pins the selection order. NCBI's PMC
+// Article Datasets page says a higher version number does not mean a more recent
+// or preferred version, except where the journal itself versions the article, and
+// points to is_manuscript to tell the two kinds apart. So the published version
+// wins whatever its number, the highest number wins within a kind, a version
+// outside the Open Access Subset is passed over, and a version whose metadata
+// cannot be read is skipped rather than sinking the others.
 func TestPDFURL_PrefersThePublishedVersion(t *testing.T) {
 	cases := []struct {
 		name string
@@ -154,24 +180,32 @@ func TestPDFURL_PrefersThePublishedVersion(t *testing.T) {
 		{
 			name: "published below a manuscript",
 			meta: map[string][]byte{
-				"PMC4991899.1": pmcOAMetaOf("PMC4991899.1", false, false),
-				"PMC4991899.2": pmcOAMetaOf("PMC4991899.2", true, false),
+				"PMC4991899.1": pmcOAMetaOf("PMC4991899.1", pmcOAPublished),
+				"PMC4991899.2": pmcOAMetaOf("PMC4991899.2", pmcOAManuscript),
 			},
 			want: "/PMC4991899.1/PMC4991899.1.pdf",
 		},
 		{
 			name: "manuscripts only takes the highest",
 			meta: map[string][]byte{
-				"PMC4991899.1": pmcOAMetaOf("PMC4991899.1", true, false),
-				"PMC4991899.2": pmcOAMetaOf("PMC4991899.2", true, false),
+				"PMC4991899.1": pmcOAMetaOf("PMC4991899.1", pmcOAManuscript),
+				"PMC4991899.2": pmcOAMetaOf("PMC4991899.2", pmcOAManuscript),
 			},
 			want: "/PMC4991899.2/PMC4991899.2.pdf",
 		},
 		{
-			name: "a retracted published version yields to the manuscript",
+			name: "a published version outside the open-access subset yields to the manuscript",
 			meta: map[string][]byte{
-				"PMC4991899.1": pmcOAMetaOf("PMC4991899.1", true, false),
-				"PMC4991899.2": pmcOAMetaOf("PMC4991899.2", false, true),
+				"PMC4991899.1": pmcOAMetaOf("PMC4991899.1", pmcOAManuscript),
+				"PMC4991899.2": pmcOAMetaOf("PMC4991899.2", pmcOAClosed),
+			},
+			want: "/PMC4991899.1/PMC4991899.1.pdf",
+		},
+		{
+			name: "unreadable metadata on one version leaves the other",
+			meta: map[string][]byte{
+				"PMC4991899.1": pmcOAMetaOf("PMC4991899.1", pmcOAPublished),
+				// No entry for .2: the stand-in answers 403 for its metadata.
 			},
 			want: "/PMC4991899.1/PMC4991899.1.pdf",
 		},
@@ -218,6 +252,44 @@ func TestPDFURL_ClassifiesEachFailure(t *testing.T) {
 		s := europePMCSource{http: bucket.Client(), bucketBase: bucket.URL}
 		_, err := s.pdfURL(context.Background(), "PMC12788873")
 		assertCleanMiss(t, err)
+	})
+
+	t.Run("a retracted flag on any version declines the whole article", func(t *testing.T) {
+		// The servable published version is .1. A retraction is about the work,
+		// so the flag on .2 covers it too.
+		bucket := pmcOABucket{
+			listing: pmcOAListingOf("PMC4991899.1/", "PMC4991899.2/"),
+			meta: map[string][]byte{
+				"PMC4991899.1": pmcOAMetaOf("PMC4991899.1", pmcOAPublished),
+				"PMC4991899.2": pmcOAMetaOf("PMC4991899.2", pmcOARetracted),
+			},
+			servePDF: true,
+		}.serve(t)
+		s := europePMCSource{http: bucket.Client(), bucketBase: bucket.URL}
+		_, err := s.pdfURL(context.Background(), "PMC4991899")
+		assertCleanMiss(t, err)
+	})
+
+	t.Run("an article held only outside the open-access subset is a clean miss", func(t *testing.T) {
+		bucket := pmcOABucket{
+			listing:  pmcOAListingOf("PMC4991899.1/"),
+			meta:     map[string][]byte{"PMC4991899.1": pmcOAMetaOf("PMC4991899.1", pmcOAClosed)},
+			servePDF: true,
+		}.serve(t)
+		s := europePMCSource{http: bucket.Client(), bucketBase: bucket.URL}
+		_, err := s.pdfURL(context.Background(), "PMC4991899")
+		assertCleanMiss(t, err)
+	})
+
+	t.Run("a canceled context is returned as itself", func(t *testing.T) {
+		bucket := pmcOABucket{listing: pmcOAFixture(t, "pmcoa_list.xml"), meta: published, servePDF: true}.serve(t)
+		s := europePMCSource{http: bucket.Client(), bucketBase: bucket.URL}
+		versions := []string{"PMC4991899.1"}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		if _, err := s.pmcOACandidates(ctx, "PMC4991899", versions); !errors.Is(err, context.Canceled) {
+			t.Errorf("pmcOACandidates() error = %v, want context.Canceled", err)
+		}
 	})
 
 	t.Run("a PDF listed but not served is unavailability", func(t *testing.T) {
