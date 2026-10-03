@@ -5250,6 +5250,97 @@ func TestDetailsByCitation_Refusals(t *testing.T) {
 	}
 }
 
+// TestCiteStyles accepts the advertised styles in any case, drops repeats in
+// the order asked, and refuses anything else by name.
+func TestCiteStyles(t *testing.T) {
+	got, err := citeStyles([]string{" APA", "vancouver", "apa", "csl-json"})
+	if err != nil || strings.Join(got, ",") != "apa,vancouver,csl-json" {
+		t.Errorf("got %q, %v", got, err)
+	}
+	if _, err = citeStyles([]string{"apa", "turabian"}); err == nil || !strings.Contains(err.Error(), `"turabian"`) {
+		t.Errorf("err = %v", err)
+	}
+}
+
+// TestDetailsHandler_RegistryDOIWithStyles drives a DataCite DOI end to end:
+// the catalog and Crossref know nothing of it, doi.org serves its CSL-JSON
+// record and the requested style, and the result says which path made each.
+func TestDetailsHandler_RegistryDOIWithStyles(t *testing.T) {
+	csl, err := os.ReadFile("testdata/csl_datacite.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/json.php", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`[]`)) })
+	mux.HandleFunc("/works/", func(w http.ResponseWriter, _ *http.Request) { http.NotFound(w, nil) })
+	mux.HandleFunc("/10.5061/dryad.8515", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Header.Get("Accept") {
+		case "application/vnd.citationstyles.csl+json":
+			_, _ = w.Write(csl)
+		case "text/x-bibliography; style=apa":
+			w.Header().Set("Content-Type", "text/x-bibliography; charset=utf-8")
+			_, _ = w.Write([]byte("Ollomo, B. (2011). <i>Data from: A new malaria agent | in African hominids.</i> Dryad."))
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: 5 * time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1, EnrichEnabled: true}
+	client := libgen.New(staticMirrors{srv.URL}, cfg, libgen.WithEnrichBaseURLs(srv.URL, srv.URL))
+
+	res, out, err := detailsHandler(client, cfg, nil)(t.Context(), nil,
+		DetailsInput{DOI: "10.5061/dryad.8515", CiteAs: []string{"apa", "ieee"}})
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	if stringField(out.File, "origin") != "doi.org" || !strings.HasPrefix(stringField(out.File, "title"), "Data from") {
+		t.Fatalf("file = %+v", out.File)
+	}
+	f := out.Citations.Formatted
+	if len(f) != 2 || f[0].Source != "doi.org" || f[1].Source != "local" {
+		t.Fatalf("formatted = %+v", f)
+	}
+	if f[0].Text != "Ollomo, B. (2011). Data from: A new malaria agent | in African hominids. Dryad." {
+		t.Errorf("apa = %q", f[0].Text)
+	}
+	md := res.Content[0].(*mcp.TextContent).Text
+	for _, want := range []string{
+		"### Citation (apa, formatted by the registry via doi.org)",
+		"### Citation (ieee, built from the record's fields)",
+		"```text\nOllomo, B. (2011).",
+	} {
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(md, want) {
+				t.Errorf("markdown lacks %q:\n%s", want, md)
+			}
+		})
+	}
+}
+
+// TestDetailsHandler_UnknownStyleRefusedFirst refuses a bad cite_as before
+// any lookup is made.
+func TestDetailsHandler_UnknownStyleRefusedFirst(t *testing.T) {
+	cfg := &config.Config{DownloadDir: t.TempDir(), Timeout: time.Second, RateRPS: 1000, RateBurst: 100, RetryAttempts: 1}
+	_, _, err := detailsHandler(emptyJSONClient(t), cfg, nil)(t.Context(), nil,
+		DetailsInput{DOI: "10.1/x", CiteAs: []string{"bluebook"}})
+	if err == nil || !strings.Contains(err.Error(), "cite_as") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+// TestDetailsFromRegistry_Nothing keeps the catalog's own error when the
+// registry has no record either.
+func TestDetailsFromRegistry_Nothing(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { http.NotFound(w, nil) }))
+	t.Cleanup(srv.Close)
+	client, _ := clientWithCrossref(t, srv.URL)
+	catalogErr := errors.New("no record for doi")
+	if _, err := detailsFromRegistry(t.Context(), client, "10.1/x", catalogErr); !errors.Is(err, catalogErr) {
+		t.Errorf("err = %v", err)
+	}
+}
+
 // TestUnresolvedCitationSteps covers the empty answer, which has no candidate
 // to name in the next call.
 func TestUnresolvedCitationSteps(t *testing.T) {

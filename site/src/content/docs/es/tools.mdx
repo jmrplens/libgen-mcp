@@ -307,6 +307,12 @@ Un resultado también puede llevar un `venue`: el medio de publicación tal y co
 	<Fragment slot="object">
 		Se usa con `id`: `edition` (por defecto) o `file`.
 	</Fragment>
+	<Fragment slot="cite_as">
+		Estilos de cita adicionales junto a BibTeX y RIS: cualquiera de `apa`,
+		`mla`, `chicago`, `harvard`, `vancouver`, `ieee` y `csl-json`. Desactivado
+		por defecto. Consulta
+		[Citas](/libgen-mcp/es/citations/#otros-estilos-de-cita).
+	</Fragment>
 	<Fragment slot="enrich">
 		Cuando es `true`, aumenta el registro con metadatos sin clave de Crossref
 		(por DOI) y OpenLibrary (por ISBN). Best-effort y desactivado por defecto.
@@ -326,7 +332,7 @@ Un resultado también puede llevar un `venue`: el medio de publicación tal y co
 	<Fragment slot="citation_match">Presente en una consulta por `citation`: `status` `resolved` con el `doi` y el `title` elegidos, o `unresolved` con el `reason` y hasta cinco `candidates` (título, autores, año, publicación, DOI y puntuación de Crossref), sin `file` ni `edition`.</Fragment>
 	<Fragment slot="file">El registro de archivo (presente en una consulta por `md5`, o una consulta por `id` con `object: file`).</Fragment>
 	<Fragment slot="edition">El registro de edición (presente en la edición relacionada de una consulta por `md5`, o una consulta por `id` con `object: edition`).</Fragment>
-	<Fragment slot="citations">`{"bibtex": ..., "ris": ..., "doi_status": ..., "provenance": ...}` — una exportación BibTeX y RIS lista para pegar, construida a partir de los metadatos del registro, con `doi_status` (`confirmed`, `unverified` o `mismatch` frente a Crossref; solo un DOI confirmado se escribe en las entradas) y `provenance` (de dónde salió cada campo, para transmitirlo junto con la cita). Se omite cuando el registro no tiene título (el mínimo necesario para una cita útil). Los campos de metadatos vacíos se descartan en lugar de emitirse en blanco, y la exportación no lleva ningún campo ISBN.</Fragment>
+	<Fragment slot="citations">`{"bibtex": ..., "ris": ..., "doi_status": ..., "provenance": ...}` — una exportación BibTeX y RIS lista para pegar, construida a partir de los metadatos del registro, con `doi_status` (`confirmed`, `unverified` o `mismatch` frente a Crossref; solo un DOI confirmado se escribe en las entradas) y `provenance` (de dónde salió cada campo, para transmitirlo junto con la cita). Se omite cuando el registro no tiene título (el mínimo necesario para una cita útil). Los campos de metadatos vacíos se descartan en lugar de emitirse en blanco, y la exportación no lleva ningún campo ISBN. Con `cite_as`, `formatted` añade los estilos pedidos (consulta [Citas](/libgen-mcp/es/citations/#otros-estilos-de-cita)).</Fragment>
 	<Fragment slot="enrichment">Metadatos externos best-effort (Crossref/OpenLibrary), presentes cuando se pidió `enrich` y se encontró algo — y también en la reserva de Crossref descrita más abajo, que los devuelve tanto si los pediste como si no. Ver [Enriquecimiento de metadatos](#enriquecimiento-de-metadatos).</Fragment>
 </SchemaTable>
 
@@ -347,6 +353,8 @@ Una [búsqueda que ha consultado las fuentes adicionales](/libgen-mcp/es/how-sea
 Ese registro es **más pobre que uno del catálogo** y sus campos varían según la colección de la que venga el ítem. Todos los registros de Anna's observados llevan `title`, `author`, `language`, `year`, `content_type`, `collection`, `filesize` y `filepath`; `isbn`/`isbn10` e `ipfs_cid` aparecen en una minoría. Ojo en particular a que la mayoría **no** tiene `ipfs_cid`, así que la ruta de descarga sin clave por IPFS no está disponible para ellos: hace falta una clave de socio u otra fuente. `author` es el campo propio de Anna's y a veces es la cadena del productor del PDF en lugar de una persona.
 
 Un **DOI** que el catálogo no tiene se trata igual por otra vía. Con el enriquecimiento activo (`LIBGEN_MCP_ENRICH`, activado por defecto), `get_details` recurre a Crossref y devuelve un registro sintético — `file.origin` vale `crossref` y `file.doi` es el DOI que pediste — con los metadatos de Crossref en `enrichment`. Ese bloque aparece aquí **aunque no hayas fijado `enrich`**, porque la reserva no tiene otra cosa que devolver. Igual que el registro de Anna's, es más pobre que uno del catálogo: no lleva md5, así que pasa el propio DOI a `download`.
+
+Un DOI que Crossref tampoco conoce, como un conjunto de datos de DataCite o un artículo de mEDRA, recurre una vez más al registro que sirve su propia agencia de registro a través de doi.org (CSL-JSON, sin clave). Ese registro lleva `file.origin` a `doi.org` y trae el título, los autores, el año, la publicación y la editorial del registro, así que recibe entradas BibTeX y RIS, con el DOI dentro, porque los campos y el DOI vienen del mismo registro.
 
 Solo cuando ningún índice tiene el identificador devuelve la herramienta el error de ausencia del catálogo.
 

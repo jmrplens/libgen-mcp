@@ -64,6 +64,7 @@ func detailsInputSchema() *jsonschema.Schema {
 	// rather than leaving the model to read it out of the prose and learn it was
 	// wrong from an error.
 	setStringEnum(schema, "object", detailsObjectNames())
+	setItemsStringEnum(schema, "cite_as", libgen.CiteStyleNames())
 	return withExample(noTopLevelCombinators(schema), detailsExample)
 }
 
@@ -120,12 +121,13 @@ type SearchOutput struct {
 
 // DetailsInput holds the parameters for the get_details tool.
 type DetailsInput struct {
-	MD5      string `json:"md5,omitempty" jsonschema:"file md5 from a search result's md5 field. Use exactly one of md5, id, doi or citation"`
-	ID       string `json:"id,omitempty" jsonschema:"edition or file id from a result's edition_id/file_id. Use exactly one of md5, id, doi or citation"`
-	DOI      string `json:"doi,omitempty" jsonschema:"article DOI, e.g. 10.1016/j.cell.2011.02.013. Use exactly one of md5, id, doi or citation. The record returned carries the md5 for download"`
-	Citation string `json:"citation,omitempty" jsonschema:"a reference pasted as free text, in any style, e.g. LeCun Y, Bengio Y, Hinton G. Deep learning. Nature 2015. Resolved through Crossref to the DOI of the one work that clearly matches, else answered with the candidates and no record. Use exactly one of md5, id, doi or citation"`
-	Object   string `json:"object,omitempty" jsonschema:"with id, one value: edition (default) or file"`
-	Enrich   bool   `json:"enrich,omitempty" jsonschema:"add best-effort keyless Crossref (by DOI) and OpenLibrary (by ISBN) metadata. Off by default"`
+	MD5      string   `json:"md5,omitempty" jsonschema:"file md5 from a search result's md5 field. Use exactly one of md5, id, doi or citation"`
+	ID       string   `json:"id,omitempty" jsonschema:"edition or file id from a result's edition_id/file_id. Use exactly one of md5, id, doi or citation"`
+	DOI      string   `json:"doi,omitempty" jsonschema:"article DOI, e.g. 10.1016/j.cell.2011.02.013. Use exactly one of md5, id, doi or citation. The record returned carries the md5 for download"`
+	Citation string   `json:"citation,omitempty" jsonschema:"a reference pasted as free text, in any style, e.g. LeCun Y, Bengio Y, Hinton G. Deep learning. Nature 2015. Resolved through Crossref to the DOI of the one work that clearly matches, else answered with the candidates and no record. Use exactly one of md5, id, doi or citation"`
+	Object   string   `json:"object,omitempty" jsonschema:"with id, one value: edition (default) or file"`
+	Enrich   bool     `json:"enrich,omitempty" jsonschema:"add best-effort keyless Crossref (by DOI) and OpenLibrary (by ISBN) metadata. Off by default"`
+	CiteAs   []string `json:"cite_as,omitempty" jsonschema:"extra citation styles to add beside BibTeX and RIS, any of apa mla chicago harvard vancouver ieee csl-json. Off by default. A record whose DOI is confirmed gets each style from its registry through doi.org, any other record gets it built from its own fields, and each style says which path produced it"`
 }
 
 // DetailsOutput holds the file and/or edition record returned by get_details.
@@ -1612,6 +1614,10 @@ func markdownResult(md string) *mcp.CallToolResult {
 func detailsHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery.MirrorLister) mcp.ToolHandlerFor[DetailsInput, DetailsOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in DetailsInput) (*mcp.CallToolResult, DetailsOutput, error) {
 		var zero DetailsOutput
+		styles, err := citeStyles(in.CiteAs)
+		if err != nil {
+			return nil, zero, err
+		}
 		out, err := lookupDetails(ctx, c, cfg, annasMirrors, in)
 		if err != nil {
 			return nil, zero, err
@@ -1622,8 +1628,31 @@ func detailsHandler(c *libgen.Client, cfg *config.Config, annasMirrors discovery
 		}
 		out.NextSteps = append(citationResolvedSteps(out.CitationMatch), detailsNextSteps(out)...)
 		attachCitations(ctx, c, cfg, in.Enrich, &out)
+		var fmtr styleFormatter
+		if cfg.EnrichEnabled {
+			fmtr = c
+		}
+		attachFormatted(ctx, fmtr, &out, styles)
 		return markdownResult(renderDetailsMarkdown(out)), out, nil
 	}
+}
+
+// citeStyles validates cite_as against the styles the schema advertises and
+// drops repeats, keeping the order asked. The schema pins the same enum, so
+// this refusal is for a client that does not validate against it.
+func citeStyles(requested []string) ([]string, error) {
+	known := libgen.CiteStyleNames()
+	out := make([]string, 0, len(requested))
+	for _, raw := range requested {
+		style := strings.ToLower(strings.TrimSpace(raw))
+		if !slices.Contains(known, style) {
+			return nil, fmt.Errorf("cite_as does not know %q. It accepts %s", truncateRunes(oneLine(raw), 40), strings.Join(known, ", "))
+		}
+		if !slices.Contains(out, style) {
+			out = append(out, style)
+		}
+	}
+	return out, nil
 }
 
 // errOneIdentifier is the refusal for a get_details call naming no identifier
@@ -1814,12 +1843,46 @@ func detailsFromEnrichment(ctx context.Context, c *libgen.Client, cfg *config.Co
 	}
 	enrichment := c.Enrich(ctx, doi, "")
 	if enrichment == nil {
-		return DetailsOutput{}, catalogErr
+		return detailsFromRegistry(ctx, c, doi, catalogErr)
 	}
 	return DetailsOutput{
 		File:       map[string]any{"origin": "crossref", "doi": doi},
 		Enrichment: enrichment,
 	}, nil
+}
+
+// detailsFromRegistry answers a DOI neither the catalog nor Crossref knows
+// from the record its own registration agency serves through doi.org. A
+// DataCite dataset or a mEDRA article is a real DOI that Crossref has never
+// registered, and without this every follow-up on one ended at "no record".
+//
+// The record is labeled origin=doi.org and carries the registry's title,
+// authors, year, venue and publisher, which is enough for buildCitations to
+// produce entries. catalogErr survives when the registry has nothing either.
+func detailsFromRegistry(ctx context.Context, c *libgen.Client, doi string, catalogErr error) (DetailsOutput, error) {
+	item := c.FetchCSL(ctx, doi)
+	if item == nil {
+		return DetailsOutput{}, catalogErr
+	}
+	file := map[string]any{"origin": originRegistry, "doi": doi, "title": item.String("title")}
+	for key, value := range map[string]string{
+		"author":          strings.Join(item.Authors(), "; "),
+		"publisher":       item.String("publisher"),
+		"container_title": item.String("container-title"),
+		"issue_volume":    item.String("volume"),
+		"issue_number":    item.String("issue"),
+	} {
+		if value != "" {
+			file[key] = value
+		}
+	}
+	if y := item.Year(); y > 0 {
+		file["year"] = strconv.Itoa(y)
+	}
+	if item.IsArticle() {
+		file["type"] = "a"
+	}
+	return DetailsOutput{File: file}, nil
 }
 
 // detailsFromAnnas looks an md5 up in Anna's Archive after the Library Genesis
