@@ -228,15 +228,14 @@ func (k *Keyring) derive(secret []byte) error {
 //
 // The standard library's crypto/hkdf computes it, and golang.org/x/crypto/hkdf
 // did through 2.1.0. The bytes are the same, which is what keeps every
-// pseudonym a configured secret has already produced, and the tests hold the
-// two to each other. The import was dropped because this was the server's own
-// one use of golang.org/x/crypto, for an algorithm the standard library has
-// carried since Go 1.24: what the binaries link from that module is now only
-// the ocsp package pdfcpu's signature code brings, which is the module that
-// cmd/audit_binary_vulns declares. The failure mode changed with it, for the
-// better: under GODEBUG=fips140=only a secret shorter than 112 bits made
-// x/crypto's Extract panic, and the standard library returns the error this
-// function hands back.
+// pseudonym a configured secret has already produced, and the tests hold this
+// function to the answers the old derivation gave, frozen as vectors since
+// 2.2.1, when golang.org/x/crypto left go.mod altogether. The import was
+// dropped because this was the server's own one use of that module, for an
+// algorithm the standard library has carried since Go 1.24. The failure mode
+// changed with it, for the better: under GODEBUG=fips140=only a secret shorter
+// than 112 bits made x/crypto's Extract panic, and the standard library
+// returns the error this function hands back.
 func expand(secret []byte, info string) ([]byte, error) {
 	key, err := deriveKey(sha256.New, secret, nil, info, identitySaltBytes)
 	if err != nil {

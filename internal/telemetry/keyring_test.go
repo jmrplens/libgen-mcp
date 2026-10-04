@@ -7,14 +7,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"hash"
 	"os"
 	"os/exec"
 	"strings"
 	"testing"
 	"time"
-
-	xhkdf "golang.org/x/crypto/hkdf"
 )
 
 // TestExpand_ReproducesRFC5869TestCase3 holds the derivation to the published
@@ -39,38 +38,109 @@ func TestExpand_ReproducesRFC5869TestCase3(t *testing.T) {
 	}
 }
 
+// previousDerivationSweep is the SHA-256 of every key the previous derivation
+// gave for derivationInputs under each of identityKeyInfo, itemKeyInfo and the
+// empty info, in that order, the 32-byte keys concatenated: 594 of them.
+//
+// The previous derivation is golang.org/x/crypto/hkdf v0.57.0, which derived
+// these keys through 2.1.0 and was this test's oracle until 2.2.1 removed the
+// module from go.mod. The digest and the vectors in previousDerivation were
+// computed by it on the last commit that still had it, agreed byte for byte
+// with the standard library's crypto/hkdf there, and agree with an independent
+// HKDF-SHA256 written from RFC 5869 in Python, which, like both Go
+// implementations, reproduces the RFC's SHA-256 test cases 1 to 3 in full.
+const previousDerivationSweep = "c2307f3134597b105069fc8e8dcd49981a0a62fc723783acfb51da5764709e51"
+
+// previousDerivation is what the previous derivation gave for the shapes of
+// secret expand is handed, under each info string: a single byte, the hash
+// size, the HMAC block size and one past it, a secret long enough that HMAC
+// hashes it, the two text secrets, a zero key, a long one and the first
+// generated key. The sweep digest covers every input, and these name one when
+// it moves.
+var previousDerivation = []struct {
+	secret []byte
+	info   string
+	key    string
+}{
+	{[]byte("s"), identityKeyInfo, "483a3ddd0737712a9ac291d557b2d87f1f637af43cbcde063fabece0455a8c24"},
+	{bytes.Repeat([]byte("s"), 32), identityKeyInfo, "a0148bba5b6932dbbfacbcac768be3dd87c7fad3f4b3c7afd167363c1a28cb53"},
+	{bytes.Repeat([]byte("s"), 64), identityKeyInfo, "222341aa5f9521dbd4549cc0ed354dc46e04793bd9920858a6307cd60239676e"},
+	{bytes.Repeat([]byte("s"), 65), identityKeyInfo, "064235ceee8f5cc424848ba3afeee72af6f6d0e81be28ab5254fbd3b61de1712"},
+	{bytes.Repeat([]byte("s"), 130), identityKeyInfo, "b5245ecd515ad50d8ec4f6de0bd404ac3c9ef156bf4eac94e97e230611e6f4be"},
+	{[]byte("a deployment-wide secret"), identityKeyInfo, "6bf8317cd9562fe1c05c6a323ca2490caf519483ccfc86fe6a9ba02b1192b83a"},
+	{[]byte("clé de pseudonymisation, ünïcödé"), identityKeyInfo, "caa6b6203e084f5d5ab886f2a8dca76b4fbbfe0b583b060ac3619d0252585c02"},
+	{bytes.Repeat([]byte{0}, 32), identityKeyInfo, "d2fcd6ead526296df1ef5bc6fd06f2b8deefbb451440383496d041847acf66f7"},
+	{bytes.Repeat([]byte("0123456789abcdef"), 64), identityKeyInfo, "fb98ddd492f32cc2047bc6a3dbf3cc7ac1d569fa7faa0b840c022944920f24cf"},
+	{derivationInputs()[0], identityKeyInfo, "0d81c54bd1f88bfb31d9a7788570c71bc69148dadc30629585584f71e45f22f1"},
+	{[]byte("s"), itemKeyInfo, "ec417be5cc59e1c93a33e108d496a34b86c7ece6da952fc2317be97fa185f525"},
+	{bytes.Repeat([]byte("s"), 32), itemKeyInfo, "9dc3656527127c133b07b27bf7827cbb180a7aa96ce0323b93c6c9f44e68b42b"},
+	{bytes.Repeat([]byte("s"), 64), itemKeyInfo, "ef6fd113b3e5a6806f4eb9d0ca1888cf5425926ad98579f7a35572dfb00ac11d"},
+	{bytes.Repeat([]byte("s"), 65), itemKeyInfo, "06db8ebfae411bee47471fd9b3c67c9f3423626537df8eb26c66712154d8f9be"},
+	{bytes.Repeat([]byte("s"), 130), itemKeyInfo, "b7ce775b20be8a77d2ee298f12bda914e071d48218ba029168393d15105e9008"},
+	{[]byte("a deployment-wide secret"), itemKeyInfo, "7e0f6fb63dbad0593db2c8fcdbd42d591fa9476b315fcecefd74070bdeb321bd"},
+	{[]byte("clé de pseudonymisation, ünïcödé"), itemKeyInfo, "0397473c25a0c1127735ecdec32ed83804b08be8607c67cca63037c1f85564a0"},
+	{bytes.Repeat([]byte{0}, 32), itemKeyInfo, "012e36bee4e5e2e6fa53747edfca17c7395f4a2473f6485778ff98686f035b5f"},
+	{bytes.Repeat([]byte("0123456789abcdef"), 64), itemKeyInfo, "bc5e8d67347aa27022f6d70b20b2bb99066e82d1343c8a257fdf1235963ec14a"},
+	{derivationInputs()[0], itemKeyInfo, "29e53af1e3e318f27e06ade53dfe7b684d7135e5f706725c0c2944096d1faa0e"},
+	{[]byte("s"), "", "29b32de0827049df9c7730fc83b1ceb37e15840af422a91cde8c194946ce69b0"},
+	{bytes.Repeat([]byte("s"), 32), "", "763c8c7e348749ef1ec3aad2b2137d263dd4075b16cbca22ea4c94aca8c88254"},
+	{bytes.Repeat([]byte("s"), 64), "", "c7ced9128fa8424ef49c84cf6d95b1a783e06bea5650f7c184f29272e828ad73"},
+	{bytes.Repeat([]byte("s"), 65), "", "2c0fb0cd4374aa921fcd42315f53211222c914a7b3b1818414fe1e14369e8f3e"},
+	{bytes.Repeat([]byte("s"), 130), "", "8cc608ddd86fb4306d250af049587531e5a5e9c9655bf8942a15d6d55c18e32e"},
+	{[]byte("a deployment-wide secret"), "", "39c474adf519ef1bab5a97a557b8c026e5a756539f2554a3086c12d9b653736e"},
+	{[]byte("clé de pseudonymisation, ünïcödé"), "", "ec548adfc2832e2be1662c919e2215574b870621f56767c7b0d29250cd454268"},
+	{bytes.Repeat([]byte{0}, 32), "", "df7204546f1bee78b85324a7898ca119b387e01386d1aef037781d4a8a036aee"},
+	{bytes.Repeat([]byte("0123456789abcdef"), 64), "", "00a03b6ea23efd19d24e74178d2bced9d5da7feac71083cabbb729999a1d2460"},
+	{derivationInputs()[0], "", "a0d87348ea7cf4b881d25d67c8a3a629346f78d1eb30f998cb7d55989cb35cf1"},
+}
+
 // TestExpand_AgreesWithThePreviousDerivation holds the standard library's HKDF
-// to golang.org/x/crypto/hkdf, which derived these keys through 2.1.0, on the
-// inputs expand is actually given.
+// to what golang.org/x/crypto/hkdf derived through 2.1.0, on the inputs expand
+// is actually given.
 //
 // Agreement is the whole requirement. A configured secret is how several
 // replicas, and one deployment across restarts, give a caller one pseudonym;
 // a derivation that moved by one bit would split every caller in two on the
 // day of the upgrade, and a distinct-user count would double without anybody
-// having changed anything. The oracle is the previous code verbatim, so this
-// test fails if either side ever stops producing the other's bytes.
+// having changed anything. The previous code was the oracle while the module
+// was in go.mod. Its answers are frozen here instead: the vectors name the
+// input that moved, and the sweep digest covers every input the oracle was
+// asked about.
 func TestExpand_AgreesWithThePreviousDerivation(t *testing.T) {
 	t.Parallel()
 
-	for _, info := range []string{identityKeyInfo, itemKeyInfo, ""} {
-		t.Run(info, func(t *testing.T) {
+	for _, v := range previousDerivation {
+		t.Run(fmt.Sprintf("%q %d bytes", v.info, len(v.secret)), func(t *testing.T) {
 			t.Parallel()
 
-			for _, secret := range derivationInputs() {
-				want := make([]byte, identitySaltBytes)
-				if _, err := xhkdf.New(sha256.New, secret, nil, []byte(info)).Read(want); err != nil {
-					t.Fatalf("the previous derivation failed on %x: %v", secret, err)
-				}
-				got, err := expand(secret, info)
-				if err != nil {
-					t.Fatalf("expand(%x): %v", secret, err)
-				}
-				if !bytes.Equal(got, want) {
-					t.Errorf("expand(%x, %q) = %x, the previous derivation gave %x", secret, info, got, want)
-				}
+			got, err := expand(v.secret, v.info)
+			if err != nil {
+				t.Fatalf("expand(%x): %v", v.secret, err)
+			}
+			if hex.EncodeToString(got) != v.key {
+				t.Errorf("expand(%x, %q) = %x, the previous derivation gave %s", v.secret, v.info, got, v.key)
 			}
 		})
 	}
+
+	t.Run("every input", func(t *testing.T) {
+		t.Parallel()
+
+		sweep := sha256.New()
+		// sequential: every key goes into one digest, in this order
+		for _, info := range []string{identityKeyInfo, itemKeyInfo, ""} {
+			for _, secret := range derivationInputs() {
+				got, err := expand(secret, info)
+				if err != nil {
+					t.Fatalf("expand(%x, %q): %v", secret, info, err)
+				}
+				sweep.Write(got)
+			}
+		}
+		if got := hex.EncodeToString(sweep.Sum(nil)); got != previousDerivationSweep {
+			t.Errorf("the keys for every input hash to %s, the previous derivation's to %s", got, previousDerivationSweep)
+		}
+	})
 }
 
 // derivationInputs is what expand is handed in production, in each shape it
@@ -100,12 +170,13 @@ func derivationInputs() [][]byte {
 // configured secret produced before the derivation moved to the standard
 // library, all the way to the sixteen hex characters a collector stores.
 //
-// The oracle test above compares the two HKDF implementations; this one fixes
-// the chain around them too (the info strings, the key length, the HMAC and
-// its truncation), because a pseudonym already sitting in a dashboard depends
-// on every one of them. The values were computed by the golang.org/x/crypto
-// derivation on the commit before this change and agree with an independent
-// HKDF and HMAC-SHA256 written from RFC 5869 in another language.
+// The test above holds the HKDF to the previous derivation's answers; this one
+// fixes the chain around it too (the info strings, the key length, the HMAC
+// and its truncation), because a pseudonym already sitting in a dashboard
+// depends on every one of them. The values were computed by the
+// golang.org/x/crypto derivation on the commit before the derivation moved and
+// agree with an independent HKDF and HMAC-SHA256 written from RFC 5869 in
+// another language.
 func TestKeyring_AConfiguredSecretKeepsTheSameKeysAndPseudonyms(t *testing.T) {
 	t.Parallel()
 
