@@ -2,6 +2,7 @@ package libgen
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -70,8 +71,8 @@ func TestTempCache_ReleaseAllowsEviction(t *testing.T) {
 	if _, ok := tc.get("md5-a"); !ok { // refs=2
 		t.Fatal("get should hit")
 	}
-	tc.release("md5-a") // refs=1
-	tc.release("md5-a") // refs=0
+	tc.release("md5-a", path) // refs=1
+	tc.release("md5-a", path) // refs=0
 
 	tc.evict(t.Context())
 
@@ -91,7 +92,7 @@ func TestTempCache_ReleaseAllowsSizeEviction(t *testing.T) {
 	tc := newTempCache(size-1, time.Hour) // maxBytes below the entry size
 
 	tc.put(t.Context(), "md5-a", path, size) // refs=1
-	tc.release("md5-a")                      // refs=0
+	tc.release("md5-a", path)                // refs=0
 
 	tc.evict(t.Context())
 
@@ -183,8 +184,8 @@ func TestTempCache_ReleaseDoesNotUnderflow(t *testing.T) {
 	tc := newTempCache(1<<30, time.Hour)
 
 	tc.put(t.Context(), "k", path, size) // refs=1
-	tc.release("k")                      // refs=0
-	tc.release("k")                      // one release too many
+	tc.release("k", path)                // refs=0
+	tc.release("k", path)                // one release too many
 
 	if got := tc.entries["k"].refs; got != 0 {
 		t.Fatalf("refs after an extra release = %d, want 0", got)
@@ -206,7 +207,7 @@ func TestTempCache_PutOverwritesUnreferencedFile(t *testing.T) {
 	path2, size2 := writeTempFile(t, "second backing file")
 
 	tc.put(t.Context(), "k", path1, size1) // refs=1
-	tc.release("k")                        // refs=0, now overwritable
+	tc.release("k", path1)                 // refs=0, now overwritable
 	tc.put(t.Context(), "k", path2, size2) // prev unreferenced with a different path → path1 removed
 
 	if _, statErr := os.Stat(path1); !os.IsNotExist(statErr) {
@@ -241,7 +242,7 @@ func TestTempCache_GetOrPutHitReturnsExisting(t *testing.T) {
 // never stored (it must not panic).
 func TestTempCache_ReleaseUnknownKey(t *testing.T) {
 	tc := newTempCache(1<<30, time.Minute)
-	tc.release("never-stored") // must not panic
+	tc.release("never-stored", "") // must not panic
 }
 
 // TestRemoveTempFile_EmptyPath verifies removeTempFile ignores an empty path (the
@@ -279,7 +280,7 @@ func TestTempCache_PurgeRemovesEverythingEvenReferenced(t *testing.T) {
 	idle, idleSize := writeTempFile(t, "idle")
 	tc.put(t.Context(), "held", held, heldSize) // put leaves refs=1
 	tc.put(t.Context(), "idle", idle, idleSize)
-	tc.release("idle")
+	tc.release("idle", idle)
 
 	if got := tc.purge(); got != 2 {
 		t.Errorf("purge = %d, want 2", got)
@@ -296,5 +297,89 @@ func TestTempCache_PurgeRemovesEverythingEvenReferenced(t *testing.T) {
 	}
 	if got := tc.purge(); got != 0 {
 		t.Errorf("a second purge = %d, want 0", got)
+	}
+}
+
+// TestTempCache_AnEntryWhoseFileIsGoneIsAMiss covers a read root removed from
+// under the process: the cache still lists the file, the disk no longer has
+// it. Handing the path out would make every read of it fail until the entry
+// aged out, so both lookups treat it as a miss and forget it.
+func TestTempCache_AnEntryWhoseFileIsGoneIsAMiss(t *testing.T) {
+	t.Run("get", func(t *testing.T) {
+		tc := newTempCache(1<<30, time.Hour)
+		path, size := writeTempFile(t, "removed from under the cache")
+		tc.put(t.Context(), "k", path, size)
+		if err := os.Remove(path); err != nil {
+			t.Fatal(err)
+		}
+		if got, ok := tc.get("k"); ok {
+			t.Fatalf("get handed out %q, whose file is gone", got)
+		}
+		if _, ok := tc.entries["k"]; ok {
+			t.Error("the entry for a vanished file was kept")
+		}
+	})
+	t.Run("getOrPut", func(t *testing.T) {
+		tc := newTempCache(1<<30, time.Hour)
+		gone, goneSize := writeTempFile(t, "removed from under the cache")
+		fresh, freshSize := writeTempFile(t, "fetched again")
+		tc.put(t.Context(), "k", gone, goneSize)
+		if err := os.Remove(gone); err != nil {
+			t.Fatal(err)
+		}
+		stored, isNew := tc.getOrPut(t.Context(), "k", fresh, freshSize)
+		if !isNew || stored != fresh {
+			t.Errorf("getOrPut = (%q, %v), want the fresh download (%q, true)", stored, isNew, fresh)
+		}
+	})
+}
+
+// TestTempCache_ReleaseReachesOnlyTheEntryItWasTakenOn pins why release takes
+// the path: a read still holding a forgotten entry must not spend a reference
+// the new entry under the same key is counting on, or the file a later read is
+// using becomes evictable while it reads.
+func TestTempCache_ReleaseReachesOnlyTheEntryItWasTakenOn(t *testing.T) {
+	tc := newTempCache(1<<30, time.Hour)
+	old, oldSize := writeTempFile(t, "held by a read when its root vanished")
+	fresh, freshSize := writeTempFile(t, "the next read's copy")
+	tc.put(t.Context(), "k", old, oldSize) // the old reader's reference
+	if err := os.Remove(old); err != nil {
+		t.Fatal(err)
+	}
+	if _, isNew := tc.getOrPut(t.Context(), "k", fresh, freshSize); !isNew {
+		t.Fatal("the vanished entry was not replaced")
+	}
+
+	tc.release("k", old)
+	if got := tc.entries["k"].refs; got != 1 {
+		t.Fatalf("the old reader's release changed the new entry's refs to %d, want 1", got)
+	}
+	tc.release("k", fresh)
+	if got := tc.entries["k"].refs; got != 0 {
+		t.Errorf("the new reader's release left refs at %d, want 0", got)
+	}
+}
+
+// TestTempCache_DropUnderForgetsOnlyThatRoot drops exactly the entries whose
+// files lived under the root that was lost, referenced or not, and keeps one
+// under a directory whose name merely starts with the same characters.
+func TestTempCache_DropUnderForgetsOnlyThatRoot(t *testing.T) {
+	tc := newTempCache(1<<30, time.Hour)
+	root := filepath.Join(t.TempDir(), readRootPrefix+"1")
+	tc.entries["held"] = &tempEntry{path: filepath.Join(root, "fetch-1", "a.pdf"), refs: 1}
+	tc.entries["idle"] = &tempEntry{path: filepath.Join(root, "fetch-2", "b.pdf")}
+	tc.entries["sibling"] = &tempEntry{path: filepath.Join(root+"0", "fetch-3", "c.pdf")}
+
+	tc.dropUnder(root)
+
+	for _, key := range []string{"held", "idle"} {
+		t.Run("dropped "+key, func(t *testing.T) {
+			if _, ok := tc.entries[key]; ok {
+				t.Errorf("%q survived the loss of its root", key)
+			}
+		})
+	}
+	if _, ok := tc.entries["sibling"]; !ok {
+		t.Error("an entry under another root was dropped")
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -45,17 +46,38 @@ func newTempCache(maxBytes int64, ttl time.Duration) *tempCache {
 
 // get returns (path, true) on a hit, incrementing the entry's refcount and
 // refreshing its atime so the caller's read holds the file open against
-// eviction; it returns ("", false) on a miss.
+// eviction; it returns ("", false) on a miss, which includes an entry whose
+// file is no longer on disk (see liveLocked).
 func (tc *tempCache) get(key string) (string, bool) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	e, ok := tc.entries[key]
+	e, ok := tc.liveLocked(key)
 	if !ok {
 		return "", false
 	}
 	e.refs++
 	e.atime = time.Now()
 	return e.path, true
+}
+
+// liveLocked returns key's entry when its file is still on disk; the caller
+// must hold tc.mu.
+//
+// An entry whose file has gone, because the read root it lived in was removed
+// from under the process, is forgotten and reported as a miss, so the caller
+// fetches the file again instead of being handed a path to nothing. A read
+// that still holds the old path keeps its reference to the old entry, and its
+// release cannot reach a new one stored under the same key (see release).
+func (tc *tempCache) liveLocked(key string) (*tempEntry, bool) {
+	e, ok := tc.entries[key]
+	if !ok {
+		return nil, false
+	}
+	if _, err := os.Stat(e.path); err != nil {
+		delete(tc.entries, key)
+		return nil, false
+	}
+	return e, true
 }
 
 // put stores a freshly downloaded file under key with refs=1 (the caller holds
@@ -81,7 +103,7 @@ func (tc *tempCache) put(ctx context.Context, key, path string, size int64) {
 func (tc *tempCache) getOrPut(ctx context.Context, key, path string, size int64) (stored string, isNew bool) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	if e, ok := tc.entries[key]; ok {
+	if e, ok := tc.liveLocked(key); ok {
 		e.refs++
 		e.atime = time.Now()
 		return e.path, false
@@ -91,14 +113,22 @@ func (tc *tempCache) getOrPut(ctx context.Context, key, path string, size int64)
 	return path, true
 }
 
-// release decrements the refcount for key (never below zero) and refreshes its
-// atime so the TTL clock starts from the last use. It is a no-op for an unknown
-// key.
-func (tc *tempCache) release(key string) {
+// release gives back the reference a get or getOrPut took on key's entry for
+// path: it decrements the refcount (never below zero) and refreshes the atime
+// so the TTL clock starts from the last use.
+//
+// The path is what binds a release to the entry it was taken on. An entry can
+// be forgotten while a read still holds it (its file vanished, see
+// liveLocked, or its root did, see dropUnder) and a new one stored under the
+// same key, with a file in a new directory. A release by key alone would then
+// drop a reference the new entry's reader is still counting on and leave its
+// file open to eviction mid-read. A release whose entry is gone, or was
+// replaced, does nothing.
+func (tc *tempCache) release(key, path string) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	e, ok := tc.entries[key]
-	if !ok {
+	if !ok || e.path != path {
 		return
 	}
 	if e.refs > 0 {
@@ -160,6 +190,23 @@ func (tc *tempCache) purge() int {
 		delete(tc.entries, key)
 	}
 	return n
+}
+
+// dropUnder forgets every entry whose file lives under dir, referenced or not.
+//
+// It is for a read root that was removed from under the running process. Every
+// file in it went with it, so each such entry is a path to nothing, and its
+// size would still count against the cap and push out files that do exist.
+// Nothing is removed from disk: there is nothing left there to remove.
+func (tc *tempCache) dropUnder(dir string) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	prefix := dir + string(filepath.Separator)
+	for key, e := range tc.entries {
+		if strings.HasPrefix(e.path, prefix) {
+			delete(tc.entries, key)
+		}
+	}
 }
 
 // observe publishes how full this cache is and what it is bounded by.

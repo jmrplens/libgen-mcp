@@ -24,6 +24,10 @@ const readRootPrefix = "libgen-mcp-read-"
 // is alive.
 const readRootLockName = ".lock"
 
+// fetchDirPattern names the directory each fetch downloads into, inside the
+// read root.
+const fetchDirPattern = "fetch-*"
+
 // readRootLockGrace is how old a read root found without its lock file must be
 // before the sweep takes it for abandoned. A live process creates the root and
 // then the lock file inside it, so for an instant a live root has none; a
@@ -55,15 +59,47 @@ type readRoot struct {
 	lock *os.File
 }
 
-// path returns the read root, creating it on first use.
+// fetchDir makes the directory one fetch downloads into, under the read root,
+// and returns it.
 //
-// The first creation also sweeps the roots dead processes left behind, so a
-// server that never reads never touches the temp directory. A failure is
-// returned and not remembered, so a temp directory that comes back serves the
-// next read rather than failing every read for the life of the process.
-func (r *readRoot) path() (string, error) {
+// A root removed from under the running process (an operator clearing the
+// temp directory, a cleaner aging it out) is noticed here, because the
+// directory cannot be made inside it: the root is given up, onLost is told
+// which one so the cache can forget the files that went with it, and a new
+// root is made once. Without that, every fetch failed for the rest of the
+// process's life. onLost runs with the root's lock held, so it must not call
+// back into the root.
+func (r *readRoot) fetchDir(onLost func(root string)) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	dir, err := r.makeFetchDirLocked()
+	if r.dir == "" || !errors.Is(err, fs.ErrNotExist) {
+		return dir, err
+	}
+	lost := r.dir
+	r.dropLocked()
+	onLost(lost)
+	return r.makeFetchDirLocked()
+}
+
+// makeFetchDirLocked makes one fetch directory under the root, making the
+// root first when there is none. The caller holds r.mu.
+func (r *readRoot) makeFetchDirLocked() (string, error) {
+	root, err := r.pathLocked()
+	if err != nil {
+		return "", err
+	}
+	return os.MkdirTemp(root, fetchDirPattern)
+}
+
+// pathLocked returns the read root, creating it on first use. The caller holds
+// r.mu.
+//
+// The first creation also sweeps the roots dead processes left behind, so a
+// server that never fetches a file never touches the temp directory. A failure
+// is returned and not remembered, so a temp directory that comes back serves
+// the next read rather than failing every read for the life of the process.
+func (r *readRoot) pathLocked() (string, error) {
 	if r.dir != "" {
 		return r.dir, nil
 	}
@@ -89,6 +125,12 @@ func (r *readRoot) path() (string, error) {
 func (r *readRoot) close() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.dropLocked()
+}
+
+// dropLocked gives up the root: its lock is released and whatever is left of
+// the directory is removed. The caller holds r.mu.
+func (r *readRoot) dropLocked() {
 	if r.dir == "" {
 		return
 	}

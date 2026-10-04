@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -63,24 +64,57 @@ func exists(path string) bool {
 	return err == nil
 }
 
+// noLoss is the onLost of a fetch that must find its root where it left it.
+func noLoss(t *testing.T) func(string) {
+	t.Helper()
+	return func(root string) { t.Errorf("root %q was reported lost", root) }
+}
+
+// rootOf makes one fetch directory and returns the root it was made under.
+func rootOf(t *testing.T, r *readRoot) string {
+	t.Helper()
+	dir, err := r.fetchDir(noLoss(t))
+	if err != nil {
+		t.Fatalf("fetchDir: %v", err)
+	}
+	return filepath.Dir(dir)
+}
+
+// removeRootFromUnder deletes the root r holds, the way an operator clearing
+// the temp directory or a cleaner aging it out would, and returns its path.
+//
+// Windows refuses to delete a file that is still open, so there the handle
+// holding the lock is closed first, which is also why nothing can take a live
+// root away on Windows. On Unix the held lock does not stop the removal, and
+// that is the case the root has to notice.
+func removeRootFromUnder(t *testing.T, r *readRoot) string {
+	t.Helper()
+	r.mu.Lock()
+	root, lock := r.dir, r.lock
+	r.mu.Unlock()
+	if runtime.GOOS == "windows" {
+		_ = lock.Close()
+	}
+	if err := os.RemoveAll(root); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
 // TestReadRoot_IsCreatedOnceLockedAndRemovedOnClose pins the root's life: one
-// directory per process however often path is asked, its lock held for as long
-// as the root exists, and nothing left once close runs.
+// directory per process however many fetches it holds, its lock held for as
+// long as the root exists, and nothing left once close runs.
 func TestReadRoot_IsCreatedOnceLockedAndRemovedOnClose(t *testing.T) {
 	isolateTempDir(t, t.TempDir())
 	var r readRoot
 	t.Cleanup(r.close)
 
-	first, err := r.path()
-	if err != nil {
-		t.Fatalf("path: %v", err)
-	}
+	first := rootOf(t, &r)
 	if !strings.HasPrefix(filepath.Base(first), readRootPrefix) {
 		t.Errorf("root %q does not carry %q", first, readRootPrefix)
 	}
-	again, err := r.path()
-	if err != nil || again != first {
-		t.Fatalf("second path = %q, %v; want the same root %q", again, err, first)
+	if again := rootOf(t, &r); again != first {
+		t.Fatalf("second fetch went under %q; want the same root %q", again, first)
 	}
 	// A second descriptor on the lock file is what another process's sweep
 	// opens. It must find the lock taken.
@@ -122,19 +156,76 @@ func TestReadRoot_AFailureIsNotRemembered(t *testing.T) {
 	var r readRoot
 	t.Cleanup(r.close)
 
-	if _, err := r.path(); err == nil {
-		t.Fatal("path succeeded under a temp directory that does not exist")
+	if _, err := r.fetchDir(noLoss(t)); err == nil {
+		t.Fatal("fetchDir succeeded under a temp directory that does not exist")
 	}
 	if err := os.Mkdir(missing, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	dir, err := r.path()
-	if err != nil {
-		t.Fatalf("path after the temp directory came back: %v", err)
+	if root := rootOf(t, &r); filepath.Dir(root) != missing {
+		t.Errorf("root %q is not under %q", root, missing)
 	}
-	if filepath.Dir(dir) != missing {
-		t.Errorf("root %q is not under %q", dir, missing)
-	}
+}
+
+// TestReadRoot_ARemovedRootIsReplacedOnce covers a root taken away from under
+// the running process. The fetch that finds it gone gives it up, says which
+// root was lost, and makes a new one, so the process does not fail every
+// fetch for the rest of its life. When the new one cannot be made either, the
+// fetch fails and the next one tries again.
+func TestReadRoot_ARemovedRootIsReplacedOnce(t *testing.T) {
+	t.Run("replaced", func(t *testing.T) {
+		isolateTempDir(t, t.TempDir())
+		var r readRoot
+		t.Cleanup(r.close)
+		first := rootOf(t, &r)
+		removed := removeRootFromUnder(t, &r)
+		if removed != first {
+			t.Fatalf("removed %q, want the root %q", removed, first)
+		}
+
+		var lost []string
+		dir, err := r.fetchDir(func(root string) { lost = append(lost, root) })
+		if err != nil {
+			t.Fatalf("fetchDir after the root was removed: %v", err)
+		}
+		if len(lost) != 1 || lost[0] != first {
+			t.Errorf("lost roots = %v, want only %q", lost, first)
+		}
+		if root := filepath.Dir(dir); root == first || !exists(dir) {
+			t.Errorf("the fetch went to %q, want a new root in place of %q", dir, first)
+		}
+		if next := rootOf(t, &r); next != filepath.Dir(dir) {
+			t.Errorf("the fetch after the replacement went under %q, want %q", next, filepath.Dir(dir))
+		}
+	})
+	t.Run("the replacement fails, the next fetch recovers", func(t *testing.T) {
+		tmp := filepath.Join(t.TempDir(), "tmp")
+		if err := os.Mkdir(tmp, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		isolateTempDir(t, tmp)
+		var r readRoot
+		t.Cleanup(r.close)
+		first := rootOf(t, &r)
+		removeRootFromUnder(t, &r)
+		if err := os.Remove(tmp); err != nil {
+			t.Fatal(err)
+		}
+
+		var lost []string
+		if _, err := r.fetchDir(func(root string) { lost = append(lost, root) }); err == nil {
+			t.Fatal("fetchDir succeeded with no temp directory to make a root in")
+		}
+		if len(lost) != 1 || lost[0] != first {
+			t.Errorf("lost roots = %v, want only %q", lost, first)
+		}
+		if err := os.Mkdir(tmp, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if root := rootOf(t, &r); filepath.Dir(root) != tmp {
+			t.Errorf("the next fetch went under %q, want a new root in %q", root, tmp)
+		}
+	})
 }
 
 // TestReadRoot_ALockFailureLeavesNoRoot shows the half-made root is removed
@@ -149,8 +240,8 @@ func TestReadRoot_ALockFailureLeavesNoRoot(t *testing.T) {
 	lockReadRoot = func(string) (*os.File, error) { return nil, refused }
 
 	var r readRoot
-	if _, err := r.path(); !errors.Is(err, refused) {
-		t.Fatalf("path error = %v, want the lock failure", err)
+	if _, err := r.fetchDir(noLoss(t)); !errors.Is(err, refused) {
+		t.Fatalf("fetchDir error = %v, want the lock failure", err)
 	}
 	entries, err := os.ReadDir(tmp)
 	if err != nil {
@@ -172,9 +263,7 @@ func TestReadRoot_FirstUseSweepsAndSaysSo(t *testing.T) {
 		var r readRoot
 		t.Cleanup(r.close)
 
-		if _, err := r.path(); err != nil {
-			t.Fatal(err)
-		}
+		rootOf(t, &r)
 		if exists(dead) {
 			t.Errorf("first use left the dead root %q", dead)
 		}
@@ -188,9 +277,7 @@ func TestReadRoot_FirstUseSweepsAndSaysSo(t *testing.T) {
 		var r readRoot
 		t.Cleanup(r.close)
 
-		if _, err := r.path(); err != nil {
-			t.Fatal(err)
-		}
+		rootOf(t, &r)
 		if logs.Len() != 0 {
 			t.Errorf("a sweep that removed nothing logged %q", logs.String())
 		}

@@ -306,25 +306,86 @@ func TestFetchToTemp_LivesUnderTheReadRootAndCloseRemovesIt(t *testing.T) {
 	}
 }
 
-// TestFetchToTemp_FetchDirCreateError covers the per-fetch directory failing
-// with the root already made, which happens when the root is removed from
-// under a running process. The error is the caller's, as when the root itself
-// cannot be made.
-func TestFetchToTemp_FetchDirCreateError(t *testing.T) {
+// TestFetchToTemp_RecoversFromARemovedRoot covers the root removed from under
+// a running process, by an operator clearing the temp directory or a cleaner
+// aging it out. The cached file went with it, so the next read of the same
+// book fetches it again into a new root instead of being handed the old path,
+// the cache forgets every other file that lived there, and the read after that
+// finds the new copy cached.
+func TestFetchToTemp_RecoversFromARemovedRoot(t *testing.T) {
 	isolateTempDir(t, t.TempDir())
-	c := newFetchTempClient(t, staticMirrors{})
-	root, err := c.readRoot.path()
+	payload := []byte("%PDF-1.4 removed root payload " + string(make([]byte, 64)))
+	want := md5Hex(payload)
+	var adsHits atomic.Int32
+	srv := adsCountingServer(t, payload, &adsHits)
+	defer srv.Close()
+	c := newFetchTempClient(t, staticMirrors{srv.URL})
+
+	first, release, err := c.FetchToTemp(context.Background(), Item{MD5: want})
 	if err != nil {
+		t.Fatalf("FetchToTemp: %v", err)
+	}
+	release()
+	lost := removeRootFromUnder(t, &c.readRoot)
+	// Another book's file in the lost root, which nothing asks for again: only
+	// the loss of the root can tell the cache it is gone.
+	c.tempCache.entries["other"] = &tempEntry{path: filepath.Join(lost, "fetch-0", "other.pdf"), size: 1}
+
+	again, releaseAgain, err := c.FetchToTemp(context.Background(), Item{MD5: want})
+	if err != nil {
+		t.Fatalf("FetchToTemp after the root was removed: %v", err)
+	}
+	defer releaseAgain()
+	if got := adsHits.Load(); got != 2 {
+		t.Errorf("ads.php hits = %d, want 2: the removed file must be fetched again", got)
+	}
+	if again == first || filepath.Dir(filepath.Dir(again)) == lost || !exists(again) {
+		t.Errorf("the fetch after the removal returned %q, want a file in a new root in place of %q", again, lost)
+	}
+	if _, ok := c.tempCache.entries["other"]; ok {
+		t.Error("the cache kept an entry for a file in the removed root")
+	}
+
+	cached, releaseCached, err := c.FetchToTemp(context.Background(), Item{MD5: want})
+	if err != nil {
+		t.Fatalf("FetchToTemp from the new root: %v", err)
+	}
+	defer releaseCached()
+	if cached != again || adsHits.Load() != 2 {
+		t.Errorf("the next read got %q after %d fetches, want the cached %q after 2", cached, adsHits.Load(), again)
+	}
+}
+
+// TestFetchToTemp_FetchDirCreateError covers a root removed from under the
+// process together with the temp directory it lived in, so no new root can be
+// made. The error is the caller's, as when the first root cannot be made, and
+// the read after the temp directory comes back recovers.
+func TestFetchToTemp_FetchDirCreateError(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "tmp")
+	if err := os.Mkdir(tmp, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if rmErr := os.RemoveAll(root); rmErr != nil {
+	isolateTempDir(t, tmp)
+	payload := []byte("%PDF-1.4 fetch dir error payload " + string(make([]byte, 64)))
+	want := md5Hex(payload)
+	var adsHits atomic.Int32
+	srv := adsCountingServer(t, payload, &adsHits)
+	defer srv.Close()
+	c := newFetchTempClient(t, staticMirrors{srv.URL})
+	_, release, err := c.FetchToTemp(context.Background(), Item{MD5: want})
+	if err != nil {
+		t.Fatalf("FetchToTemp: %v", err)
+	}
+	release()
+	removeRootFromUnder(t, &c.readRoot)
+	if rmErr := os.Remove(tmp); rmErr != nil {
 		t.Fatal(rmErr)
 	}
 
-	path, release, err := c.FetchToTemp(context.Background(), Item{MD5: "0123456789abcdef0123456789abcdef"})
+	path, release, err := c.FetchToTemp(context.Background(), Item{MD5: want})
 	var pathErr *os.PathError
-	if !errors.As(err, &pathErr) || !strings.HasPrefix(pathErr.Path, root) {
-		t.Fatalf("want an *os.PathError from MkdirTemp inside %q, got %v", root, err)
+	if !errors.As(err, &pathErr) || !strings.HasPrefix(pathErr.Path, tmp) {
+		t.Fatalf("want an *os.PathError from MkdirTemp in %q, got %v", tmp, err)
 	}
 	if path != "" {
 		t.Errorf("path = %q, want empty on error", path)
@@ -333,4 +394,16 @@ func TestFetchToTemp_FetchDirCreateError(t *testing.T) {
 		t.Fatal("release must be non-nil even on error")
 	}
 	release()
+
+	if mkErr := os.Mkdir(tmp, 0o700); mkErr != nil {
+		t.Fatal(mkErr)
+	}
+	path, release, err = c.FetchToTemp(context.Background(), Item{MD5: want})
+	if err != nil {
+		t.Fatalf("FetchToTemp once the temp directory is back: %v", err)
+	}
+	defer release()
+	if !strings.HasPrefix(path, tmp) || !exists(path) {
+		t.Errorf("the read after the failure returned %q, want a file under %q", path, tmp)
+	}
 }
