@@ -52,8 +52,14 @@ func (c *Client) FetchToTemp(ctx context.Context, item Item, progress ...Progres
 
 	// Miss: download into a dedicated per-fetch temp dir so eviction can drop the
 	// whole directory. An empty filename lets DownloadItem auto-name the file with
-	// its correct extension.
-	tempDir, err := os.MkdirTemp("", "libgen-read-*")
+	// its correct extension. The directory lives under this process's read root
+	// rather than loose in the temp directory, which is what lets Close and the
+	// next start remove whatever the cache still held when the process ended.
+	root, err := c.readRoot.path()
+	if err != nil {
+		return "", noopRelease, err
+	}
+	tempDir, err := os.MkdirTemp(root, "fetch-*")
 	if err != nil {
 		return "", noopRelease, err
 	}
@@ -75,6 +81,14 @@ func (c *Client) FetchToTemp(ctx context.Context, item Item, progress ...Progres
 		_ = os.RemoveAll(tempDir)
 	}
 	return stored, c.releaseOnce(key), nil
+}
+
+// Close removes every file FetchToTemp put on disk: what the cache still holds
+// and the read root those files live under. It is for the end of the process;
+// a read after it fetches again into a new root. Safe to call more than once.
+func (c *Client) Close() {
+	c.tempCache.purge()
+	c.readRoot.close()
 }
 
 // releaseOnce returns a release closure that drops exactly one cache reference for

@@ -164,6 +164,10 @@ type Client struct {
 	// by a total-size cap and a per-entry TTL and refcounts in-progress reads.
 	tempCache *tempCache
 
+	// readRoot is the per-process directory those temp files live under. Close
+	// removes it; see readRoot for why it exists.
+	readRoot readRoot
+
 	// serverFetch is the deployment's permission to pull a file's body over its
 	// own connection, decided at startup from LIBGEN_MCP_SERVER_FETCH and the
 	// transport. False makes DownloadItem and FetchToTemp refuse before they make

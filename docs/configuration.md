@@ -453,6 +453,16 @@ least-recently-used files are evicted first (a file a `read` call is actively us
 evicted). Neither variable affects `download`, which always writes directly to
 `LIBGEN_MCP_DOWNLOAD_DIR` and keeps no server-side temp cache.
 
+The temp files live in one directory per server process, `libgen-mcp-read-*` in the operating
+system's temporary directory (`TMPDIR` on Unix, `TMP` or `TEMP` on Windows). A server that
+exits cleanly removes it with everything in it. A server that is killed cannot, so the
+directory holds a lock the process keeps for its whole life, and the next server's first `read`
+from the same temporary directory removes every such directory whose lock no process holds,
+which is how it tells a dead server's files from a live one's. Up to 2.2.0 each file's
+directory sat loose in the temporary directory as `libgen-read-*` and outlived every process
+that fetched it; those are left alone, because nothing says which process made one, and can be
+deleted by hand once no server of those versions is running.
+
 ### `LIBGEN_MCP_CONFIRM_DOWNLOADS`
 
 Controls whether `download` asks before writing a file to the server's disk. The default `true`

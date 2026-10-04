@@ -269,3 +269,32 @@ func TestTempCache_RefcountBlocksEviction(t *testing.T) {
 		t.Errorf("held entry should still hit: got=%q ok=%v", got, ok)
 	}
 }
+
+// TestTempCache_PurgeRemovesEverythingEvenReferenced is the end-of-process
+// pass: unlike eviction it does not spare an entry a read still references,
+// because no read is left to answer once the process is ending.
+func TestTempCache_PurgeRemovesEverythingEvenReferenced(t *testing.T) {
+	tc := newTempCache(1<<30, time.Hour)
+	held, heldSize := writeTempFile(t, "held")
+	idle, idleSize := writeTempFile(t, "idle")
+	tc.put(t.Context(), "held", held, heldSize) // put leaves refs=1
+	tc.put(t.Context(), "idle", idle, idleSize)
+	tc.release("idle")
+
+	if got := tc.purge(); got != 2 {
+		t.Errorf("purge = %d, want 2", got)
+	}
+	for _, path := range []string{held, idle} {
+		t.Run(path, func(t *testing.T) {
+			if _, err := os.Stat(path); !os.IsNotExist(err) {
+				t.Errorf("%q is still on disk (stat err %v)", path, err)
+			}
+		})
+	}
+	if _, ok := tc.get("held"); ok {
+		t.Error("the purged cache still answers for a key")
+	}
+	if got := tc.purge(); got != 0 {
+		t.Errorf("a second purge = %d, want 0", got)
+	}
+}

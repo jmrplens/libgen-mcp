@@ -8,7 +8,7 @@ mentions:
     wikidata: Q121746046
 datePublished: "2026-10-04"
 # Generated from PRIVACY.md by scripts/sync-privacy.mjs — do not edit by hand.
-privacySource: "e5f472290d80d48a"
+privacySource: "9ac3c2c912b750b0"
 head:
   - tag: script
     attrs:
@@ -303,7 +303,9 @@ optional, and unset by default.
 - **Temporary files.** `read` fetches the file it extracts text from into a
   temporary directory on the machine running the server, so successive pages of
   one document reuse a single fetch; those files are evicted on a size cap and a
-  TTL (`LIBGEN_MCP_READ_CACHE_BYTES` / `LIBGEN_MCP_READ_CACHE_TTL`). An
+  TTL (`LIBGEN_MCP_READ_CACHE_BYTES` / `LIBGEN_MCP_READ_CACHE_TTL`) and removed
+  when the server exits. A server that is killed instead leaves them until the
+  next server's first `read` from the same temporary directory removes them. An
   interrupted `download` likewise leaves a `.part` file in the destination
   directory so a later call can resume it.
 
@@ -342,8 +344,8 @@ there first.
 
 The only things the server leaves behind after it exits are the files described
 under [Local storage and downloads](#local-storage-and-downloads): what you asked
-it to download, the 24-hour mirror cache, and any temporary `read` files not yet
-evicted. None of them records a query or an identifier of yours except the names
+it to download, the 24-hour mirror cache, and, only if the server was killed
+rather than stopped, the temporary `read` files it still held. None of them records a query or an identifier of yours except the names
 of the files you chose to fetch. It shares data with no third parties beyond the
 destinations listed under [Data flows](#data-flows) — the Library Genesis
 mirrors, the extra searchers a `search` may reach, the metadata services

@@ -1706,6 +1706,18 @@ in the same change. Two things about it are easy to get wrong:
 
 ## Gotchas
 
+- **The files read fetches live under one root per process.** `FetchToTemp`
+  writes each file into a `fetch-*` directory inside `libgen-mcp-read-*` in the
+  OS temp directory, and that root holds a lock (`flock` on Unix, `LockFileEx`
+  on Windows) for the whole life of the process. `Client.Close` removes the
+  root, `run` defers the cleanup `newRegisteredServer` returns, and the first
+  `read` of the next process removes every root whose lock is free. Two things
+  fail silently if undone: a fetch directory made anywhere but under the root
+  outlives the process again, which is how every restart left one behind up to
+  2.2.0, and a caller of `newRegisteredServer` that drops the cleanup does the
+  same on a clean exit. The old loose prefix, `libgen-read-*`, is deliberately
+  not swept: nothing marks which process made one, and a server of those
+  versions may still be running beside a newer one.
 - **Root binaries.** `go build ./cmd/<x>` drops the binary in the repo root
   (e.g. `./gen_eval_pages`). These are gitignored, but **never** `git add -A` —
   stage files explicitly so a stray binary or `.env` is never committed. Prefer

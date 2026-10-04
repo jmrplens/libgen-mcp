@@ -145,6 +145,23 @@ func (tc *tempCache) evictLocked(ctx context.Context) {
 	}
 }
 
+// purge removes every cached file with its per-fetch directory, referenced or
+// not, forgets them all, and returns how many it removed.
+//
+// It is for a process that is ending. Eviction honors references because a
+// read is still going to open the file; at the end there is no read left to
+// answer, and a file kept for one would outlive the process.
+func (tc *tempCache) purge() int {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	n := len(tc.entries)
+	for key, e := range tc.entries {
+		removeTempFile(e.path)
+		delete(tc.entries, key)
+	}
+	return n
+}
+
 // observe publishes how full this cache is and what it is bounded by.
 //
 // The callbacks take the cache's own lock, which is what makes them safe to run

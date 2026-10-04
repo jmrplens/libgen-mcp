@@ -940,10 +940,13 @@ func run(ctx context.Context, spec listenSpec, opts transport.Options, decision 
 	// the honest answer on stdio: one caller, no table.
 	spec.records.observe()
 
-	server, err := newRegisteredServer(cfg, spec.addr, spec.records, spec.inflight, identity)
+	server, closeServer, err := newRegisteredServer(cfg, spec.addr, spec.records, spec.inflight, identity)
 	if err != nil {
 		return err
 	}
+	// After either transport returns: by then the HTTP server has drained, or
+	// the stdio client has gone, so no read is left to want its file.
+	defer closeServer()
 
 	if spec.addr != "" {
 		// The digest is built here rather than at flag time because it
@@ -1066,7 +1069,11 @@ func refusePrivateHatchOnBoundListener(ln net.Listener, allowPrivate bool) error
 // prompt registered — the same construction run performs, pulled out so a
 // test can inspect the live handshake (e.g. that serverInstructions still
 // names every registered tool and prompt) without duplicating it.
-func newRegisteredServer(cfg *config.Config, listenAddr string, records *clientRecords, inflight inflightFlag, identity identityChoice) (*mcp.Server, error) {
+//
+// The second value removes what the server put on disk while it ran, the files
+// read fetched, and is the caller's to call once the server has stopped
+// serving. Without it those files outlived every process that fetched them.
+func newRegisteredServer(cfg *config.Config, listenAddr string, records *clientRecords, inflight inflightFlag, identity identityChoice) (*mcp.Server, func(), error) {
 	// A deployment is remote when its disk is not the caller's: an HTTP listener
 	// (a TCP address or a unix socket) or a hosted stdio process that says so with
 	// LIBGEN_MCP_REMOTE_DOWNLOADS. That is also what decides, when the operator has
@@ -1084,7 +1091,7 @@ func newRegisteredServer(cfg *config.Config, listenAddr string, records *clientR
 
 	mgr, err := mirrors.NewManager(cfg)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	client := libgen.New(mgr, cfg)
 	// Either trigger puts download in link-only mode: a remote server cannot
@@ -1114,7 +1121,7 @@ func newRegisteredServer(cfg *config.Config, listenAddr string, records *clientR
 	}
 	tools.Register(server, client, cfg, regOpts...)
 	prompts.Register(server, client, cfg)
-	return server, nil
+	return server, client.Close, nil
 }
 
 // serveHTTP runs the streamable HTTP transport and shuts it down gracefully when

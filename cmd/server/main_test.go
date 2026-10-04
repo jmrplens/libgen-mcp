@@ -952,10 +952,11 @@ func TestServerInstructionsNameEveryToolAndPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	server, err := newRegisteredServer(cfg, "", nil, inflightFlag{}, identityChoice{})
+	server, closeServer, err := newRegisteredServer(cfg, "", nil, inflightFlag{}, identityChoice{})
 	if err != nil {
 		t.Fatalf("newRegisteredServer() error = %v", err)
 	}
+	t.Cleanup(closeServer)
 
 	st, ct := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(t.Context(), st, nil)
@@ -1007,10 +1008,11 @@ func TestNoResourcesIsConsistent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	server, err := newRegisteredServer(cfg, "", nil, inflightFlag{}, identityChoice{})
+	server, closeServer, err := newRegisteredServer(cfg, "", nil, inflightFlag{}, identityChoice{})
 	if err != nil {
 		t.Fatalf("newRegisteredServer() error = %v", err)
 	}
+	t.Cleanup(closeServer)
 
 	st, ct := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(t.Context(), st, nil)
@@ -1074,10 +1076,11 @@ func TestAdvertisedCapabilitiesAreWhatThisServerServes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	server, err := newRegisteredServer(cfg, "", nil, inflightFlag{}, identityChoice{})
+	server, closeServer, err := newRegisteredServer(cfg, "", nil, inflightFlag{}, identityChoice{})
 	if err != nil {
 		t.Fatalf("newRegisteredServer() error = %v", err)
 	}
+	t.Cleanup(closeServer)
 
 	st, ct := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(t.Context(), st, nil)
@@ -1790,10 +1793,11 @@ func registeredSurface(t *testing.T, httpAddr string) (names []string, instructi
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	server, err := newRegisteredServer(cfg, httpAddr, nil, inflightFlag{}, identityChoice{})
+	server, closeServer, err := newRegisteredServer(cfg, httpAddr, nil, inflightFlag{}, identityChoice{})
 	if err != nil {
 		t.Fatalf("newRegisteredServer() error = %v", err)
 	}
+	t.Cleanup(closeServer)
 	st, ct := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(t.Context(), st, nil)
 	if err != nil {

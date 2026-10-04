@@ -44,8 +44,10 @@ func adsCountingServer(t *testing.T, payload []byte, adsHits *atomic.Int32) *htt
 }
 
 // newFetchTempClient builds a test client wired to a single mirror with a small
-// temp cache, keeping the fast, network-free defaults used elsewhere.
-func newFetchTempClient(m MirrorLister) *Client {
+// temp cache, keeping the fast, network-free defaults used elsewhere. Close is
+// registered as cleanup, so a test leaves no read root in the temp directory.
+func newFetchTempClient(t *testing.T, m MirrorLister) *Client {
+	t.Helper()
 	cfg := &config.Config{
 		Timeout:                5_000_000_000,
 		RateRPS:                1000,
@@ -54,6 +56,7 @@ func newFetchTempClient(m MirrorLister) *Client {
 		MaxConcurrentDownloads: 2,
 	}
 	c := New(m, cfg)
+	t.Cleanup(c.Close)
 	c.backoffBase = 1_000_000
 	c.sources = []DownloadSource{libgenSource{c: c}}
 	return c
@@ -69,7 +72,7 @@ func TestFetchToTemp_DownloadsThenReusesCache(t *testing.T) {
 	var adsHits atomic.Int32
 	srv := adsCountingServer(t, payload, &adsHits)
 	defer srv.Close()
-	c := newFetchTempClient(staticMirrors{srv.URL})
+	c := newFetchTempClient(t, staticMirrors{srv.URL})
 
 	path1, release1, err := c.FetchToTemp(context.Background(), Item{MD5: want})
 	if err != nil {
@@ -104,7 +107,7 @@ func TestFetchToTemp_DownloadsThenReusesCache(t *testing.T) {
 // TestFetchToTemp_NoIdentifier verifies that an item with neither md5 nor doi
 // returns an error and a non-nil no-op release.
 func TestFetchToTemp_NoIdentifier(t *testing.T) {
-	c := newFetchTempClient(staticMirrors{})
+	c := newFetchTempClient(t, staticMirrors{})
 	path, release, err := c.FetchToTemp(context.Background(), Item{})
 	if err == nil {
 		t.Fatal("FetchToTemp with no identifier should error")
@@ -123,7 +126,7 @@ func TestFetchToTemp_NoIdentifier(t *testing.T) {
 // chain) surfaces the download error with an empty path and a safe no-op release,
 // and leaves no per-fetch temp dir behind.
 func TestFetchToTemp_DownloadError(t *testing.T) {
-	c := newFetchTempClient(staticMirrors{}) // libgen source only; does not support DOIs
+	c := newFetchTempClient(t, staticMirrors{}) // libgen source only; does not support DOIs
 	path, release, err := c.FetchToTemp(context.Background(), Item{DOI: "10.1/x"})
 	if err == nil {
 		t.Fatal("FetchToTemp for an unservable identifier should error")
@@ -147,7 +150,7 @@ func TestFetchToTemp_ConcurrentLoserDiscardsDownload(t *testing.T) {
 	want := md5Hex(payload)
 	b := newBlockingCDN(t, payload)
 	defer b.srv.Close()
-	c := newFetchTempClient(staticMirrors{b.srv.URL})
+	c := newFetchTempClient(t, staticMirrors{b.srv.URL})
 
 	type out struct {
 		path    string
@@ -186,8 +189,8 @@ func TestFetchToTemp_ConcurrentLoserDiscardsDownload(t *testing.T) {
 	}
 }
 
-// TestFetchToTemp_TempDirCreateError verifies that when the per-fetch temp
-// directory cannot be created (an unwritable TMPDIR), FetchToTemp surfaces the
+// TestFetchToTemp_TempDirCreateError verifies that when the process's read root
+// cannot be created (an unwritable TMPDIR), FetchToTemp surfaces the
 // os.MkdirTemp error and returns a non-nil no-op release, rather than panicking
 // or proceeding without a directory. The identifier is a cache miss so the fast
 // path does not short-circuit before the MkdirTemp call.
@@ -197,7 +200,7 @@ func TestFetchToTemp_TempDirCreateError(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "no", "such", "dir")
 	isolateTempDir(t, missing)
 
-	c := newFetchTempClient(staticMirrors{})
+	c := newFetchTempClient(t, staticMirrors{})
 	path, release, err := c.FetchToTemp(context.Background(), Item{MD5: "0123456789abcdef0123456789abcdef"})
 	// Assert it is specifically the temp-dir creation failure (os.MkdirTemp fails to
 	// stat the missing TMPDIR base), so a future download/cache error occurring
@@ -252,4 +255,82 @@ func isolateTempDir(t *testing.T, dir string) {
 		t.Fatalf("os.TempDir() = %q after isolating it to %q; this platform reads a variable %v does not cover",
 			got, want, tempDirVars)
 	}
+}
+
+// TestFetchToTemp_LivesUnderTheReadRootAndCloseRemovesIt is the leak this root
+// fixes: a fetched file used to sit loose in the temp directory and outlive
+// the process, because only eviction removed it. Now it lives under the
+// process's read root, Close removes the root with whatever the cache held,
+// and a read after Close fetches again into a new root.
+func TestFetchToTemp_LivesUnderTheReadRootAndCloseRemovesIt(t *testing.T) {
+	tmp := t.TempDir()
+	isolateTempDir(t, tmp)
+	payload := []byte("%PDF-1.4 read root payload " + string(make([]byte, 64)))
+	want := md5Hex(payload)
+	var adsHits atomic.Int32
+	srv := adsCountingServer(t, payload, &adsHits)
+	defer srv.Close()
+	c := newFetchTempClient(t, staticMirrors{srv.URL})
+
+	path, release, err := c.FetchToTemp(context.Background(), Item{MD5: want})
+	if err != nil {
+		t.Fatalf("FetchToTemp: %v", err)
+	}
+	// Held, not released: a read caught mid-page when the process ends must
+	// not keep its file on disk either.
+	defer release()
+	root := filepath.Dir(filepath.Dir(path))
+	if filepath.Dir(root) != tmp || !strings.HasPrefix(filepath.Base(root), readRootPrefix) {
+		t.Fatalf("fetched file %q is not in a per-fetch directory under a read root in %q", path, tmp)
+	}
+
+	c.Close()
+	entries, err := os.ReadDir(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("Close left %d entries in the temp directory, first %q", len(entries), entries[0].Name())
+	}
+
+	again, releaseAgain, err := c.FetchToTemp(context.Background(), Item{MD5: want})
+	if err != nil {
+		t.Fatalf("FetchToTemp after Close: %v", err)
+	}
+	defer releaseAgain()
+	if got := adsHits.Load(); got != 2 {
+		t.Errorf("ads.php hits = %d, want 2: the file Close removed must be fetched again", got)
+	}
+	if filepath.Dir(filepath.Dir(again)) == root {
+		t.Errorf("the fetch after Close reused the removed root %q", root)
+	}
+}
+
+// TestFetchToTemp_FetchDirCreateError covers the per-fetch directory failing
+// with the root already made, which happens when the root is removed from
+// under a running process. The error is the caller's, as when the root itself
+// cannot be made.
+func TestFetchToTemp_FetchDirCreateError(t *testing.T) {
+	isolateTempDir(t, t.TempDir())
+	c := newFetchTempClient(t, staticMirrors{})
+	root, err := c.readRoot.path()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rmErr := os.RemoveAll(root); rmErr != nil {
+		t.Fatal(rmErr)
+	}
+
+	path, release, err := c.FetchToTemp(context.Background(), Item{MD5: "0123456789abcdef0123456789abcdef"})
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) || !strings.HasPrefix(pathErr.Path, root) {
+		t.Fatalf("want an *os.PathError from MkdirTemp inside %q, got %v", root, err)
+	}
+	if path != "" {
+		t.Errorf("path = %q, want empty on error", path)
+	}
+	if release == nil {
+		t.Fatal("release must be non-nil even on error")
+	}
+	release()
 }
