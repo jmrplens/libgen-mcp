@@ -190,42 +190,45 @@ Cómo verificar cada canal, con las órdenes, está en [Instalación → Verific
 
 ### Lo que informa un escáner, y la declaración VEX
 
-Un escáner que lee el binario del servidor (Trivy, Docker Scout, osv-scanner, el análisis propio de un registro) informa de **GO-2026-5932** contra `golang.org/x/crypto`. Ese aviso cubre los paquetes `openpgp` del módulo, no tiene versión corregida ni puntuación CVSS, así que algunas herramientas lo muestran sin severidad. El binario no los contiene: el único paquete del módulo que enlaza es `golang.org/x/crypto/ocsp`, que la biblioteca de PDF (pdfcpu) importa para su código de firmas. Un escáner compara el módulo que nombra la información de compilación, no los paquetes enlazados, y por eso aparece el aviso. Puedes comprobar la lista de paquetes tú mismo desde una copia del código:
+La puerta de la release (`make check-binary-vulns`) falla ante cualquier aviso contra un módulo que nombre la información de compilación de cualquiera de los seis objetivos de la release, salvo que lo acepte una declaración revisada, y desde la 2.2.1 la tabla no tiene ninguna. Un escáner que lee el binario del servidor o su SBOM (Trivy, Grype, Docker Scout, osv-scanner, el análisis propio de un registro) no encuentra, por tanto, ningún aviso de Go contra lo que enlaza el binario cuando sale la release. Medido con Trivy 0.75 sobre la compilación linux/amd64: ningún aviso, donde el mismo análisis de la compilación de la 2.2.0 informa de uno.
+
+Las releases hasta la 2.2.0 aparecen con **GO-2026-5932** contra `golang.org/x/crypto`. Ese aviso cubre los paquetes `openpgp` del módulo, no tiene versión corregida ni puntuación CVSS, así que algunas herramientas lo muestran sin severidad. Esos binarios no los contienen: el único paquete del módulo que enlazan es `golang.org/x/crypto/ocsp`, que la biblioteca de PDF con la que leían los índices (pdfcpu) importa para su código de firmas. Un escáner compara el módulo que nombra la información de compilación, no los paquetes enlazados, y por eso aparece el aviso. La 2.2.1 lee el índice con la biblioteca de PDF que ya usaba la lectura de texto, y pdfcpu y `golang.org/x/crypto` salieron de los binarios; [Herramientas → Índice de contenidos](/libgen-mcp/es/tools/#índice-de-contenidos) cuenta lo que cuesta. Desde una copia del código de la 2.2.1 o posterior, esto no imprime nada:
 
 ```bash
 go list -deps ./cmd/server | grep '^golang.org/x/crypto'
 ```
 
-La puerta de la release (`make check-binary-vulns`) falla ante cualquier aviso así salvo que lo acepte una declaración revisada, y este está declarado `not-linked`. Esa afirmación no se da por buena tal como está escrita: en cada ejecución, la puerta lee del registro del aviso los paquetes que nombra y falla si alguno aparece en `go list -deps` de cualquiera de los seis objetivos de la release. La declaración sería falsa en cuanto se enlazara un paquete `openpgp`, y eso es justo lo que detiene una release.
+Cuando un aviso alcanza un módulo que enlazan los binarios y ninguno de los paquetes que nombra, la puerta solo lo acepta mediante una declaración `not-linked` revisada, y no da esa afirmación por buena tal como está escrita: en cada ejecución lee del registro del aviso los paquetes que nombra y falla si alguno aparece en `go list -deps` de cualquiera de los seis objetivos de la release.
 
-La declaración se publica como una declaración [OpenVEX](https://openvex.dev), `not_affected` con la justificación `vulnerable_code_not_present`:
+Cada declaración así se publica como una declaración [OpenVEX](https://openvex.dev), `not_affected` con la justificación `vulnerable_code_not_present`:
 
-- [`.vex/libgen-mcp.openvex.json`](https://github.com/jmrplens/libgen-mcp/blob/main/.vex/libgen-mcp.openvex.json), en el repositorio, nombra la release actual (la versión de `VERSION`) y ninguna otra. Se genera a partir de las declaraciones, y una comprobación de CI falla cuando las dos no coinciden, así que una declaración no puede sobrevivir a la evidencia que la sostiene.
-- Desde la 2.2.1, cada release escribe su propia copia, fijada a su versión y al digest de su imagen, solo después de que la puerta haya pasado sobre esa release. Adjunta esa copia a la imagen en GHCR y en Docker Hub como attestation firmada y la publica como el asset `libgen-mcp.openvex.json` de la release. Las releases hasta la 2.2.0 no llevan declaración propia.
+- [`.vex/libgen-mcp.openvex.json`](https://github.com/jmrplens/libgen-mcp/blob/main/.vex/libgen-mcp.openvex.json), en el repositorio, nombra la release actual (la versión de `VERSION`) y ninguna otra. Se genera a partir de las declaraciones, y una comprobación de CI falla cuando las dos no coinciden, así que una declaración no puede sobrevivir a la evidencia que la sostiene. Hoy no contiene ninguna: GO-2026-5932 era la única, y se fue con el módulo.
+- Una release con una declaración que hacer escribe su propia copia, fijada a su versión y al digest de su imagen, solo después de que la puerta haya pasado sobre esa release, la adjunta a la imagen en GHCR y en Docker Hub como attestation firmada y la publica como el asset `libgen-mcp.openvex.json` de la release. Una release sin ninguna, la 2.2.1 entre ellas, no adjunta ni publica nada. Las releases hasta la 2.2.0 tampoco llevan declaración: se publicaron antes de que existiera.
 
-Todos los productos de ambos ficheros llevan versión, así que una declaración no puede suprimir el aviso en una release contra la que no se comprobó. Usa la copia que corresponde a la release que ejecutas.
+Todos los productos de una declaración llevan versión, así que una declaración no puede suprimir un aviso en una release contra la que no se comprobó. Usa la copia que corresponde a la release que ejecutas.
 
-| Escáner         | Cómo usa la declaración                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Trivy           | `--vex oci` lee la attestation del registro. `--vex <fichero>` lee el documento del repositorio o de la release. En la release que nombra el documento, el aviso pasa a listarse como suprimido, `not_affected`, en lugar de como vulnerabilidad. En cualquier otra release se sigue informando. No puede aplicar la declaración a los SBOM SPDX que adjunta la release, que no llevan datos de relación que unan el módulo con la imagen o el binario                                 |
-| Docker Scout    | `docker scout cves --vex-location <dir>` lee una copia local. El documento también nombra la imagen como `pkg:docker/jmrplens/libgen-mcp@<versión>`, la forma que documenta Scout. Scout exige iniciar sesión en Docker, así que esto no se ha medido aquí, y aún no se sabe si Scout y la página de Docker Hub leen la attestation del registro                                                                                                                                       |
-| Grype           | Un análisis de la imagen o del binario no informa de este aviso. Un análisis de un SBOM sí: los SBOM SPDX y CycloneDX que adjunta la release, y un SBOM syft-json por defecto, lo muestran todos. `--vex` no lo suprime en los SBOM SPDX publicados, que no llevan el digest ni las etiquetas de la imagen con los que casar una declaración. Solo lo suprime en un SBOM syft-json de la imagen, y solo mediante los productos `pkg:oci` fijados por digest de la copia de una release |
-| Otros registros | Un escáner que no lee VEX sigue mostrando el aviso. La explicación de arriba es la respuesta que dar                                                                                                                                                                                                                                                                                                                                                                                   |
+| Escáner         | Cómo usa la declaración                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Trivy           | `--vex oci` lee la attestation del registro. `--vex <fichero>` lee el documento del repositorio o de la release. En la release que nombra el documento, un aviso que declara pasa a listarse como suprimido, `not_affected`, en lugar de como vulnerabilidad. En cualquier otra release se sigue informando. No puede aplicar la declaración a los SBOM SPDX que adjunta la release, que no llevan datos de relación que unan el módulo con la imagen o el binario                                            |
+| Docker Scout    | `docker scout cves --vex-location <dir>` lee una copia local. El documento también nombra la imagen como `pkg:docker/jmrplens/libgen-mcp@<versión>`, la forma que documenta Scout. Scout exige iniciar sesión en Docker, así que esto no se ha medido aquí, y aún no se sabe si Scout y la página de Docker Hub leen la attestation del registro                                                                                                                                                              |
+| Grype           | Un análisis de la imagen o del binario no informaba de GO-2026-5932 en la 2.2.0. Un análisis de un SBOM sí: los SBOM SPDX y CycloneDX que adjunta la release, y un SBOM syft-json por defecto, lo mostraban todos. `--vex` no suprime un aviso en los SBOM SPDX publicados, que no llevan el digest ni las etiquetas de la imagen con los que casar una declaración. Solo lo suprime en un SBOM syft-json de la imagen, y solo mediante los productos `pkg:oci` fijados por digest de la copia de una release |
+| Otros registros | Un escáner que no lee VEX sigue mostrando un aviso que cubre una declaración. El motivo de la declaración es la respuesta que dar                                                                                                                                                                                                                                                                                                                                                                             |
 
 Para comprobarlo tú mismo:
 
 ```bash
-# La declaración aplicada desde el registro (adjunta desde la 2.2.1)
-trivy image --vex oci --show-suppressed ghcr.io/jmrplens/libgen-mcp:latest
+# La release que ejecutas, analizada tal cual
+trivy image ghcr.io/jmrplens/libgen-mcp:latest
 
-# La declaración del repositorio, que nombra solo la release actual
-curl -fsSLO https://raw.githubusercontent.com/jmrplens/libgen-mcp/main/.vex/libgen-mcp.openvex.json
-trivy image --vex libgen-mcp.openvex.json --show-suppressed ghcr.io/jmrplens/libgen-mcp:latest
-mkdir -p vex && mv libgen-mcp.openvex.json vex/
-docker scout cves --vex-location ./vex docker.io/jmrplens/libgen-mcp:latest
+# Una release que lleva declaración: aplicada desde el registro
+trivy image --vex oci --show-suppressed ghcr.io/jmrplens/libgen-mcp:<versión>
+
+# La misma declaración desde una copia local del asset de la release
+mkdir -p vex && cp libgen-mcp.openvex.json vex/
+docker scout cves --vex-location ./vex docker.io/jmrplens/libgen-mcp:<versión>
 
 # La attestation en sí: quién la firmó y qué dice
-gh attestation verify oci://ghcr.io/jmrplens/libgen-mcp:latest --bundle-from-oci \
+gh attestation verify oci://ghcr.io/jmrplens/libgen-mcp:<versión> --bundle-from-oci \
   --predicate-type https://openvex.dev/ns/v0.2.0 -R jmrplens/libgen-mcp
 ```
 

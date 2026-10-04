@@ -752,13 +752,57 @@ which is precisely the lag the measurement above found.
   (jumpable via `read`'s cursor). Trivial, no new dependency, high value on large books. GO.
 - **TOC / outline navigation** — EPUB nav/NCX (trivial; the container is already unzipped) and
   PDF bookmarks via **pdfcpu** (pure-Go, Apache-2.0). Best-effort: many scanned/old PDFs carry no
-  outline, so degrade cleanly when absent. GO (EPUB first, then PDF).
+  outline, so degrade cleanly when absent. GO (EPUB first, then PDF). **Superseded 2026-10-04 —
+  see the amendment below:** the PDF outline is read with ledongthuc/pdf, and pdfcpu is gone.
 - New pure-Go, permissively licensed dependencies are acceptable where they earn their place
   (pdfcpu is the first). **OCR remains out of scope**: the viable engines are CGO (Tesseract) or
   keyed cloud services, either of which breaks the static-binary / keyless identity. Revisit only
   as an explicit, separately-decided opt-in that does not regress the default static build.
 - Server-side summarization / RAG embeddings — NO-GO (redundant with the calling model, or needs
   a model/key).
+
+#### Amendment — 2026-10-04 (the PDF outline without pdfcpu)
+
+pdfcpu earned its place on one feature, and by 2.2.0 it cost more than that feature. It is the
+reason every release binary carried `golang.org/x/crypto`: its core imports the signature package,
+which imports `x/crypto/ocsp`. Scanners report
+[GO-2026-5932](https://pkg.go.dev/vuln/GO-2026-5932) against the whole module, for `openpgp`
+packages nothing here links, with no fixed version to move to; Go declined to narrow the
+advisory ([golang/go#80347](https://github.com/golang/go/issues/80347)), and the proposal to
+delete `openpgp` from `x/crypto` ([golang/go#81227](https://github.com/golang/go/issues/81227))
+is still open. pdfcpu 0.16.0, the release 2.2.0 shipped, also carries advisories of its own,
+[GHSA-6524-w46v-6399](https://github.com/advisories/GHSA-6524-w46v-6399) among them. The OpenVEX
+statement 2.2.1 was going to publish reaches few of the people who see the finding: a scanner
+applies one only when it is handed it, and none of the measured ones can apply it to the SPDX
+SBOMs the release attaches.
+
+**Decision.** The PDF outline is read with `github.com/ledongthuc/pdf`, the library the text,
+`find` and `section` paths already use, and pdfcpu leaves `go.mod`, taking `golang.org/x/crypto`
+with it (the one other import, a test oracle for HKDF, is frozen into vectors). The walk carries
+the bounds the page tree already has: the page-tree pre-flight first, a budget on items and on
+named destinations, a depth bound, a stop at an item met twice, and a recovered panic.
+
+**Measured** against pdfcpu 0.16.0 on 68 PDFs (20 documents and fixtures, pdfcpu's own 47-file
+test set, and a 5.6 MB document with a 1,928-entry outline): 66 outlines identical. One title
+pdfcpu read as `1Preface` is now `1 Preface` (a tab becomes a space), and a `/First` cycle pdfcpu
+answered with an error now yields the entry before the cycle. The 1,928-entry outline reads in
+1.6 s instead of 10.3 s. The release binaries link 43 modules instead of 50, the linux/amd64 one
+is 4.5 MB smaller, and Trivy 0.75 reports nothing on it where it reported GO-2026-5932 before.
+
+**What it costs.** ledongthuc/pdf decrypts RC4 and AES-128 and nothing else, and does not repair
+a damaged file, where pdfcpu did both. A PDF encrypted with AES-256 (V=5) or with RC4 under crypt
+filters (V=4), or one whose cross-reference table needs rebuilding, loses its outline. Those
+files already had no text and no `find`, so `read` now gives every mode one honest reason, that
+the file is encrypted in a way the reader cannot decrypt or is damaged, instead of an outline
+beside a text path that called the file "not a valid PDF". An outline that is present but does
+not parse is reported as damaged rather than as missing, which pdfcpu could not tell apart.
+
+**Rejected, with the reason.** Keeping pdfcpu behind a `replace` to a fork without the signature
+code: `go install …@latest` refuses a module whose `go.mod` has a `replace`. Stripping or
+trimming the build information so scanners do not see the module: it blinds them to real
+advisories as well, and `THIRD_PARTY_NOTICES` is generated from it. Relying on the OpenVEX
+statement alone: measured above, it reaches few. The machinery stays for the next not-linked
+advisory, with an empty table.
 
 ### 5. Elicitation — GO (opt-in, with a deterministic fallback)
 
@@ -829,6 +873,8 @@ clients and the no-friction promise must keep working unchanged.
   Library Genesis and open access."
 - The context footprint grows with federated discovery and the new read affordances; keep result
   fields lean and re-measure `make audit-tokens` as each lands.
-- pdfcpu enters go.mod; the pure-Go static build and license posture are preserved.
+- pdfcpu enters go.mod; the pure-Go static build and license posture are preserved. **Reversed
+  2026-10-04:** pdfcpu, and `golang.org/x/crypto` with it, left go.mod — see the amendment under
+  §4.
 - Adoption also needs a non-feature push (clear one-line hook, awesome-list / registry presence);
   tracked separately from this record.

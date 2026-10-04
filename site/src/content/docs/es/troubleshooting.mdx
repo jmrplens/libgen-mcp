@@ -1066,16 +1066,16 @@ Valen para un servidor arrancado con `--http`. Todo rechazo en el propio endpoin
 
 <Facts>
 	<Fact kind="symptom">
-		`read` devuelve `extractable: false` con un motivo: `no extractable text layer (likely a scanned or image-only PDF); OCR is not supported`, `unsupported format .djvu: text extraction is not available (comic/scanned/proprietary container)`, `unsupported file extension .env and its bytes match no supported format (unrecognized)`, o `cannot read the file: the reader did not finish within the time limit (the document is damaged or pathologically structured)`.
+		`read` devuelve `extractable: false` con un motivo: `no extractable text layer (likely a scanned or image-only PDF); OCR is not supported`, `unsupported format .djvu: text extraction is not available (comic/scanned/proprietary container)`, `unsupported file extension .env and its bytes match no supported format (unrecognized)`, `cannot read PDF: it is encrypted in a way this reader cannot decrypt (…)`, `cannot read PDF: the file is damaged (…)`, o `cannot read the file: the reader did not finish within the time limit (the document is damaged or pathologically structured)`.
 	</Fact>
 	<Fact kind="meaning">
-		`read` extrae texto de PDF, EPUB y texto plano. Un escaneo no tiene texto que extraer y aquí no se hace OCR; DjVu, los archivos de cómic y los contenedores propietarios de ebooks no se leen en absoluto; a un documento dañado se le da un tiempo límite en lugar de un hilo para siempre.
+		`read` extrae texto de PDF, EPUB y texto plano. Un escaneo no tiene texto que extraer y aquí no se hace OCR; DjVu, los archivos de cómic y los contenedores propietarios de ebooks no se leen en absoluto; un PDF cifrado con AES-256 o con RC4 bajo filtros de cifrado, o uno que pide contraseña, no se puede descifrar, y un PDF dañado no se repara; a un documento que tarda demasiado se le da un tiempo límite en lugar de un hilo para siempre.
 	</Fact>
 	<Fact kind="fixes">
 
-    - Descarga otra edición de la misma obra: el catálogo suele tener un PDF con texto o un EPUB junto a un escaneo.
-    - Abre el archivo en local con un lector que haga OCR.
-    - Un índice que vuelve vacío no es un fallo: muchos PDF no llevan tabla de contenidos, y `find` sigue buscando en el texto.
+    - Descarga otra edición de la misma obra: el catálogo suele tener un PDF con texto o un EPUB junto a un escaneo, y la copia de otro mirror de un PDF cifrado o dañado suele estar sin cifrar y entera.
+    - Abre el archivo en local con un lector que haga OCR, o que descifre o repare el PDF.
+    - Un índice que vuelve vacío no es un fallo: muchos PDF no llevan tabla de contenidos, el `reason` dice si no tiene ninguno o lo tiene dañado, y `find` sigue buscando en el texto.
 
     </Fact>
     <Fact label="Cómo funciona">

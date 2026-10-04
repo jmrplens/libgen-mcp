@@ -88,9 +88,9 @@ gate therefore reads the packages each such advisory names (its
 reporting `LINKED`, if any of them appears in `go list -deps` of the main package
 of any release target, built with that target's environment and flags. An
 advisory that names no package covers the whole module, which the binaries link,
-so it is reported `UNCHECKED` and fails too. The declaration's reason, which
+so it is reported `UNCHECKED` and fails too. A declaration's reason, which
 becomes the statement's `impact_statement`, says the same: the statement is
-false as soon as an `openpgp` package is linked. The check is part of `make
+false as soon as one of the advisory's packages is linked. The check is part of `make
 check-binary-vulns`, so it runs wherever that gate does: CI's `Release binaries`
 job on every pull request, the release's `binary-vulns` gate, the GoReleaser
 job's check of its own output, and the `vex` job below.
@@ -109,11 +109,16 @@ the version in `VERSION`, so `check-vex` fails a version bump until
 `make gen-vex` has run, and it carries no OCI purl, because before the image is
 pushed there is no digest to pin it to.
 
-**The statement first ships with 2.2.1.** No earlier release carries it. Their
-GitHub releases are immutable, so no asset can be added to them. Attaching the
-statement to their published images afterwards was decided against: a dispatch
-workflow holding `id-token` for that one use is surface with no purpose once the
-next release carries it.
+**No release carries a statement yet.** The table's one declaration when this
+was built, GO-2026-5932 against `golang.org/x/crypto`, went in 2.2.1 with the
+module itself: the binaries linked it only for the `ocsp` package pdfcpu's
+signature code imports, and 2.2.1 reads the PDF outline without pdfcpu. So 2.2.1
+writes a copy with no statements and attests nothing. Releases up to 2.2.0,
+which do link the module, carry none either. Their GitHub releases are
+immutable, so no asset can be added to them, and attaching the statement to
+their published images afterwards was decided against: a dispatch workflow
+holding `id-token` for that one use is surface with no purpose once the next
+release no longer links the module.
 
 Three jobs carry it through a release:
 
@@ -211,9 +216,10 @@ of leaving an attestation nobody can find.
 
 ## The licence and the third-party notices travel with every binary
 
-The binaries link the Go standard library and modules under BSD-3-Clause,
-Apache-2.0 (pdfcpu) and MPL-2.0, whose terms ask for their texts to accompany a
-binary redistribution, and MIT asks the same of this project's own notice. The
+The binaries link the Go standard library and modules under BSD-3-Clause and
+Apache-2.0 (the OpenTelemetry modules among them), whose terms ask for their
+texts to accompany a binary redistribution, and MIT asks the same of this
+project's own notice and of the MIT modules the binaries link. The
 SBOMs name each licence and carry none of the texts. So two files go into every
 artifact that hands somebody a binary:
 
@@ -222,7 +228,8 @@ artifact that hands somebody a binary:
   the six binaries link, read from their build information and the module cache
   by `cmd/gen_third_party_notices`: at each module's root, and in the directory
   of each package the binaries link (listed per target with `go list -deps`),
-  which is where pdfcpu keeps the MIT licence of the pkcs7 code it vendors.
+  which is where a module keeps the licence of code it vendors under terms of
+  its own, as pdfcpu did for pkcs7 until 2.2.1 removed it.
   GoReleaser runs it as an `sboms` entry with
   `artifacts: any`, the one hook after the builds and before `checksums.txt` is
   computed and signed, so the file is a release asset covered by the signature

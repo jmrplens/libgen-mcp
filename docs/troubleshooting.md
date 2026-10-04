@@ -1147,21 +1147,25 @@ remote server takes no local path at all, because the path would be on the serve
 **Symptom.** `read` returns `extractable: false` with a reason: `no extractable text layer
 (likely a scanned or image-only PDF); OCR is not supported`, `unsupported format .djvu: text
 extraction is not available (comic/scanned/proprietary container)`, `unsupported file
-extension .env and its bytes match no supported format (unrecognized)`, or `cannot read the
-file: the reader did not finish within the time limit (the document is damaged or
-pathologically structured)`.
+extension .env and its bytes match no supported format (unrecognized)`, `cannot read PDF: it is
+encrypted in a way this reader cannot decrypt (…)`, `cannot read PDF: the file is damaged (…)`,
+or `cannot read the file: the reader did not finish within the time limit (the document is
+damaged or pathologically structured)`.
 
 **Meaning.** `read` extracts text from PDF, EPUB and plain text. A scan has no text to
 extract and no OCR runs here; DjVu, comic archives and proprietary e-book containers are not
-read at all; a damaged document is given a time limit rather than a thread forever.
+read at all; a PDF encrypted with AES-256 or RC4 under crypt filters, or one that needs a
+password, cannot be decrypted, and a damaged PDF is not repaired; a document that takes too
+long is given a time limit rather than a thread forever.
 
 **Fixes.**
 
 - Download another edition of the same work: the catalog often has a text PDF or an EPUB
-  beside a scan.
-- Open the file locally in a reader that does OCR.
+  beside a scan, and another mirror's copy of an encrypted or damaged PDF is often a plain,
+  whole one.
+- Open the file locally in a reader that does OCR, or that decrypts or repairs the PDF.
 - An outline that comes back empty is not a failure: many PDFs carry no table of contents,
-  and `find` still searches the text.
+  the `reason` says whether it has none or a damaged one, and `find` still searches the text.
 
 **How it works.** [Tools](tools.md#not-extractable).
 
