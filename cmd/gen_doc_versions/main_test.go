@@ -192,7 +192,22 @@ func TestRun_Refusals(t *testing.T) {
 			name:    "a month that does not exist",
 			version: "1.0.0",
 			files:   map[string]string{"CITATION.cff": "date-released: 2026-13-01\n"},
-			want:    "no date-released",
+			want:    "date-released is not a date",
+		},
+		{
+			name:    "a day the month does not have",
+			version: "1.0.0",
+			files:   map[string]string{"CITATION.cff": "date-released: 2026-02-30\n"},
+			want:    "date-released is not a date",
+		},
+		{
+			name:    "a historical number at a token position",
+			version: "2.2.0",
+			files: map[string]string{
+				"site/src/content/docs/a.mdx": "Pin %%VERSION%%, or %%VERSION%%.",
+				"docs/a.md":                   "Pin 2.1.0, or 1.9.0.",
+			},
+			want: `disagree: "2.1.0" at line 1, "1.9.0" at line 1`,
 		},
 		{
 			name:    "no Starlight pages",

@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
 
 // twinDir is where the English Starlight pages live, relative to the root.
@@ -156,18 +157,19 @@ func readValues(root string) (map[string]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read CITATION.cff: %w", err)
 	}
+	// time.Parse checks the day against the month, so 2026-02-30 is refused.
 	m := datePattern.FindStringSubmatch(string(cff))
-	month := 0
-	if m != nil {
-		_, _ = fmt.Sscanf(m[2], "%d", &month)
-	}
-	if month < 1 || month > 12 {
+	if m == nil {
 		return nil, errors.New("CITATION.cff has no date-released of the form YYYY-MM-DD")
+	}
+	released, err := time.Parse(time.DateOnly, m[1]+"-"+m[2]+"-"+m[3])
+	if err != nil {
+		return nil, fmt.Errorf("CITATION.cff date-released is not a date: %w", err)
 	}
 	return map[string]string{
 		versionPlaceholder: version,
 		yearPlaceholder:    m[1],
-		monthPlaceholder:   bibtexMonths[month-1],
+		monthPlaceholder:   bibtexMonths[released.Month()-1],
 	}, nil
 }
 
@@ -291,6 +293,9 @@ func syncPage(k kind, twinSrc, docSrc, value string) (string, []mention, error) 
 	if i := firstDisagreement(twin, doc); i >= 0 {
 		return "", nil, misaligned(k, twinSrc, docSrc, twin, doc, i)
 	}
+	if err := mixedCurrent(k, docSrc, twin, doc); err != nil {
+		return "", nil, err
+	}
 	var b strings.Builder
 	var stale []mention
 	last := 0
@@ -323,6 +328,30 @@ func firstDisagreement(twin, doc []mention) int {
 		return n
 	}
 	return -1
+}
+
+// mixedCurrent refuses a docs page whose mentions at token positions do not
+// all say the same thing. They are all the current release, or all the one
+// before it after a bump, so two different values mean one of them is a
+// historical number standing where the twin writes the token, and rewriting it
+// would silently change a fact.
+func mixedCurrent(k kind, docSrc string, twin, doc []mention) error {
+	var first *mention
+	for i := range doc {
+		if !twin[i].token {
+			continue
+		}
+		if first == nil {
+			first = &doc[i]
+			continue
+		}
+		if doc[i].text != first.text {
+			return fmt.Errorf("the mentions where the twin writes %s disagree: %q at line %d, %q at line %d. "+
+				"They should all name one release, so one of them is not the current release",
+				k.placeholder, first.text, lineOf(docSrc, first.start), doc[i].text, lineOf(docSrc, doc[i].start))
+		}
+	}
+	return nil
 }
 
 // misaligned describes where the two copies of a page stopped agreeing.
