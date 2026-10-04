@@ -46,7 +46,12 @@ citation file. To cut a release:
    writes that date at release time and the `commit-manifests` job runs the
    generator before committing, so between the bump and the stamp the sample
    still carries the previous release's date.
-6. Open a PR; once merged, **rehearse it** (below), then tag `vX.Y.Z` on main to
+6. Run `make gen-vex`. Every product in `.vex/libgen-mcp.openvex.json` is pinned
+   to the version in `VERSION`, so a bump leaves it naming the previous release,
+   and `make check-vex` (CI's `Release binaries` job and the release's
+   `binary-vulns` gate) fails until it is rewritten. The release's own pinned
+   copy is written by the `vex` job, not by hand.
+7. Open a PR; once merged, **rehearse it** (below), then tag `vX.Y.Z` on main to
    trigger the release.
 
 ## Rehearsing a release

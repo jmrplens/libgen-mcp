@@ -136,7 +136,21 @@ func TestReportWrite_SaysWhatWasScannedAndTheVerdict(t *testing.T) {
 				"FINDING GO-2099-0001 stdlib@v1.27.1 (fixed in v1.27.2) in linux/amd64: \n",
 				`STALE declaration "GO-2099-0009 example.com/gone": no binary of this run carries the finding it accepts` + "\n",
 				`INVALID declaration "broken": the key is not an advisory id and a module separated by one space` + "\n",
-				"audit_binary_vulns: FAILED: 2 undeclared findings, 2 stale and 1 invalid declarations\n",
+				"audit_binary_vulns: FAILED: 2 undeclared findings, 2 stale, 1 invalid, 0 linked and 0 unchecked declarations\n",
+			},
+		},
+		{
+			name: "linked and unchecked",
+			rep: report{
+				verified:  []string{"GO-2099-0003 example.com/a: none of 1 packages"},
+				linked:    []string{"GO-2099-0004 example.com/b: example.com/b/bad is linked on linux/amd64"},
+				unchecked: []string{"GO-2099-0005 example.com/c: the advisory names no packages"},
+			},
+			want: []string{
+				"verified not-linked GO-2099-0003 example.com/a: none of 1 packages\n",
+				"LINKED GO-2099-0004 example.com/b: example.com/b/bad is linked on linux/amd64\n",
+				"UNCHECKED GO-2099-0005 example.com/c: the advisory names no packages\n",
+				"FAILED: 0 undeclared findings, 0 stale, 0 invalid, 1 linked and 1 unchecked declarations\n",
 			},
 		},
 	} {

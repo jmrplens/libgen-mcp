@@ -72,6 +72,45 @@
 // it excused is how an allowlist comes to excuse the next advisory against the
 // same module unread.
 //
+// # The VEX document
+//
+// A not-linked declaration is a claim a scanner can be told: the module is in
+// the binary and the advisory's packages are not. .vex/libgen-mcp.openvex.json
+// says it to them, as one OpenVEX statement per not-linked declaration
+// (not_affected, vulnerable_code_not_present, the reason as the impact
+// statement), about every identifier the products go by: the main module's
+// purl, which Trivy reports as the root of the binary in an image or on its
+// own, the image's pkg:oci purl in each registry, and Docker Scout's
+// pkg:docker form. Every one is pinned to a version, since a product with none
+// matches every release, ones the gate never saw included, and the OCI purls
+// are written only with the index digest. A fix-not-yet-adoptable declaration
+// writes nothing, since the code it excuses is in the binary.
+//
+// The committed document names the version -vex-version gives (the VERSION
+// file), is generated from the table and is never edited by hand. -vex-check
+// holds it to the table and that version in both directions, and so does a
+// test of this package: a statement with no not-linked declaration behind it
+// fails, and so does a declaration with no statement, which is what makes
+// removing a declaration (an advisory fixed) remove its statement in the same
+// change. -vex-write rewrites it, keeping its timestamp and version while the
+// statements are unchanged. Neither builds or scans anything.
+//
+// -vex-out with -vex-release and -vex-index-digest writes the copy a release
+// attaches to its image and publishes as an asset, each product pinned to
+// that release and its index. It runs the whole audit on -dir first, the
+// not-linked check below included, and writes nothing unless it passes: the
+// copy is what gets signed.
+//
+// # Not-linked is checked, not trusted
+//
+// The scan reads modules, so a not-linked declaration would otherwise be a
+// measurement made once by hand. Every run remakes it: the packages the
+// advisory names (ecosystem_specific.imports of the record the scan matched)
+// must not appear in go list -deps of the main package of any release target,
+// listed with that target's GOOS, GOARCH, env and flags. One that does fails
+// the run as LINKED. An advisory that names no package covers the whole
+// module, which the binaries link, and fails as UNCHECKED.
+//
 // # Why it is a module of its own
 //
 // golang.org/x/vuln brings golang.org/x/tools, x/mod and x/telemetry with it,
@@ -87,7 +126,8 @@
 // # Exit codes
 //
 // 0 when every finding is declared and every declaration matched; 1 when a
-// finding is undeclared or a declaration is stale or malformed; 2 when the run
+// finding is undeclared, a declaration is stale or malformed, or the VEX
+// document disagrees with the table; 2 when the run
 // could not be made (a configuration it refuses, a build or a scan that
 // failed, arguments that do not parse), because a gate that could not check the
 // release must not read as one that passed. The database is vuln.go.dev unless

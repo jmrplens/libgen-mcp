@@ -412,6 +412,12 @@ jobs:
         run: make elf-standalone
       - name: No binary carries an advisory the declarations do not accept
         run: make check-binary-vulns BINARIES='dist/libgen-mcp_*/libgen-mcp*'
+      # The OpenVEX document is what scanners are told about those
+      # declarations, so it is held to them beside the gate: a statement with
+      # no not-linked declaration behind it, or a declaration removed without
+      # its statement, fails here.
+      - name: The VEX document states exactly the not-linked declarations
+        run: make check-vex
       - name: The standalone check refuses a PIE build and accepts the release's
         run: make check-elf-standalone
       # cmd/audit_binary_vulns is a module of its own, which the root's

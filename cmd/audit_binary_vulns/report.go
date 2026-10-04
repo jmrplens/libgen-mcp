@@ -22,7 +22,10 @@ type scanned struct {
 type judged struct {
 	osv, module, version, fixed, summary string
 	targets                              []string
-	declaration                          *declaration
+	// imports are the packages of the module the advisory names, merged
+	// across every binary's copy of the record.
+	imports     []string
+	declaration *declaration
 }
 
 // report is the verdict of one run.
@@ -31,6 +34,10 @@ type report struct {
 	findings []judged
 	stale    []string
 	invalid  []string
+	// linked names every not-linked declaration the build graph contradicts,
+	// and unchecked every one it could not be held to; verified says how each
+	// of the others was held to it.
+	linked, unchecked, verified []string
 }
 
 // judge merges the findings of every binary and holds them to the table.
@@ -50,9 +57,8 @@ func judge(scans []scanned, declared map[string]declaration) report {
 				merged[key] = j
 				order = append(order, key)
 			}
-			if name := s.binary.target.String(); !slices.Contains(j.targets, name) {
-				j.targets = append(j.targets, name)
-			}
+			j.targets = appendNew(j.targets, s.binary.target.String())
+			j.imports = appendNew(j.imports, s.result.imports[key]...)
 		}
 	}
 
@@ -74,6 +80,16 @@ func judge(scans []scanned, declared map[string]declaration) report {
 	return rep
 }
 
+// appendNew appends each value the list does not hold yet, in order.
+func appendNew(list []string, values ...string) []string {
+	for _, v := range values {
+		if !slices.Contains(list, v) {
+			list = append(list, v)
+		}
+	}
+	return list
+}
+
 // undeclared counts the findings no declaration accepts.
 func (r report) undeclared() int {
 	n := 0
@@ -88,7 +104,8 @@ func (r report) undeclared() int {
 // ok reports whether the run passes: nothing undeclared, nothing stale, and
 // every declaration readable.
 func (r report) ok() bool {
-	return r.undeclared() == 0 && len(r.stale) == 0 && len(r.invalid) == 0
+	return r.undeclared() == 0 && len(r.stale) == 0 && len(r.invalid) == 0 &&
+		len(r.linked) == 0 && len(r.unchecked) == 0
 }
 
 // write prints what was scanned, every finding, and the verdict.
@@ -116,6 +133,15 @@ func (r report) write(w io.Writer) {
 	for _, problem := range r.invalid {
 		fmt.Fprintf(w, "INVALID declaration %s\n", problem)
 	}
+	for _, line := range r.verified {
+		fmt.Fprintf(w, "verified not-linked %s\n", line)
+	}
+	for _, problem := range r.linked {
+		fmt.Fprintf(w, "LINKED %s\n", problem)
+	}
+	for _, problem := range r.unchecked {
+		fmt.Fprintf(w, "UNCHECKED %s\n", problem)
+	}
 	if r.ok() {
 		if len(r.findings) == 0 {
 			fmt.Fprintf(w, "%s: no advisory affects a module the %d binaries link\n", toolName, len(r.scanned))
@@ -124,6 +150,6 @@ func (r report) write(w io.Writer) {
 		fmt.Fprintf(w, "%s: %d findings in the %d binaries, each accepted by a declaration\n", toolName, len(r.findings), len(r.scanned))
 		return
 	}
-	fmt.Fprintf(w, "%s: FAILED: %d undeclared findings, %d stale and %d invalid declarations\n",
-		toolName, r.undeclared(), len(r.stale), len(r.invalid))
+	fmt.Fprintf(w, "%s: FAILED: %d undeclared findings, %d stale, %d invalid, %d linked and %d unchecked declarations\n",
+		toolName, r.undeclared(), len(r.stale), len(r.invalid), len(r.linked), len(r.unchecked))
 }

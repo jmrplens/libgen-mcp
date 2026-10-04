@@ -187,6 +187,47 @@ The detail is on [Telemetry](/libgen-mcp/telemetry/#what-is-never-recorded), and
 
 How to verify each channel, with the commands, is on [Installation → Verifying what you install](/libgen-mcp/install/overview/#verifying-what-you-install).
 
+### What a scanner reports, and the VEX statement
+
+A scanner that reads the server binary (Trivy, Docker Scout, osv-scanner, a registry's own scan) reports **GO-2026-5932** against `golang.org/x/crypto`. That advisory covers the module's `openpgp` packages, has no fixed version and no CVSS score, so some tools show it with no severity. The binary does not contain them: the only package of the module it links is `golang.org/x/crypto/ocsp`, which the PDF library (pdfcpu) imports for its signature code. A scanner matches the module named in the build information, not the packages linked, which is why the finding appears at all. You can check the package list yourself from a source checkout:
+
+```bash
+go list -deps ./cmd/server | grep '^golang.org/x/crypto'
+```
+
+The release gate (`make check-binary-vulns`) fails on any such finding unless a reviewed declaration accepts it, and this one is declared `not-linked`. That claim is not trusted as written: on every run the gate reads the packages the advisory names from its record and fails if any of them appears in `go list -deps` of any of the six release targets. The statement would be false the moment an `openpgp` package was linked, and that is exactly what stops a release.
+
+The declaration is published as an [OpenVEX](https://openvex.dev) statement, `not_affected` with the justification `vulnerable_code_not_present`:
+
+- [`.vex/libgen-mcp.openvex.json`](https://github.com/jmrplens/libgen-mcp/blob/main/.vex/libgen-mcp.openvex.json) in the repository names the current release (the version in `VERSION`) and nothing else. It is generated from the declarations, and a CI check fails when the two disagree, so a statement cannot outlive the evidence behind it.
+- From 2.2.1 on, each release writes its own copy, pinned to its version and image digest, only after the gate has passed on that release. It attaches that copy to the image on GHCR and Docker Hub as a signed attestation and publishes it as the `libgen-mcp.openvex.json` release asset. Releases up to 2.2.0 carry no statement of their own.
+
+Every product in either file carries a version, so a statement cannot suppress the finding on a release it was not checked against. Use the copy that belongs to the release you run.
+
+| Scanner          | How it uses the statement                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Trivy            | `--vex oci` reads the attestation from the registry. `--vex <file>` reads the document from the repository or the release. On the release the document names, the finding is then listed as suppressed, `not_affected`, instead of as a vulnerability. On any other release it is still reported. It cannot apply the statement to the SPDX SBOMs the release attaches, which carry no relationship data tying the module to the image or the binary |
+| Docker Scout     | `docker scout cves --vex-location <dir>` reads a local copy. The document also names the image as `pkg:docker/jmrplens/libgen-mcp@<version>`, the form Scout documents. Scout needs a Docker login, so this has not been measured here, and whether Scout and the Docker Hub page read the registry attestation is not yet known                                                                                                                     |
+| Grype            | An image or binary scan does not report this advisory. A scan of an SBOM does: the SPDX and CycloneDX SBOMs the release attaches, and a default syft-json SBOM, all show it. `--vex` does not suppress it on the shipped SPDX SBOMs, which do not carry the image's digest or tags for a statement to match. It suppresses it only on a syft-json SBOM of the image, and only through the digest-pinned `pkg:oci` products of a release copy         |
+| Other registries | A scanner that reads no VEX keeps showing the finding. The explanation above is the answer to give                                                                                                                                                                                                                                                                                                                                                   |
+
+To check it yourself:
+
+```bash
+# The statement applied from the registry (attached from 2.2.1 on)
+trivy image --vex oci --show-suppressed ghcr.io/jmrplens/libgen-mcp:latest
+
+# The committed statement, which names the current release only
+curl -fsSLO https://raw.githubusercontent.com/jmrplens/libgen-mcp/main/.vex/libgen-mcp.openvex.json
+trivy image --vex libgen-mcp.openvex.json --show-suppressed ghcr.io/jmrplens/libgen-mcp:latest
+mkdir -p vex && mv libgen-mcp.openvex.json vex/
+docker scout cves --vex-location ./vex docker.io/jmrplens/libgen-mcp:latest
+
+# The attestation itself: who signed it and what it says
+gh attestation verify oci://ghcr.io/jmrplens/libgen-mcp:latest --bundle-from-oci \
+  --predicate-type https://openvex.dev/ns/v0.2.0 -R jmrplens/libgen-mcp
+```
+
 ## Reporting a vulnerability
 
 Do not open a public issue. Report privately through GitHub's [private vulnerability reporting](https://github.com/jmrplens/libgen-mcp/security/advisories/new) or by email, as the [security policy](https://github.com/jmrplens/libgen-mcp/blob/main/SECURITY.md) describes; it also lists what is in scope, the response targets, and which versions receive fixes (the latest release only).

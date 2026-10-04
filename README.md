@@ -315,12 +315,12 @@ by registering the tools and prompts for real and walking the tree, and
 | Discovery providers      |    10 |
 | `LIBGEN_MCP_*` variables |    58 |
 | Go packages              |    55 |
-| Test files               |   287 |
+| Test files               |   289 |
 
 | Test surface         | Files |
 | -------------------- | ----: |
 | unit (internal)      |   126 |
-| unit (cmd)           |   103 |
+| unit (cmd)           |   105 |
 | HTTP end-to-end      |    34 |
 | stdio end-to-end     |    11 |
 | collector acceptance |     7 |
