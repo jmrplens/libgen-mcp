@@ -19,6 +19,14 @@ import (
 // twinDir is where the English Starlight pages live, relative to the root.
 const twinDir = "site/src/content/docs"
 
+// The placeholders a Starlight page writes, which
+// site/src/lib/release-version.mjs replaces at build time.
+const (
+	versionPlaceholder = "%%VERSION%%"       // the VERSION file
+	yearPlaceholder    = "%%RELEASE_YEAR%%"  // date-released's year, in CITATION.cff
+	monthPlaceholder   = "%%RELEASE_MONTH%%" // date-released's month, as BibTeX abbreviates it
+)
+
 // versionPattern matches a version-shaped string: three numeric fields and an
 // optional prerelease suffix. Boundaries are checked by [versionBoundary],
 // since Go regular expressions have no lookbehind.
@@ -56,9 +64,9 @@ type kind struct {
 // The month is matched only in BibTeX's `month = …` form, the one place it is
 // written, because the abbreviations are also English words (`may`).
 var kinds = []kind{
-	{placeholder: "%%VERSION%%", pattern: versionPattern, boundary: versionBoundary},
-	{placeholder: "%%RELEASE_YEAR%%", pattern: regexp.MustCompile(`\d{4}`), boundary: wordBoundary},
-	{placeholder: "%%RELEASE_MONTH%%", pattern: regexp.MustCompile(`month = ([a-z]{3}|%%RELEASE_MONTH%%)`), boundary: wordBoundary},
+	{placeholder: versionPlaceholder, pattern: versionPattern, boundary: versionBoundary},
+	{placeholder: yearPlaceholder, pattern: regexp.MustCompile(`\d{4}`), boundary: wordBoundary},
+	{placeholder: monthPlaceholder, pattern: regexp.MustCompile(`month = ([a-z]{3}|` + monthPlaceholder + `)`), boundary: wordBoundary},
 }
 
 // mention is one value-shaped string, or one token, at a byte range of a page.
@@ -111,7 +119,7 @@ func run(args []string, stdout io.Writer) error {
 	}
 	if len(stale) > 0 {
 		return fmt.Errorf("%w (VERSION %s, CITATION.cff date-released %s %s), run `make gen-doc-versions`:\n  %s",
-			errStale, values["%%VERSION%%"], values["%%RELEASE_MONTH%%"], values["%%RELEASE_YEAR%%"],
+			errStale, values[versionPlaceholder], values[monthPlaceholder], values[yearPlaceholder],
 			strings.Join(stale, "\n  "))
 	}
 	return nil
@@ -157,9 +165,9 @@ func readValues(root string) (map[string]string, error) {
 		return nil, errors.New("CITATION.cff has no date-released of the form YYYY-MM-DD")
 	}
 	return map[string]string{
-		"%%VERSION%%":       version,
-		"%%RELEASE_YEAR%%":  m[1],
-		"%%RELEASE_MONTH%%": bibtexMonths[month-1],
+		versionPlaceholder: version,
+		yearPlaceholder:    m[1],
+		monthPlaceholder:   bibtexMonths[month-1],
 	}, nil
 }
 
