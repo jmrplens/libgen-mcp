@@ -7,6 +7,7 @@
         coverage-conditions coverage-mutants check-coverage-recipes \
         test test-short test-race test-e2e test-e2e-http test-e2e-stdio test-e2e-collector eval coverage cover-check \
         lint golangci-lint govulncheck check-binary-vulns test-binary-vulns godoc-check-binary-vulns analyze analyze-fix fmt tidy vet \
+        gen-vex check-vex vex-release \
         format-md-tables check-md-tables check-doc-links gen-doc-versions check-doc-versions \
         godoc-audit godoc-check \
         gen-llms check-llms gen-lhm-manifest check-lhm-manifest \
@@ -357,6 +358,27 @@ govulncheck: ## Scan for known vulnerabilities (govulncheck)
 # from its own module (VULNGATE_DIR), so every path it is handed is absolute.
 check-binary-vulns: ## Fail when a release binary carries an undeclared advisory at module grain (needs network)
 	go -C $(VULNGATE_DIR) run . -dir $(CURDIR) -config $(CURDIR)/.goreleaser.yml $(if $(BINARIES),-binaries '$(CURDIR)/$(BINARIES)')
+
+# The OpenVEX document scanners read: one not_affected statement per not-linked
+# declaration in the table above, generated from it and never edited by hand.
+# check-vex holds the committed copy to the table in both directions (offline,
+# no build), so a declaration removed without its statement fails, and so does a
+# statement with no declaration behind it. vex-release writes the copy a release
+# attaches to its image and publishes as an asset, pinned to VEX_VERSION and the
+# image index VEX_DIGEST, and only after the same check passed.
+VEX_DOC := .vex/libgen-mcp.openvex.json
+VEX_OUT ?= dist/libgen-mcp.openvex.json
+
+gen-vex: ## Rewrite .vex/libgen-mcp.openvex.json from the binary-vuln declarations
+	go -C $(VULNGATE_DIR) run . -vex-write $(CURDIR)/$(VEX_DOC)
+
+check-vex: ## Fail when .vex/libgen-mcp.openvex.json disagrees with the binary-vuln declarations
+	go -C $(VULNGATE_DIR) run . -vex-check $(CURDIR)/$(VEX_DOC)
+
+vex-release: ## Write the release's OpenVEX copy (VEX_VERSION=2.2.0 VEX_DIGEST=sha256:... [VEX_OUT=path])
+	@test -n "$(VEX_VERSION)" && test -n "$(VEX_DIGEST)" || { echo "usage: make vex-release VEX_VERSION=<x.y.z> VEX_DIGEST=sha256:<index> [VEX_OUT=<path>]"; exit 2; }
+	go -C $(VULNGATE_DIR) run . -vex-check $(CURDIR)/$(VEX_DOC) \
+		-vex-out $(abspath $(VEX_OUT)) -vex-release $(VEX_VERSION) -vex-index-digest $(VEX_DIGEST)
 
 # The nested module's tests, with the same floor the root module is held to.
 test-binary-vulns: ## Run cmd/audit_binary_vulns's tests (its own module) and hold it to COVERAGE_MIN

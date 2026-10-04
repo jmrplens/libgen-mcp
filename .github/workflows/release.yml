@@ -169,6 +169,9 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
       - run: make check-binary-vulns
+      # The OpenVEX document tells scanners what the not-linked declarations
+      # say, so it is held to them here as well, before anything is pushed.
+      - run: make check-vex
 
   release:
     name: GoReleaser
@@ -182,12 +185,13 @@ jobs:
     # That used to come for free while signing lived inside the docker job;
     # once it moved out, nothing held it and an image nobody signed could have
     # shipped beside npm, PyPI and NuGet versions that cannot be withdrawn.
-    needs: [preflight, transport-e2e, race, binary-vulns, docker, sign-attest]
+    needs: [preflight, transport-e2e, race, binary-vulns, docker, vex, sign-attest]
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
+      VEX_STATEMENTS: ${{ needs.vex.outputs.statements }}
     permissions:
-      contents: write # create the release, upload the .mcpb bundles, un-draft it
+      contents: write # create the release, upload the .mcpb bundles and the OpenVEX document, un-draft it
       id-token: write # cosign's blob signature, and the npm/PyPI/NuGet OIDC exchanges
       attestations: write # actions/attest-build-provenance over the assets
     steps:
@@ -326,6 +330,25 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "v${RELEASE_TAG#v}" dist/*.mcpb --clobber
 
+      # The OpenVEX document the vex job wrote and sign-attest attached to the
+      # image, published beside the binaries for a scanner that reads a file
+      # (`trivy ... --vex libgen-mcp.openvex.json`, `grype --vex`) rather than
+      # the registry. Taken in a rehearsal too, so the hand-over is exercised.
+      # Uploaded before the release is un-drafted, because the release is
+      # immutable once it is published.
+      - name: Take the OpenVEX document the vex job wrote
+        if: env.VEX_STATEMENTS != '0'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: openvex
+          path: dist
+
+      - name: Upload the OpenVEX document to the release
+        if: env.REHEARSAL != 'true' && env.VEX_STATEMENTS != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "v${RELEASE_TAG#v}" dist/libgen-mcp.openvex.json --clobber
+
       # SLSA build provenance for every asset this release ships, stored in
       # GitHub's attestation store — no release asset changes and nothing is
       # re-uploaded. The cosign signature over checksums.txt answers "did our
@@ -355,6 +378,14 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-path: dist/*.mcpb
+
+      # The OpenVEX asset is written after checksums.txt is signed, for the
+      # reason the bundles are, so it is attested on its own.
+      - name: Attest build provenance (OpenVEX document)
+        if: env.REHEARSAL != 'true' && env.VEX_STATEMENTS != '0'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-path: dist/libgen-mcp.openvex.json
 
       # Every asset — binaries, checksums.txt and its signature, the SBOMs,
       # THIRD_PARTY_NOTICES and the .mcpb bundles above — is attached before the release
@@ -706,10 +737,13 @@ jobs:
   # are written to a file rather than expanded into the command line.
   verify-published:
     name: Verify published packages
-    needs: [preflight, npm, pypi, nuget]
+    needs: [preflight, docker, vex, npm, pypi, nuget]
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
+      INDEX_DIGEST: ${{ needs.docker.outputs.digest }}
+      DOCKERHUB_SKIP: ${{ needs.docker.outputs.dockerhub }}
+      VEX_STATEMENTS: ${{ needs.vex.outputs.statements }}
     permissions:
       contents: read # download the published release assets
     steps:
@@ -742,6 +776,29 @@ jobs:
             --retry-budget 480 --retry-delay 30 \
             --nuget-digests "$RUNNER_TEMP/nupkg.sha256" \
             "${RELEASE_TAG#v}" dist/checksums.txt
+
+      # The OpenVEX statement as a scanner meets it: read from each registry's
+      # referrers of the published index rather than from GitHub's attestation
+      # store, verified against this workflow at this tag, and equal to the
+      # asset the release published. A statement that reached the store and not
+      # the registry, or one that says something other than the asset, fails
+      # here. No credential is used for the registries: the images are public.
+      - name: The image carries the published OpenVEX statement
+        if: env.REHEARSAL != 'true' && env.VEX_STATEMENTS != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="v${RELEASE_TAG#v}"
+          gh release download "$tag" --pattern libgen-mcp.openvex.json --dir "$RUNNER_TEMP/vex"
+          repos=("${REGISTRY}/${IMAGE_NAME}")
+          if [ "${DOCKERHUB_SKIP}" = "false" ]; then
+            repos+=("docker.io/${DOCKERHUB_IMAGE}")
+          fi
+          for repo in "${repos[@]}"; do
+            bash .github/scripts/verify-vex-attestation.sh "${repo}@${INDEX_DIGEST}" \
+              "$RUNNER_TEMP/vex/libgen-mcp.openvex.json" release.yml "refs/tags/${tag}"
+          done
 
       - name: Nothing to verify in a rehearsal
         if: env.REHEARSAL == 'true'
@@ -1354,6 +1411,56 @@ jobs:
           short-description: "MCP server to search and read Library Genesis and open-access sources. By jmrp.io"
           readme-filepath: ./.github/dockerhub-description.md
 
+  # The OpenVEX statement this release makes: .vex/libgen-mcp.openvex.json,
+  # which is generated from the not-linked declarations of
+  # cmd/audit_binary_vulns and held to them, with every product pinned to this
+  # version and to the index digest the docker job pushed. sign-attest attaches
+  # it to the image in both registries, which is where Trivy's `--vex oci`
+  # looks, and the release job publishes it as an asset.
+  #
+  # A job of its own, holding nothing but `contents: read`, because writing it
+  # means compiling and running the gate's module, and the signing job runs no
+  # build of anything. It runs in a rehearsal too, against the rehearsed index
+  # digest: the generation and its check are the part that can rot, and only
+  # attaching it is irreversible.
+  #
+  # `statements` is how many statements the document makes. With none there is
+  # nothing to tell a scanner, so nothing is attested or published, rather than
+  # an empty document that would read as a claim.
+  vex:
+    name: OpenVEX document
+    needs: [preflight, docker]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
+      INDEX_DIGEST: ${{ needs.docker.outputs.digest }}
+    outputs:
+      statements: ${{ steps.vex.outputs.statements }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Write the release's OpenVEX document
+        id: vex
+        run: |
+          set -euo pipefail
+          make vex-release VEX_VERSION="${RELEASE_TAG#v}" VEX_DIGEST="${INDEX_DIGEST}" VEX_OUT="${RUNNER_TEMP}/libgen-mcp.openvex.json"
+          statements=$(jq '.statements | length' "${RUNNER_TEMP}/libgen-mcp.openvex.json")
+          echo "statements=${statements}" >> "$GITHUB_OUTPUT"
+          echo "${statements} statements, pinned to ${RELEASE_TAG} and ${INDEX_DIGEST}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: openvex
+          path: ${{ runner.temp }}/libgen-mcp.openvex.json
+          retention-days: 1
+          if-no-files-found: error
+
   # Signing and attestation, in a job of their own, for two reasons that both
   # bite in practice.
   #
@@ -1374,7 +1481,7 @@ jobs:
   # store trusts is no longer live while code fetched at build time runs.
   sign-attest:
     name: Sign and attest
-    needs: [preflight, docker]
+    needs: [preflight, docker, vex]
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
@@ -1382,6 +1489,7 @@ jobs:
       AMD64_DIGEST: ${{ needs.docker.outputs.amd64 }}
       ARM64_DIGEST: ${{ needs.docker.outputs.arm64 }}
       DOCKERHUB_SKIP: ${{ needs.docker.outputs.dockerhub }}
+      VEX_STATEMENTS: ${{ needs.vex.outputs.statements }}
     permissions:
       contents: read # checkout, for the signing script
       packages: write # the referrer writes push-to-registry makes on ghcr.io
@@ -1415,6 +1523,12 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: image-sboms
+
+      - name: Take the OpenVEX document the vex job wrote
+        if: env.REHEARSAL != 'true' && env.VEX_STATEMENTS != '0'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: openvex
 
       # The digests this job was handed must be real before anything is signed
       # against them: a job output that arrived empty would sign the string "@"
@@ -1602,6 +1716,86 @@ jobs:
           subject-digest: ${{ needs.docker.outputs.arm64 }}
           predicate-type: https://spdx.dev/Document
           predicate-path: image-sbom-arm64.spdx.json
+          push-to-registry: true
+
+      # The OpenVEX statement, attached the way the SBOM is and to the same six
+      # subjects, because a scanner reads a referrer of the digest it resolved
+      # and nothing else: `trivy image --vex oci <tag>` looks under the index,
+      # one that pulled for its platform under that manifest. Measured with
+      # Trivy 0.75 against a copy of the 2.2.0 index carrying a Sigstore
+      # bundle of this document in the same referrer shape: the finding is
+      # reported as not_affected, from "VEX attestation in OCI registry", and
+      # Trivy reads this action's SBOM bundles from the same place. Trivy
+      # matches the main module's purl, which is why the document names it
+      # beside the image's own purls: a copy in another repository still
+      # matches.
+      #
+      # The predicate type is the versioned OpenVEX context, which is the one
+      # Docker Scout documents for VEX attestations; Trivy accepts it as well
+      # as the bare https://openvex.dev/ns cosign writes for --type openvex.
+      #
+      # Nothing is attested when the document makes no statement: a release
+      # whose declarations are all fixes-in-waiting has nothing to say.
+      #
+      # Verify: gh attestation verify oci://<ref>@<digest> --bundle-from-oci --predicate-type https://openvex.dev/ns/v0.2.0 -R jmrplens/libgen-mcp --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
+      - name: Attest OpenVEX (ghcr.io, index)
+        if: env.REHEARSAL != 'true' && env.VEX_STATEMENTS != '0'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ needs.docker.outputs.digest }}
+          predicate-type: https://openvex.dev/ns/v0.2.0
+          predicate-path: libgen-mcp.openvex.json
+          push-to-registry: true
+
+      - name: Attest OpenVEX (ghcr.io, linux/amd64)
+        if: env.REHEARSAL != 'true' && env.VEX_STATEMENTS != '0'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ needs.docker.outputs.amd64 }}
+          predicate-type: https://openvex.dev/ns/v0.2.0
+          predicate-path: libgen-mcp.openvex.json
+          push-to-registry: true
+
+      - name: Attest OpenVEX (ghcr.io, linux/arm64)
+        if: env.REHEARSAL != 'true' && env.VEX_STATEMENTS != '0'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ needs.docker.outputs.arm64 }}
+          predicate-type: https://openvex.dev/ns/v0.2.0
+          predicate-path: libgen-mcp.openvex.json
+          push-to-registry: true
+
+      - name: Attest OpenVEX (Docker Hub, index)
+        if: env.REHEARSAL != 'true' && env.VEX_STATEMENTS != '0' && env.DOCKERHUB_SKIP == 'false'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: docker.io/${{ env.DOCKERHUB_IMAGE }}
+          subject-digest: ${{ needs.docker.outputs.digest }}
+          predicate-type: https://openvex.dev/ns/v0.2.0
+          predicate-path: libgen-mcp.openvex.json
+          push-to-registry: true
+
+      - name: Attest OpenVEX (Docker Hub, linux/amd64)
+        if: env.REHEARSAL != 'true' && env.VEX_STATEMENTS != '0' && env.DOCKERHUB_SKIP == 'false'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: docker.io/${{ env.DOCKERHUB_IMAGE }}
+          subject-digest: ${{ needs.docker.outputs.amd64 }}
+          predicate-type: https://openvex.dev/ns/v0.2.0
+          predicate-path: libgen-mcp.openvex.json
+          push-to-registry: true
+
+      - name: Attest OpenVEX (Docker Hub, linux/arm64)
+        if: env.REHEARSAL != 'true' && env.VEX_STATEMENTS != '0' && env.DOCKERHUB_SKIP == 'false'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: docker.io/${{ env.DOCKERHUB_IMAGE }}
+          subject-digest: ${{ needs.docker.outputs.arm64 }}
+          predicate-type: https://openvex.dev/ns/v0.2.0
+          predicate-path: libgen-mcp.openvex.json
           push-to-registry: true
 
       # oras is fetched by hand for the reason spelled out at syft's install,

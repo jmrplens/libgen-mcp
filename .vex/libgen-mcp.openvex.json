@@ -1,0 +1,61 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/jmrplens/libgen-mcp/blob/main/.vex/libgen-mcp.openvex.json",
+  "author": "José M. Requena Plens",
+  "timestamp": "2026-10-04T18:19:29Z",
+  "version": 1,
+  "tooling": "https://github.com/jmrplens/libgen-mcp/tree/main/cmd/audit_binary_vulns",
+  "statements": [
+    {
+      "vulnerability": {
+        "@id": "https://pkg.go.dev/vuln/GO-2026-5932",
+        "name": "GO-2026-5932"
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/github.com/jmrplens/libgen-mcp/v2",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/libgen-mcp?repository_url=ghcr.io%2Fjmrplens%2Flibgen-mcp",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/libgen-mcp?repository_url=index.docker.io%2Fjmrplens%2Flibgen-mcp",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/jmrplens/libgen-mcp",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/jmrplens/libgen-mcp?repository_url=ghcr.io",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "the advisory names x/crypto's openpgp packages, and the one package of the module the binaries link is golang.org/x/crypto/ocsp, which github.com/pdfcpu/pdfcpu/pkg/pdfcpu/sign imports and internal/extract reaches through pdfcpu (go list -deps ./cmd/server, on every release target); the advisory has no fixed version, so this goes stale only when pdfcpu stops importing ocsp"
+    }
+  ]
+}

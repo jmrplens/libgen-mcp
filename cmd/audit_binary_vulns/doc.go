@@ -72,6 +72,29 @@
 // it excused is how an allowlist comes to excuse the next advisory against the
 // same module unread.
 //
+// # The VEX document
+//
+// A not-linked declaration is a claim a scanner can be told: the module is in
+// the binary and the advisory's packages are not. .vex/libgen-mcp.openvex.json
+// says it to them, as one OpenVEX statement per not-linked declaration
+// (not_affected, vulnerable_code_not_present, the reason as the impact
+// statement), about every identifier the products go by: the main module's
+// purl, which Trivy reports as the root of the binary in an image or on its
+// own, the image's pkg:oci purl in each registry, and Docker Scout's
+// pkg:docker form. A fix-not-yet-adoptable declaration writes nothing, since
+// the code it excuses is in the binary.
+//
+// The document is generated from the table and never edited by hand.
+// -vex-check holds it to the table in both directions, and so does a test of
+// this package: a statement with no not-linked declaration behind it fails,
+// and so does a declaration with no statement, which is what makes removing a
+// declaration (an advisory fixed) remove its statement in the same change.
+// -vex-write rewrites it, keeping its timestamp and version while the
+// statements are unchanged. -vex-out with -vex-release and -vex-index-digest
+// writes the copy a release attaches to its image and publishes as an asset,
+// each product pinned to that release, and only after -vex-check passed.
+// None of these modes builds or scans anything.
+//
 // # Why it is a module of its own
 //
 // golang.org/x/vuln brings golang.org/x/tools, x/mod and x/telemetry with it,
@@ -87,7 +110,8 @@
 // # Exit codes
 //
 // 0 when every finding is declared and every declaration matched; 1 when a
-// finding is undeclared or a declaration is stale or malformed; 2 when the run
+// finding is undeclared, a declaration is stale or malformed, or the VEX
+// document disagrees with the table; 2 when the run
 // could not be made (a configuration it refuses, a build or a scan that
 // failed, arguments that do not parse), because a gate that could not check the
 // release must not read as one that passed. The database is vuln.go.dev unless

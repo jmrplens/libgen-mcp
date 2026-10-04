@@ -877,6 +877,7 @@ make check-npm-launcher                                    # only if you touched
 make check-homebrew-tap                                    # only if you touched scripts/update-homebrew-tap.sh
 make check-ci-scripts                                      # only if you touched the PR description gate or the site audit
 make check-binary-vulns                                    # only if you touched go.mod or .goreleaser.yml (needs network)
+make check-vex                                             # only if you touched cmd/audit_binary_vulns/declarations.go or .vex/
 make check-elf-standalone                                  # only if you touched scripts/check_elf_standalone.py
 make audit-site-deps                                       # only if you touched site/package.json or its lockfile (needs network)
 make check-pr-description                                  # once the pull request is open: its title and body land on main
@@ -1295,7 +1296,7 @@ version, tagging, or publishing to the MCP registry, npm or LobeHub.
 
 **The chain's shape is a page rather than the skill**, because changing
 `release.yml` and cutting a release are different jobs:
-`docs/development/release-chain.md` has the fifteen jobs, why each edge exists,
+`docs/development/release-chain.md` has the sixteen jobs, why each edge exists,
 the digest handover that stops a tag from being pinned beside the previous
 release's image, and what a rehearsal cannot prove. The settings it depends on
 and CI cannot see — the branch ruleset, the three trusted publishers and their
@@ -1695,6 +1696,15 @@ in the same change. Two things about it are easy to get wrong:
   before hook other than `go mod download`) is refused rather than guessed at,
   and `-binaries` must match the configuration's targets exactly, each once.
   Adding a key to `.goreleaser.yml` means teaching the command about it first.
+- **A `not-linked` declaration is also a published statement.**
+  `.vex/libgen-mcp.openvex.json` says it to scanners as OpenVEX `not_affected`,
+  and each release attaches a pinned copy to the image. The file is generated:
+  change the table, then `make gen-vex`, never the JSON by hand. `make
+  check-vex` (CI and the release's `binary-vulns`) fails when the two disagree
+  either way. The product identifiers are the ones Trivy and Docker Scout were
+  measured to compute (`docs/development/release-chain.md` § *The OpenVEX
+  statement*), so do not "tidy" them into another purl form without measuring
+  the scanner again.
 
 ## Commit & PR Conventions
 
