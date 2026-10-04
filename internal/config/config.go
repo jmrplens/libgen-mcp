@@ -905,9 +905,19 @@ func (c *Config) validateDownloadTuning() error {
 // deployment opts in by setting its own email); a non-empty value must contain
 // an "@" and have a "." somewhere after it (the Unpaywall API rejects requests
 // without a plausible email).
+//
+// It must also hold no parenthesis. The address travels in a User-Agent as
+// " (mailto:address)", and netguard removes that comment when a redirect leaves
+// the origin it was set for. An address carrying ")" would end the comment early
+// and leave the rest of itself behind on the next host, and one carrying "(" can
+// open a comment the strip does not recognize. No address a person uses needs
+// either, so a value with one is refused rather than escaped.
 func validateUnpaywallEmail(email string) error {
 	if email == "" {
 		return nil
+	}
+	if strings.ContainsAny(email, "()") {
+		return fmt.Errorf("LIBGEN_MCP_UNPAYWALL_EMAIL must not contain a parenthesis, got %q", email)
 	}
 	at := strings.Index(email, "@")
 	if at <= 0 {

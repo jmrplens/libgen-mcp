@@ -27,15 +27,11 @@ Un paquete es un zip con un manifiesto, el icono, el servidor para uno o varios 
 | Linux (x86_64 y arm64, beta de Claude Desktop)   | [`libgen-mcp-linux.mcpb`](https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp-linux.mcpb)     | ~18 MiB | Los dos binarios de Linux y un lanzador que elige uno |
 | Los tres                                         | [`libgen-mcp.mcpb`](https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp.mcpb)                 | ~45 MiB | Todos los servidores de arriba                        |
 
-<Aside
-	type="note"
-	title="Los paquetes por sistema empiezan con la release posterior a la 2.1.0"
->
-	Las releases hasta la 2.1.0 incluida publican solo el `libgen-mcp.mcpb`
-	universal, así que hasta la próxima release los tres enlaces que hay encima
-	responden 404 y el paquete universal es el que hay que descargar. A partir de
-	entonces cada release publica los cuatro, y el universal se mantiene para los
-	enlaces que apuntan a él.
+<Aside type="note" title="Los paquetes por sistema empiezan con la 2.2.0">
+	Cada release desde la 2.2.0 publica los cuatro, y el universal se mantiene
+	para los enlaces que apuntan a él. Las releases hasta la 2.1.0 incluida
+	publicaban solo el `libgen-mcp.mcpb` universal, así que para una de esas
+	versiones es el paquete que hay que descargar.
 </Aside>
 
 Cada paquete por sistema declara solo su propio sistema, así que Claude Desktop rechaza con un mensaje el que se abre en otro sistema en lugar de instalar un servidor que no puede arrancar. Los cuatro se instalan como **la misma extensión**, de modo que instalar uno reemplaza a otro en su sitio.
@@ -65,22 +61,23 @@ Después pídele a Claude un libro o un artículo. Las cuatro herramientas de la
 
 Todos los ajustes son opcionales. Cada uno corresponde a una variable de entorno que lee el servidor, y un campo vacío deja el ajuste a los archivos dotenv de más abajo y, si no lo traen, al valor por defecto del servidor.
 
-| Ajuste                        | Por defecto                 | Variable                        | Qué hace                                                                                                       |
-| ----------------------------- | --------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Mirror                        | vacío (elección automática) | `LIBGEN_MIRROR`                 | Prueba primero este mirror de Library Genesis, p. ej. `https://libgen.li`; el descubrimiento sigue de respaldo |
-| Download directory            | `~/Downloads`               | `LIBGEN_MCP_DOWNLOAD_DIR`       | Dónde guarda `download` los archivos. Debe poder escribirse, o el servidor se niega a arrancar                 |
-| Request timeout               | `10s`                       | `LIBGEN_MCP_TIMEOUT`            | Por petición HTTP, como duración de Go (`10s`, `1m`), como mucho `10m`                                         |
-| Maximum download size (bytes) | `0`                         | `LIBGEN_MCP_MAX_DOWNLOAD_BYTES` | Rechaza una descarga mayor que esto. `0` significa sin límite                                                  |
-| Log level                     | `info`                      | `LIBGEN_MCP_LOG_LEVEL`          | `debug`, `info`, `warn` o `error`                                                                              |
-| Settings file                 | vacío                       | `LIBGEN_MCP_ENV_FILE`           | Ruta absoluta a un archivo dotenv que se lee además de `~/.libgen-mcp.env`                                     |
-| Unpaywall email               | vacío                       | `LIBGEN_MCP_UNPAYWALL_EMAIL`    | Tu dirección de contacto para Unpaywall, que activa esa fuente de artículos                                    |
-| CORE API key                  | vacío                       | `LIBGEN_MCP_CORE_KEY`           | Una clave gratuita de core.ac.uk, que activa la fuente de artículos CORE. Marcada como sensible                |
+| Ajuste                        | Por defecto                 | Variable                        | Qué hace                                                                                                                            |
+| ----------------------------- | --------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Mirror                        | vacío (elección automática) | `LIBGEN_MIRROR`                 | Prueba primero este mirror de Library Genesis, p. ej. `https://libgen.li`; el descubrimiento sigue de respaldo                      |
+| Download directory            | `~/Downloads`               | `LIBGEN_MCP_DOWNLOAD_DIR`       | Dónde guarda `download` los archivos. Debe poder escribirse, o el servidor se niega a arrancar                                      |
+| Request timeout               | `10s`                       | `LIBGEN_MCP_TIMEOUT`            | Por petición HTTP, como duración de Go (`10s`, `1m`), como mucho `10m`                                                              |
+| Maximum download size (bytes) | `0`                         | `LIBGEN_MCP_MAX_DOWNLOAD_BYTES` | Rechaza una descarga mayor que esto. `0` significa sin límite                                                                       |
+| Log level                     | `info`                      | `LIBGEN_MCP_LOG_LEVEL`          | `debug`, `info`, `warn` o `error`                                                                                                   |
+| Settings file                 | vacío                       | `LIBGEN_MCP_ENV_FILE`           | Ruta absoluta a un archivo dotenv que se lee además de `~/.libgen-mcp.env`                                                          |
+| Unpaywall email               | vacío                       | `LIBGEN_MCP_UNPAYWALL_EMAIL`    | Tu dirección de contacto para Unpaywall, que activa esa fuente de artículos                                                         |
+| CORE API key                  | vacío                       | `LIBGEN_MCP_CORE_KEY`           | Una clave gratuita de core.ac.uk, que activa la fuente de artículos CORE. Marcada como sensible                                     |
+| OpenAlex API key              | vacío                       | `LIBGEN_MCP_OPENALEX_KEY`       | Una clave gratuita de openalex.org, que lleva las peticiones a OpenAlex a su propia cuota diaria, más amplia. Marcada como sensible |
 
 Los nombres de los ajustes son los que muestra Claude Desktop, en inglés.
 
-**El formulario y el archivo de ajustes se reparten el trabajo según qué campos tengan valor.** La extensión pasa cada campo como su variable, y un campo con valor gana sobre los dos archivos dotenv (el indicado en Settings file y después `~/.libgen-mcp.env`). Un campo que se deja en blanco llega vacío, y el servidor toma esa variable vacía de los archivos, así que Mirror, Unpaywall email y CORE API key pueden vivir en un archivo mientras sus campos sigan vacíos. Download directory, Request timeout, Maximum download size y Log level empiezan con su valor por defecto, así que llegan con ese valor y ganan sobre un archivo: cámbialos en el formulario. Usa el archivo para todo lo que el formulario no tiene, como `LIBGEN_MCP_EXTRA_SOURCES` o `LIBGEN_MCP_SOURCES`. Un `.env` en el directorio de trabajo de Claude Desktop no se lee nunca. Cada variable se describe en [Configuración](/libgen-mcp/es/configuration/).
+**El formulario y el archivo de ajustes se reparten el trabajo según qué campos tengan valor.** La extensión pasa cada campo como su variable, y un campo con valor gana sobre los dos archivos dotenv (el indicado en Settings file y después `~/.libgen-mcp.env`). Un campo que se deja en blanco llega vacío, y el servidor toma esa variable vacía de los archivos, así que Mirror, Unpaywall email, CORE API key y OpenAlex API key pueden vivir en un archivo mientras sus campos sigan vacíos. Download directory, Request timeout, Maximum download size y Log level empiezan con su valor por defecto, así que llegan con ese valor y ganan sobre un archivo: cámbialos en el formulario. Usa el archivo para todo lo que el formulario no tiene, como `LIBGEN_MCP_EXTRA_SOURCES` o `LIBGEN_MCP_SOURCES`. Un `.env` en el directorio de trabajo de Claude Desktop no se lee nunca. Cada variable se describe en [Configuración](/libgen-mcp/es/configuration/).
 
-La clave de CORE está marcada como sensible, así que Claude Desktop la guarda cifrada con una clave que protege el sistema operativo (donde lo hay) y la oculta en el formulario.
+Las claves de CORE y de OpenAlex están marcadas como sensibles, así que Claude Desktop las guarda cifradas con una clave que protege el sistema operativo (donde lo hay) y las oculta en el formulario.
 
 ## Verificar lo que instalaste
 

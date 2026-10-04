@@ -1,5 +1,6 @@
 // Command audit_gateway_chars scans everything a client receives from
-// tools/list and prompts/list for characters that MCP gateway validators
+// tools/list and prompts/list, and the Instructions of the initialize result
+// in each deployment's variant, for characters that MCP gateway validators
 // reject.
 //
 // The rule it enforces is pure ASCII prose, plus a short list of rejected

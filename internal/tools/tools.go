@@ -2130,8 +2130,13 @@ func elicitUnpaywallEmail(round *inputRound, cfg *config.Config, in DownloadInpu
 
 // looksLikeEmail applies the same light sanity check as the config's email
 // validation: the value must contain an "@" (not first) and a "." somewhere after
-// it that is not the final character. It deliberately does not over-validate.
+// it that is not the final character, and no parenthesis, which the config
+// refuses because the address can ride in a User-Agent comment. It
+// deliberately does not over-validate.
 func looksLikeEmail(s string) bool {
+	if strings.ContainsAny(s, "()") {
+		return false
+	}
 	at := strings.Index(s, "@")
 	if at <= 0 {
 		return false

@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/jmrplens/libgen-mcp/v2/internal/instructions"
 )
 
 // TestScanText_WhatOffendsAndWhatDoesNot pins the policy itself: every rune
@@ -189,6 +191,24 @@ func TestRun_TheRealSurfaceIsClean(t *testing.T) {
 
 	if got := run(true); got != 0 {
 		t.Errorf("run(check) = %d, want 0. The report:\n%s", got, out.String())
+	}
+}
+
+// TestScanInstructions_CoversEveryVariant checks the handshake text is read
+// in each deployment's form and that a clean text reports nothing. The
+// surface name is what tells a report row from the tool and prompt rows.
+func TestScanInstructions_CoversEveryVariant(t *testing.T) {
+	if found := scanInstructions(); len(found) != 0 {
+		t.Errorf("scanInstructions() = %v, want nothing on the shipped text", found)
+	}
+	for _, v := range instructions.Variants() {
+		t.Run(v.Name, func(t *testing.T) {
+			text := instructions.Render(v.ServerFetch, v.LinkOnly) + " a;b"
+			got := scanText("initialize", "instructions ("+v.Name+")", text)
+			if len(got) != 1 || got[0].surface != "initialize" {
+				t.Errorf("an offending variant reported %v, want one initialize row", got)
+			}
+		})
 	}
 }
 

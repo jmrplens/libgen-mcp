@@ -2687,7 +2687,7 @@ func TestLooksLikeEmail(t *testing.T) {
 			}
 		})
 	}
-	invalid := []string{"", "nope", "@example.com", "a@b", "a@b.", "a@.com"}
+	invalid := []string{"", "nope", "@example.com", "a@b", "a@b.", "a@.com", "a)b@c.d", "a(b@c.d"}
 	for _, e := range invalid {
 		t.Run(e, func(t *testing.T) {
 			if looksLikeEmail(e) {

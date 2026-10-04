@@ -26,6 +26,7 @@ import (
 	"github.com/jmrplens/libgen-mcp/v2/internal/cachehints"
 	"github.com/jmrplens/libgen-mcp/v2/internal/capguard"
 	"github.com/jmrplens/libgen-mcp/v2/internal/config"
+	"github.com/jmrplens/libgen-mcp/v2/internal/instructions"
 	"github.com/jmrplens/libgen-mcp/v2/internal/libgen"
 	"github.com/jmrplens/libgen-mcp/v2/internal/logging"
 	"github.com/jmrplens/libgen-mcp/v2/internal/mcpotel"
@@ -159,7 +160,7 @@ func resolveCommit(ldflagsCommit string, readBuildInfo func() (*debug.BuildInfo,
 // same identity instead of the bare {name, version} it sent before.
 const (
 	implementationTitle       = "Books & Papers MCP Server"
-	implementationDescription = "Federated search of books and papers, BibTeX/RIS citations, open-access retrieval and reading."
+	implementationDescription = "Federated search of books and papers, formatted citations, open-access retrieval and reading."
 	// implementationWebsiteURL is the documentation site rather than the
 	// repository or the hosted endpoint: a client rendering serverInfo shows
 	// this to an end user, for whom the guides are more useful than a source
@@ -168,74 +169,14 @@ const (
 	implementationWebsiteURL = "https://jmrp.io/docs/libgen-mcp"
 )
 
-// The handshake's Instructions text, in the pieces serverInstructions assembles.
-// It is the one place that tells a connecting model how the tools chain
-// together, since each tool's own Description documents only itself. It goes
-// straight into the model's system prompt, so it stays short and names only what
-// a client cannot otherwise infer from the tool list —
-// [TestServerInstructionsNameEveryToolAndPrompt] guards that every name below
-// still exists on the registered surface, and the tests in serverfetch_test.go
-// guard the reverse for a deployment that registers fewer of them.
-const (
-	instructionsOpening = "libgen-mcp searches, retrieves and reads books, papers, comics, magazines and standards" +
-		" — no account or API key needed for any tool."
-	// The opening for a deployment that does not fetch files: it still searches
-	// and retrieves, but reading a file's text is the client's to do.
-	instructionsOpeningNoFetch = "libgen-mcp searches and retrieves books, papers, comics, magazines and standards" +
-		" — no account or API key needed for any tool."
-
-	instructionsWorkflow = "WORKFLOW — the tools chain by identifier: search returns each record's md5 (books)" +
-		" or doi (articles); carry that identifier into the next call."
-
-	stepSearch  = "search — find candidate records across the catalog and, when needed, open-access sources."
-	stepDetails = "get_details — full metadata and a ready-to-paste BibTeX/RIS citation for a record you already identified; it does not fetch the file. Use it whenever a citation is requested."
-	// Two download steps, because the two deployments honor different contracts
-	// and the numbered step is what a model follows. Telling it a link-only
-	// server saves the file is the same defect the tool's own description was
-	// rewritten to remove, one layer up.
-	stepDownload         = "download — save the file by md5 (book), doi (article) or isbn (openly licensed book sources); resolve_only=true returns a link without saving."
-	stepDownloadLinkOnly = "download — resolve a copy by md5 (book), doi (article) or isbn (openly licensed book sources); this deployment always returns a link to fetch yourself, never a saved file."
-	stepRead             = "read — extract, paginate, search within (find) or outline a file's text by the same md5/doi (or a local path); it fetches the file itself, so it does not require calling download first."
-
-	// Stated once, where a model that expected to read text will look: this
-	// deployment has no read tool, and the way to a file's contents is the link.
-	instructionsNoFetch = "THIS DEPLOYMENT DOES NOT FETCH FILES — there is no read tool here. download returns a" +
-		" direct link; fetch it yourself to read the file's text."
-
-	instructionsPrompts = "PROMPTS — acquire_book, research_topic, get_paper and download_troubleshoot wrap these" +
-		" tools into ready-made, step-by-step workflows. Prefer one of them over calling the tools ad hoc when the" +
-		" user's request matches its shape."
-)
-
 // serverInstructions renders the handshake Instructions for the surface this
-// deployment actually registers. A server that may not fetch file bodies has no
-// read tool, so the text neither numbers a step for it nor claims the server
-// reads files — instructions naming a tool that is not there cost the model the
-// same wasted turn that hiding the tool exists to save.
-//
-// linkOnly is the download tool's contract, which is not the same question:
-// a remote deployment with fetching enabled still serves read and still only
-// ever returns links. Not fetching implies link-only; the reverse does not hold.
+// deployment actually registers. The text and its rules live in
+// internal/instructions, where cmd/audit_gateway_chars can read them too.
+// [TestServerInstructionsNameEveryToolAndPrompt] guards that every name in it
+// still exists on the registered surface, and the remote-deployment tests guard
+// the reverse for a deployment that registers fewer of them.
 func serverInstructions(serverFetch, linkOnly bool) string {
-	download := stepDownload
-	if linkOnly {
-		download = stepDownloadLinkOnly
-	}
-	opening, steps := instructionsOpening, []string{stepSearch, stepDetails, download, stepRead}
-	if !serverFetch {
-		opening, steps = instructionsOpeningNoFetch, []string{stepSearch, stepDetails, download}
-	}
-	numbered := make([]string, 0, len(steps))
-	for i, step := range steps {
-		numbered = append(numbered, fmt.Sprintf("%d. %s", i+1, step))
-	}
-	workflow := instructionsWorkflow + "\n" + strings.Join(numbered, "\n")
-
-	paragraphs := []string{opening, workflow}
-	if !serverFetch {
-		paragraphs = append(paragraphs, instructionsNoFetch)
-	}
-	return strings.Join(append(paragraphs, instructionsPrompts), "\n\n")
+	return instructions.Render(serverFetch, linkOnly)
 }
 
 func main() {
@@ -428,7 +369,7 @@ func isCleanShutdown(err error) bool {
 }
 
 // newMCPServer builds the bare MCP server with its receiving middleware in
-// place; the caller registers the tools and prompts on top. instructions is the
+// place; the caller registers the tools and prompts on top. handshakeText is the
 // handshake text for the surface the caller is about to register, which is not
 // the same on every deployment — see serverInstructions.
 //
@@ -436,7 +377,7 @@ func isCleanShutdown(err error) bool {
 // none — stdio, and any listener where an address cannot tell two callers apart.
 // Nil leaves the metering middlewares out entirely rather than installing ones
 // that would allow everything.
-func newMCPServer(instructions string, records *clientRecords, ceiling heavyCeiling, spans mcpotel.Options) *mcp.Server {
+func newMCPServer(handshakeText string, records *clientRecords, ceiling heavyCeiling, spans mcpotel.Options) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:        "libgen-mcp",
 		Title:       implementationTitle,
@@ -445,7 +386,7 @@ func newMCPServer(instructions string, records *clientRecords, ceiling heavyCeil
 		WebsiteURL:  implementationWebsiteURL,
 		Icons:       toolutil.IconBrand,
 	}, &mcp.ServerOptions{
-		Instructions: instructions,
+		Instructions: handshakeText,
 		// Pinned rather than left nil, because nil is not neutral: the SDK
 		// fills it with its own default of {"logging":{}}, and MCP logging
 		// is Deprecated as of revision 2026-07-28 (SEP-2577), whose prescribed

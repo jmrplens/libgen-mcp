@@ -12,6 +12,7 @@ import (
 	"unicode"
 
 	"github.com/jmrplens/libgen-mcp/v2/cmd/internal/mcpsurface"
+	"github.com/jmrplens/libgen-mcp/v2/internal/instructions"
 )
 
 // offendingChars lists the ASCII characters gateway validators are known to
@@ -89,7 +90,21 @@ func run(check bool) int {
 			found = append(found, scanText("prompts", "prompt "+prompt.Name+" argument "+arg.Name, arg.Description)...)
 		}
 	}
+	found = append(found, scanInstructions()...)
 	return report(found, check)
+}
+
+// scanInstructions scans the Instructions of the initialize result, in every
+// variant a deployment can serve. It is served text the same way a tool
+// description is: it reaches the client in the handshake, before any listing,
+// and a gateway that reads the one has no reason to skip the other.
+func scanInstructions() []offender {
+	var found []offender
+	for _, v := range instructions.Variants() {
+		text := instructions.Render(v.ServerFetch, v.LinkOnly)
+		found = append(found, scanText("initialize", "instructions ("+v.Name+")", text)...)
+	}
+	return found
 }
 
 // report prints the offenders, sorted by surface then location, and returns
