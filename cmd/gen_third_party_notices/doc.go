@@ -6,8 +6,8 @@
 //
 // libgen-mcp is MIT and its LICENSE travels with every package. The binaries
 // also carry the Go standard library and the modules the server links, under
-// BSD-3-Clause, Apache-2.0 (pdfcpu among them), MIT and MPL-2.0, whose terms
-// ask for their license and notice texts to accompany a binary
+// BSD-3-Clause, Apache-2.0 (the OpenTelemetry modules among them) and MIT,
+// whose terms ask for their license and notice texts to accompany a binary
 // redistribution, and until this command no channel shipped them: the SPDX
 // SBOMs name each license and carry none of the texts. This file is those
 // texts, generated at release time from what the binaries actually link rather
@@ -29,9 +29,12 @@
 // way, after its VERSION is held to the toolchain the binaries record, so the
 // text is the one of the Go that built them.
 //
-// A module can also carry a license of its own below its root: pdfcpu, under
-// Apache-2.0, vendors pkcs7 in pkg/pdfcpu/pkcs7 under MIT, and that package is
-// linked into the server. Build information records modules, not packages, so
+// A module can also carry a license of its own below its root. pdfcpu did,
+// while the server linked it through 2.2.0: Apache-2.0 at its root, with pkcs7
+// vendored under MIT in pkg/pdfcpu/pkcs7 and an LZW filter under a license of
+// its own in internal/filter/lzw, both linked. No module the binaries link
+// today does, and the read stays, so the next one that does is not reproduced
+// without its text. Build information records modules, not packages, so
 // for each binary the packages it links are listed again with
 // `go list -deps` on its main package, under the GOOS, GOARCH, CGO_ENABLED
 // and build tags it records, and the license files in the directory of every

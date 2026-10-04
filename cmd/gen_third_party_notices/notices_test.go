@@ -68,7 +68,7 @@ func fixtureModcache(t *testing.T) string {
 		"example.com/alpha@v1.2.0/LICENSE.d/MIT.txt":  "nested, never read\n",
 		"example.com/only-windows@v0.3.0/MIT-LICENSE": "MIT License\nCopyright Windows\n",
 		// A license of its own in a linked package's directory, the shape of
-		// pdfcpu's vendored pkcs7, counts; one in a directory holding only
+		// the pkcs7 pdfcpu vendored, counts; one in a directory holding only
 		// packages no binary links does not.
 		"example.com/alpha@v1.2.0/pkg/vendored/LICENSE":  "Vendored MIT\nCopyright Vendored\n",
 		"example.com/alpha@v1.2.0/pkg/vendored/doc.go":   "package vendored\n",

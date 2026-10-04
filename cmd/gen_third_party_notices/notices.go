@@ -65,8 +65,9 @@ const listFormat = "{{if .Module}}{{.ImportPath}}\t{{.Module.Path}}\t{{.Module.V
 
 // goListPackages asks the toolchain which packages the build that produced
 // info links. Build information records modules, not packages, and a module
-// can carry a license of its own in a package directory (pdfcpu vendors
-// pkcs7 under the MIT license beside its Apache-2.0 root), so the package
+// can carry a license of its own in a package directory (pdfcpu, which the
+// server linked through 2.2.0, vendored pkcs7 under the MIT license beside its
+// Apache-2.0 root), so the package
 // graph is listed again, for the binary's main package under the target and
 // build tags the binary records. It runs in the working directory, which has
 // to be inside the module the binaries were built from.
@@ -378,8 +379,8 @@ func readLicenses(fsys fs.FS, dir, what string) ([]licenseText, error) {
 // directory below a module's root that holds a linked package or a parent of
 // one, in path order, each named for the file and the import path of the
 // directory it sits in. Most directories hold none; the ones that do carry
-// code under a license of its own, like pdfcpu's vendored pkcs7, which is MIT
-// inside an Apache-2.0 module.
+// code under a license of its own, like the pkcs7 pdfcpu vendored, MIT inside
+// an Apache-2.0 module.
 func nestedLicenses(root string, module *linkedModule) ([]licenseText, error) {
 	dirs := slices.Sorted(maps.Keys(module.dirs))
 	var texts []licenseText
