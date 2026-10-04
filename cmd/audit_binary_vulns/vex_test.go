@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -386,6 +387,10 @@ func TestRunMain_VEXFlags(t *testing.T) {
 		t.Fatal(err)
 	}
 	drifted := writeVEXFixture(t, committedDocument(fixtureDeclarations))
+	// The committed document states what the real table declares, which is
+	// counted rather than written down, so emptying the table or adding to it
+	// does not make this test about the flags fail.
+	statements := len(vexStatements(acceptedAdvisories, vexRelease{version: version}))
 
 	for _, tc := range []struct {
 		name string
@@ -393,9 +398,9 @@ func TestRunMain_VEXFlags(t *testing.T) {
 		code int
 		want string
 	}{
-		{name: "check", args: []string{"-vex-check", committed, "-vex-version", version}, want: "states exactly the 1 not-linked declarations, for " + version},
+		{name: "check", args: []string{"-vex-check", committed, "-vex-version", version}, want: fmt.Sprintf("states exactly the %d not-linked declarations, for %s", statements, version)},
 		{name: "drift", args: []string{"-vex-check", drifted, "-vex-version", version}, code: 1, want: "VEX DRIFT"},
-		{name: "rewrite", args: []string{"-vex-write", rewritten, "-vex-version", version}, want: "(1 statements, version "},
+		{name: "rewrite", args: []string{"-vex-write", rewritten, "-vex-version", version}, want: fmt.Sprintf("(%d statements, version ", statements)},
 		{name: "no version", args: []string{"-vex-check", committed}, code: 2},
 		{name: "bad committed version", args: []string{"-vex-check", committed, "-vex-version", "v" + version}, code: 2},
 		{name: "write and check", args: []string{"-vex-write", rewritten, "-vex-check", committed, "-vex-version", version}, code: 2},

@@ -18,8 +18,9 @@
 // packages nothing here links, and google.golang.org/grpc v1.84.0, against
 // which GO-2026-6443 is filed for a server-side transport the binaries linked
 // and never reached. Nothing asked the scanners' question before a release, so
-// nothing said so. The first is declared; the second was fixed by taking
-// v1.83.2, and a bump back to v1.84.0 now fails here.
+// nothing said so. The first was declared until 2.2.1, which removed pdfcpu
+// and with it x/crypto; the second was fixed by taking v1.83.2, and a bump
+// back to v1.84.0 now fails here.
 //
 // # What it scans
 //

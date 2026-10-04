@@ -50,24 +50,20 @@ type declaration struct {
 
 // acceptedAdvisories are the findings a release may carry, each with the reason
 // that is right, keyed by the advisory's id and the module it was found in,
-// separated by one space: "GO-2026-5932 golang.org/x/crypto".
+// separated by one space: "GO-2026-5932 golang.org/x/crypto", for instance.
 //
 // An entry is an advisory shipped on purpose in every binary the release
 // publishes, which is why each one needs a category and a reason a reviewer
 // can check. The module is part of the key so the same advisory reaching the
 // binaries through another module is a new finding rather than one already
 // excused.
-var acceptedAdvisories = map[string]declaration{
-	"GO-2026-5932 golang.org/x/crypto": {
-		category: categoryNotLinked,
-		reason: "the advisory names x/crypto's openpgp packages (golang.org/x/crypto/openpgp and its subpackages), and the " +
-			"one package of the module the binaries link is golang.org/x/crypto/ocsp, which " +
-			"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/sign imports and internal/extract reaches through pdfcpu. This is false " +
-			"as soon as any openpgp package is linked into a release binary, which the release gate checks on every " +
-			"run against go list -deps of each release target and fails on. With no fixed version, the declaration " +
-			"becomes unnecessary only when pdfcpu stops importing ocsp",
-	},
-}
+//
+// The table is empty. Its one entry, that GO-2026-5932 against
+// golang.org/x/crypto was not-linked, went in 2.2.1 with the module itself:
+// the binaries carried x/crypto only for the ocsp package pdfcpu's signature
+// code imports, and pdfcpu left when the outline reader moved to the PDF
+// library the text path uses.
+var acceptedAdvisories = map[string]declaration{}
 
 // advisoryID is the shape of a Go vulnerability database id.
 var advisoryID = regexp.MustCompile(`^GO-\d{4}-\d{4,}$`)
