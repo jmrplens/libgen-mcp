@@ -6,9 +6,9 @@ mentions:
     wikidata: Q133436854
   - name: "OpenTelemetry"
     wikidata: Q121746046
-datePublished: "2026-10-03"
+datePublished: "2026-10-04"
 # Generated from PRIVACY.md by scripts/sync-privacy.mjs — do not edit by hand.
-privacySource: "76dc65f0adac77d9"
+privacySource: "d2aa72551a5db409"
 head:
   - tag: script
     attrs:
@@ -190,7 +190,7 @@ AI assistant) make. There are no background connections. The destinations are:
   [OpenLibrary](https://openlibrary.org), Project Gutenberg via the third-party
   [Gutendex](https://gutendex.com) API (`gutendex.com`; the ebook files it links
   to live on `gutenberg.org`, which is contacted only if you fetch one),
-  [dblp](https://dblp.org) (`dblp.org`),
+  [dblp](https://dblp.org) (its SPARQL service, `sparql.dblp.org`),
   [PubMed](https://pubmed.ncbi.nlm.nih.gov)
   (`eutils.ncbi.nlm.nih.gov`) and [ERIC](https://eric.ed.gov)
   (`api.ies.ed.gov`). When this happens is under your

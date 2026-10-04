@@ -133,15 +133,24 @@ stands:
 Defeating the challenge is out of scope by decision: it would mean running Anna's anti-bot
 code to impersonate a browser. See [Sources → `annas`](sources.md#annas).
 
-**dblp's search API is behind a bot check, so dblp contributes no search results.** As
-measured on 2026-10-03, dblp.org and its two mirrors answer the search API with an Anubis
-"Making sure you're not a bot!" page (HTTP 200, HTML in place of the requested JSON), and
-sometimes with a 429. The block was seen from a consumer ISP address, so it is not reserved
-for datacenter ranges. While it stands, the dblp provider returns nothing, logs the reason
-once at INFO, and asks nothing more for fifteen minutes. The other providers are unaffected,
-and Crossref indexes most of the same computer-science papers by DOI. Passing the
-check would mean running its proof of work as a browser does, which is out of scope for the
-same reason as Anna's. See [How search works](how-search-works.md).
+**dblp is searched through its SPARQL service, which matches every word against the title
+and the first author only.** As measured on 2026-10-03, dblp.org and its two mirrors answer
+the search API with an Anubis "Making sure you're not a bot!" page, also from a consumer ISP
+address, and dblp.org's robots.txt now disallows everything. So the dblp provider asks dblp's
+SPARQL query service at `sparql.dblp.org` instead, whose robots.txt opens its query endpoint
+to scripts. That query is not the search API's ranked keyword search:
+
+- every word of the query must occur in the record's label, which holds its title and its
+  first author (or first two), so a query that names a later author, the venue or a word the
+  title lacks finds nothing there;
+- accents must match as written, so `rene vidal` does not find René Vidal;
+- results are ordered by title length, shortest first, and then by year, which puts an exact
+  title first but is not a relevance ranking;
+- the service is asked at most once every ten seconds, the crawl delay it asks for, so a
+  second search inside that window goes without dblp.
+
+A 429, a 403, a 503, or a page in place of the JSON results still closes dblp for fifteen
+minutes, logged once at INFO. See [How search works](how-search-works.md).
 
 **Some DOIs are reachable by no source.** The chain reaches only what its sources hold and
 will serve to an automated client. SciELO's oldest articles are HTML-only, and no source

@@ -80,8 +80,9 @@ can be left out to leave that side open. They apply differently on each side of 
 - **The searchers beyond the catalog take the range in their own query** wherever their API
   can: arXiv (`submittedDate`), OpenAlex (`publication_year`), Europe PMC (`PUB_YEAR`),
   Crossref (`from-pub-date`/`until-pub-date`), PubMed (`mindate`/`maxdate`), ERIC
-  (`publicationdateyear`) and OpenLibrary (`first_publish_year`). Their page is spent on
-  in-range records. dblp, Project Gutenberg and Anna's Archive cannot take one, so their hits
+  (`publicationdateyear`), OpenLibrary (`first_publish_year`) and dblp (a SPARQL `FILTER` on
+  `dblp:yearOfPublication`). Their page is spent on
+  in-range records. Project Gutenberg and Anna's Archive cannot take one, so their hits
   are filtered after they arrive. Gutenberg records carry no year at all, so a range leaves
   none of them.
 

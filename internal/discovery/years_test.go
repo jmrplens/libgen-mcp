@@ -223,9 +223,9 @@ func TestRangeSearchers_PushTheRangeIntoTheirQuery(t *testing.T) {
 
 // TestExtraProviders_WhichFilterThemselves pins the providers that cannot take a
 // range and so are filtered after they answer, which the search tool's
-// documentation names: dblp (its search API takes no year range), Gutenberg
-// (Gutendex dates authors, not editions, so its hits carry no year and a range
-// drops them all) and Anna's Archive (an HTML search page).
+// documentation names: Gutenberg (Gutendex dates authors, not editions, so its
+// hits carry no year and a range drops them all) and Anna's Archive (an HTML
+// search page). dblp is not among them: its SPARQL query filters on the year.
 func TestExtraProviders_WhichFilterThemselves(t *testing.T) {
 	var unranged []string
 	for _, p := range ExtraProviders(Settings{AnnasMirrors: staticMirrors{"https://annas-archive.invalid"}}) {
@@ -233,7 +233,7 @@ func TestExtraProviders_WhichFilterThemselves(t *testing.T) {
 			unranged = append(unranged, p.Name())
 		}
 	}
-	if got, want := strings.Join(unranged, ","), "gutenberg,dblp,annas"; got != want {
+	if got, want := strings.Join(unranged, ","), "gutenberg,annas"; got != want {
 		t.Errorf("providers filtered after the fact = %s, want %s", got, want)
 	}
 }

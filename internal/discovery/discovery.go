@@ -175,11 +175,23 @@ func boundedGet(ctx context.Context, client *http.Client, rawURL string) (status
 // failure on the floor — so this is the leak being closed before it opens, on
 // the day something starts recording a provider refusal.
 func boundedGetUA(ctx context.Context, client *http.Client, rawURL, userAgent string) (status int, body []byte, err error) {
+	return boundedGetHeaders(ctx, client, rawURL, http.Header{"User-Agent": {userAgent}})
+}
+
+// boundedGetHeaders is boundedGet with the request's headers given whole, for a
+// provider that must also say what it accepts (dblp's SPARQL service answers in
+// the media type the Accept header names). The headers should include the
+// User-Agent. Its context, body-bounding and redaction semantics are boundedGet's.
+func boundedGetHeaders(ctx context.Context, client *http.Client, rawURL string, header http.Header) (status int, body []byte, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, http.NoBody)
 	if err != nil {
 		return 0, nil, netguard.RedactTransportError(err)
 	}
-	req.Header.Set("User-Agent", userAgent)
+	for name, values := range header {
+		for _, v := range values {
+			req.Header.Add(name, v)
+		}
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return 0, nil, netguard.RedactTransportError(err)

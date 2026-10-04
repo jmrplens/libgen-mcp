@@ -61,7 +61,10 @@ call. Rather than hand back an empty result, the search can escalate and consult
   indexes, for computer science and biomedicine respectively. They answer *what the paper is*
   (venue, year, full author list, DOI) without claiming it is free to read, which is exactly
   why they are worth asking: PubMed in particular covers the literature that has no
-  open-access copy at all. Their hits land in the same list, never marked open access.
+  open-access copy at all. Their hits land in the same list, never marked open access. dblp
+  is asked through its SPARQL query service (`sparql.dblp.org`), which finds a record when
+  every word of the query is in its title or first author's name. See
+  [Limitations](limitations.md).
 - [ERIC](https://eric.ed.gov/) — the US Institute of Education Sciences' index of education
   research, and the only source here that reaches **grey literature**: technical reports,
   dissertations, conference papers and government/agency documents that carry no DOI and so

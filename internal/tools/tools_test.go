@@ -2818,12 +2818,15 @@ const oaOpenLibraryDocs = `{"docs":[
    "first_publish_year":1843,"isbn":["9780000000001"],"key":"/works/OL1W"}
 ]}`
 
-// oaDblpHits is a one-hit dblp search response used by the extra-source search
-// tests; it carries a distinct DOI so it is not deduped against the others.
-const oaDblpHits = `{"result":{"hits":{"@total":"1","hit":[{
-  "info":{"authors":{"author":{"text":"Edsger W. Dijkstra"}},
-  "title":"A Conference Paper.","venue":"DAC","year":"2018",
-  "doi":"10.3000/dblp-only","ee":"https://doi.org/10.3000/dblp-only"}}]}}}`
+// oaDblpHits is a one-record dblp SPARQL results document used by the
+// extra-source search tests; it carries a distinct DOI so it is not deduped
+// against the others.
+const oaDblpHits = `{"head":{"vars":["title","year","venues","doi","authors"]},"results":{"bindings":[{
+  "title":{"type":"literal","value":"A Conference Paper."},
+  "year":{"type":"literal","value":"2018"},
+  "venues":{"type":"literal","value":"DAC"},
+  "doi":{"type":"uri","value":"https://doi.org/10.3000/dblp-only"},
+  "authors":{"type":"literal","value":"1 Edsger W. Dijkstra"}}]}}`
 
 // oaPubMedSearch is a one-PMID esearch response, and oaPubMedSummary the matching
 // esummary record, used by the extra-source search tests. The DOI is distinct so the

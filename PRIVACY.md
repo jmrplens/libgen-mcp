@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 2026-10-03
+Last updated: 2026-10-04
 
 **libgen-mcp** is a Model Context Protocol (MCP) server you run yourself. In its
 normal use it runs entirely on your machine and acts as a bridge between your MCP
@@ -133,7 +133,7 @@ AI assistant) make. There are no background connections. The destinations are:
   [OpenLibrary](https://openlibrary.org), Project Gutenberg via the third-party
   [Gutendex](https://gutendex.com) API (`gutendex.com`; the ebook files it links
   to live on `gutenberg.org`, which is contacted only if you fetch one),
-  [dblp](https://dblp.org) (`dblp.org`),
+  [dblp](https://dblp.org) (its SPARQL service, `sparql.dblp.org`),
   [PubMed](https://pubmed.ncbi.nlm.nih.gov)
   (`eutils.ncbi.nlm.nih.gov`) and [ERIC](https://eric.ed.gov)
   (`api.ies.ed.gov`). When this happens is under your
