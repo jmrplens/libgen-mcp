@@ -20,6 +20,7 @@ import (
 	"github.com/jmrplens/libgen-mcp/v2/internal/mcpotel"
 	"github.com/jmrplens/libgen-mcp/v2/internal/mirrors"
 	"github.com/jmrplens/libgen-mcp/v2/internal/netguard"
+	"github.com/jmrplens/libgen-mcp/v2/internal/openalex"
 	"github.com/jmrplens/libgen-mcp/v2/internal/version"
 )
 
@@ -128,6 +129,15 @@ type Client struct {
 	// doiOrgBaseOverride overrides the DOI resolver root the citation formats
 	// are negotiated against. Empty means doiOrgBase; it is a test seam.
 	doiOrgBaseOverride string
+	// openAlexKey is the optional OpenAlex API key the related-works lookups
+	// send, through openalex.NewRequest, in a header and never in the URL.
+	openAlexKey string
+	// openAlexBaseOverride overrides the OpenAlex API root the related-works
+	// lookups use. Empty means openalex.APIBase; it is a test seam.
+	openAlexBaseOverride string
+	// openAlexBudget is the credit budget the related-works lookups observe and
+	// spend from. Nil means the process-wide openalex.Shared; tests set their own.
+	openAlexBudget *openalex.Budget
 	// annasMirrors is the Anna's Archive mirror lister shared by the sources that
 	// fetch from that family, including any ad-hoc source built for a per-call key.
 	annasMirrors MirrorLister
@@ -306,6 +316,17 @@ func WithDOIOrgBaseURL(base string) Option {
 	return func(c *Client) { c.doiOrgBaseOverride = base }
 }
 
+// WithOpenAlexBase points the related-works lookups at another OpenAlex API
+// root and gives them their own credit budget, so tests (including callers in
+// other packages) reach an httptest server and never share the process-wide
+// budget. Production leaves both unset.
+func WithOpenAlexBase(base string, budget *openalex.Budget) Option {
+	return func(c *Client) {
+		c.openAlexBaseOverride = base
+		c.openAlexBudget = budget
+	}
+}
+
 // New builds a Client from the configuration: rate limiter (RateRPS/RateBurst),
 // number of retries (RetryAttempts), HTTP timeout and the download-source chain.
 // Options are applied last, so WithSources can replace the config-built chain.
@@ -340,6 +361,7 @@ func New(m MirrorLister, cfg *config.Config, opts ...Option) *Client {
 		enrichLimiter:    rate.NewLimiter(5, 5),
 		olLimiter:        rate.NewLimiter(rate.Limit(olRPS), olRPS),
 		enrichEmail:      cfg.UnpaywallEmail,
+		openAlexKey:      cfg.OpenAlexKey,
 		retry:            cfg.RetryAttempts,
 		backoffBase:      defaultBackoffBase,
 		maxDownloadBytes: cfg.MaxDownloadBytes,

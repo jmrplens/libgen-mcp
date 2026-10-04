@@ -152,6 +152,20 @@
           "required": false
         },
         {
+          "name": "related",
+          "type": "string",
+          "required": false,
+          "enum": [
+            "references",
+            "cited_by"
+          ]
+        },
+        {
+          "name": "related_limit",
+          "type": "integer",
+          "required": false
+        },
+        {
           "name": "cite_as",
           "type": "string[]",
           "required": false,
@@ -194,6 +208,11 @@
         },
         {
           "name": "enrichment",
+          "type": "object",
+          "required": false
+        },
+        {
+          "name": "related",
           "type": "object",
           "required": false
         }
