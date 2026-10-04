@@ -185,10 +185,11 @@ AI assistant) make. There are no background connections. The destinations are:
   (`api.openalex.org`) by DOI, with your `LIBGEN_MCP_OPENALEX_KEY` as a bearer
   token if you set one. The requests to Crossref, OpenLibrary and `doi.org` carry your
   `LIBGEN_MCP_UNPAYWALL_EMAIL` as a contact address in their User-Agent when you
-  configured one, and none otherwise. That header follows doi.org's redirect, so
-  the address also reaches the registering agency's host, in cleartext when that
-  host is reached over `http`. `LIBGEN_MCP_ENRICH=false` turns every one of these
-  lookups off.
+  configured one, and none otherwise. The address stays with the service it was
+  sent to: when a redirect leaves that origin, doi.org's to a registering agency
+  included, the server removes it from the User-Agent before following, so the
+  agency's host receives the product name and version and no address.
+  `LIBGEN_MCP_ENRICH=false` turns every one of these lookups off.
 - **Anna's Archive and IPFS gateways (only when you download through them).**
   The `scidb` source resolves an article `download` by `doi` through Anna's
   Archive, and the `annas` source resolves a book `download` by `md5` there,

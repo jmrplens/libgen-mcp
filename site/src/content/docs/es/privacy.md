@@ -10,7 +10,7 @@ datePublished: "2026-10-04"
 # Traducción de PRIVACY.md. El digest de abajo fija la versión del original de la
 # que procede: scripts/sync-privacy.mjs --check falla cuando el original cambia y
 # esta traducción se queda atrás.
-privacySource: "de04985b6e4f155b"
+privacySource: "e5f472290d80d48a"
 head:
   - tag: script
     attrs:
@@ -249,10 +249,11 @@ destinos son:
   DOI, con tu `LIBGEN_MCP_OPENALEX_KEY` como bearer token si fijas una. Las
   peticiones a Crossref, a OpenLibrary y a `doi.org` llevan tu `LIBGEN_MCP_UNPAYWALL_EMAIL` como
   dirección de contacto en su User-Agent cuando configuraste una, y ninguna en
-  otro caso. Esa cabecera sigue la redirección de doi.org, así que la dirección
-  llega también al host de la agencia que registró el DOI, sin cifrar cuando ese
-  host se alcanza por `http`. `LIBGEN_MCP_ENRICH=false` apaga todas estas
-  consultas.
+  otro caso. La dirección se queda en el servicio al que se envió: cuando una
+  redirección sale de ese origen, incluida la de doi.org hacia una agencia de
+  registro, el servidor la quita del User-Agent antes de seguirla, así que el
+  host de la agencia recibe el nombre y la versión del producto y ninguna
+  dirección. `LIBGEN_MCP_ENRICH=false` apaga todas estas consultas.
 - **Anna's Archive y pasarelas IPFS (solo cuando descargas a través de ellas).**
   La fuente `scidb` resuelve un `download` de artículo por `doi` a través de
   Anna's Archive, y la fuente `annas` resuelve un `download` de libro por `md5`
