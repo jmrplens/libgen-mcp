@@ -32,6 +32,10 @@ type tempCache struct {
 	entries  map[string]*tempEntry
 	maxBytes int64
 	ttl      time.Duration
+
+	// now is time.Now, as a seam: an entry expires when its idle time reaches
+	// the TTL exactly, and only a clock a test sets can land on that instant.
+	now func() time.Time
 }
 
 // newTempCache builds an empty tempCache bounded by maxBytes of total on-disk
@@ -41,6 +45,7 @@ func newTempCache(maxBytes int64, ttl time.Duration) *tempCache {
 		entries:  make(map[string]*tempEntry),
 		maxBytes: maxBytes,
 		ttl:      ttl,
+		now:      time.Now,
 	}
 }
 
@@ -56,7 +61,7 @@ func (tc *tempCache) get(key string) (string, bool) {
 		return "", false
 	}
 	e.refs++
-	e.atime = time.Now()
+	e.atime = tc.now()
 	return e.path, true
 }
 
@@ -90,7 +95,7 @@ func (tc *tempCache) put(ctx context.Context, key, path string, size int64) {
 	if prev, ok := tc.entries[key]; ok && prev.refs == 0 && prev.path != path {
 		removeTempFile(prev.path)
 	}
-	tc.entries[key] = &tempEntry{path: path, size: size, refs: 1, atime: time.Now()}
+	tc.entries[key] = &tempEntry{path: path, size: size, refs: 1, atime: tc.now()}
 	tc.evictLocked(ctx)
 }
 
@@ -105,10 +110,10 @@ func (tc *tempCache) getOrPut(ctx context.Context, key, path string, size int64)
 	defer tc.mu.Unlock()
 	if e, ok := tc.liveLocked(key); ok {
 		e.refs++
-		e.atime = time.Now()
+		e.atime = tc.now()
 		return e.path, false
 	}
-	tc.entries[key] = &tempEntry{path: path, size: size, refs: 1, atime: time.Now()}
+	tc.entries[key] = &tempEntry{path: path, size: size, refs: 1, atime: tc.now()}
 	tc.evictLocked(ctx)
 	return path, true
 }
@@ -134,7 +139,7 @@ func (tc *tempCache) release(key, path string) {
 	if e.refs > 0 {
 		e.refs--
 	}
-	e.atime = time.Now()
+	e.atime = tc.now()
 }
 
 // evict removes entries that are past the TTL and, while the total cached size
@@ -152,7 +157,7 @@ func (tc *tempCache) evict(ctx context.Context) {
 // drops the least-recently-used unreferenced entry until it is within the cap or
 // no evictable entry remains.
 func (tc *tempCache) evictLocked(ctx context.Context) {
-	now := time.Now()
+	now := tc.now()
 	for key, e := range tc.entries {
 		if e.refs == 0 && tc.ttl >= 0 && now.Sub(e.atime) >= tc.ttl {
 			removeTempFile(e.path)
@@ -254,15 +259,15 @@ func (tc *tempCache) lruEvictableLocked() (string, bool) {
 	return lruKey, found
 }
 
-// removeTempFile deletes a cached temp file and, when it lives in a dedicated
-// per-fetch subdirectory (created by FetchToTemp), that directory too. Errors are
-// ignored: eviction is best-effort cleanup.
+// removeTempFile deletes a cached temp file and then the directory it was in,
+// which for every file FetchToTemp caches is that fetch's own directory, empty
+// once the file is gone. os.Remove refuses a directory that still holds
+// anything, so a file kept anywhere else never takes its directory with it.
+// Errors are ignored: eviction is best-effort cleanup.
 func removeTempFile(path string) {
 	if path == "" {
 		return
 	}
 	_ = os.Remove(path)
-	if dir := filepath.Dir(path); filepath.Base(dir) != "" {
-		_ = os.Remove(dir)
-	}
+	_ = os.Remove(filepath.Dir(path))
 }

@@ -1,6 +1,7 @@
 package libgen
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -297,6 +298,130 @@ func TestTempCache_PurgeRemovesEverythingEvenReferenced(t *testing.T) {
 	}
 	if got := tc.purge(); got != 0 {
 		t.Errorf("a second purge = %d, want 0", got)
+	}
+}
+
+// TestTempCache_EveryHitHoldsItsEntryAgainstEviction pins that a hit takes a
+// reference of its own, on both lookups. Each case leaves exactly one of the
+// two references outstanding, so the entry must survive an eviction pass that
+// would otherwise take it; a hit that took none would leave none, and the file
+// a read is still using would go.
+func TestTempCache_EveryHitHoldsItsEntryAgainstEviction(t *testing.T) {
+	cases := []struct {
+		name string
+		hit  func(tc *tempCache, path string, size int64) bool
+	}{
+		{"get", func(tc *tempCache, _ string, _ int64) bool {
+			_, ok := tc.get("k")
+			return ok
+		}},
+		{"getOrPut", func(tc *tempCache, path string, size int64) bool {
+			_, isNew := tc.getOrPut(context.Background(), "k", path, size)
+			return !isNew
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path, size := writeTempFile(t, "read by two calls at once")
+			cache := newTempCache(1<<30, 0) // ttl=0: unreferenced means evicted
+			cache.put(t.Context(), "k", path, size)
+			if !tc.hit(cache, path, size) {
+				t.Fatal("the second lookup missed")
+			}
+			cache.release("k", path)
+
+			cache.evict(t.Context())
+			if _, ok := cache.entries["k"]; !ok {
+				t.Fatal("the entry was evicted while the hit's reference was outstanding")
+			}
+			if _, err := os.Stat(path); err != nil {
+				t.Errorf("the file a read still holds was removed: %v", err)
+			}
+		})
+	}
+}
+
+// TestTempCache_ExpiresExactlyAtTheTTL lands the clock on the boundary: an
+// unreferenced entry idle for exactly the TTL is expired, and one a nanosecond
+// short of it is not.
+func TestTempCache_ExpiresExactlyAtTheTTL(t *testing.T) {
+	const ttl = 10 * time.Minute
+	cases := []struct {
+		name string
+		idle time.Duration
+		want bool
+	}{
+		{"one nanosecond short of the TTL", ttl - time.Nanosecond, false},
+		{"exactly the TTL", ttl, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path, size := writeTempFile(t, "idle")
+			cache := newTempCache(1<<30, ttl)
+			start := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
+			cache.now = func() time.Time { return start }
+			cache.put(t.Context(), "k", path, size)
+			cache.release("k", path)
+
+			cache.now = func() time.Time { return start.Add(tc.idle) }
+			cache.evict(t.Context())
+			if _, kept := cache.entries["k"]; kept == tc.want {
+				t.Errorf("after %v idle the entry was kept=%v, want evicted=%v", tc.idle, kept, tc.want)
+			}
+		})
+	}
+}
+
+// TestTempCache_AtTheCapIsWithinIt pins the size boundary: a cache holding
+// exactly its cap is full, not over, so nothing is evicted for size.
+func TestTempCache_AtTheCapIsWithinIt(t *testing.T) {
+	path, size := writeTempFile(t, "exactly the cap")
+	tc := newTempCache(size, time.Hour)
+	tc.put(t.Context(), "k", path, size)
+	tc.release("k", path)
+
+	tc.evict(t.Context())
+	if _, ok := tc.entries["k"]; !ok {
+		t.Error("an entry exactly at the cap was evicted for size")
+	}
+}
+
+// TestTempCache_RemovingAFileRemovesItsFetchDirectory checks both ways an
+// entry leaves the cache take its per-fetch directory with it, which is what
+// keeps eviction and the end-of-process purge from leaving one empty directory
+// behind per file.
+func TestTempCache_RemovingAFileRemovesItsFetchDirectory(t *testing.T) {
+	fetched := func(t *testing.T) (string, string) {
+		t.Helper()
+		dir := filepath.Join(t.TempDir(), "fetch-1")
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(dir, "book.pdf")
+		if err := os.WriteFile(path, []byte("%PDF"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return dir, path
+	}
+	cases := []struct {
+		name   string
+		remove func(tc *tempCache)
+	}{
+		{"evict", func(tc *tempCache) { tc.evict(context.Background()) }},
+		{"purge", func(tc *tempCache) { tc.purge() }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir, path := fetched(t)
+			cache := newTempCache(1<<30, 0)
+			cache.put(t.Context(), "k", path, 4)
+			cache.release("k", path)
+
+			tc.remove(cache)
+			if _, err := os.Stat(dir); !os.IsNotExist(err) {
+				t.Errorf("the fetch directory %q is still there (stat err %v)", dir, err)
+			}
+		})
 	}
 }
 
