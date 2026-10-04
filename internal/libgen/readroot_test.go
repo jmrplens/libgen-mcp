@@ -2,6 +2,7 @@ package libgen
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -228,27 +229,86 @@ func TestReadRoot_ARemovedRootIsReplacedOnce(t *testing.T) {
 	})
 }
 
-// TestReadRoot_ALockFailureLeavesNoRoot shows the half-made root is removed
-// when its lock cannot be taken, so a failed start does not become the very
-// leftover this file exists to prevent.
-func TestReadRoot_ALockFailureLeavesNoRoot(t *testing.T) {
+// lockAnswers makes every lock this process tries answer err, and returns a
+// count of the attempts.
+func lockAnswers(t *testing.T, err error) *atomic.Int32 {
+	t.Helper()
+	var tries atomic.Int32
+	prev := takeLock
+	t.Cleanup(func() { takeLock = prev })
+	takeLock = func(*os.File) error {
+		tries.Add(1)
+		return err
+	}
+	return &tries
+}
+
+// TestReadRoot_AHeldLockLeavesNoRootAndIsNotRemembered shows the half-made
+// root is removed when another file holds its lock, so a failed start does not
+// become the very leftover this file exists to prevent, and that the next
+// fetch tries again rather than giving up on roots.
+func TestReadRoot_AHeldLockLeavesNoRootAndIsNotRemembered(t *testing.T) {
 	tmp := t.TempDir()
 	isolateTempDir(t, tmp)
-	refused := errors.New("lock refused")
-	prev := lockReadRoot
-	t.Cleanup(func() { lockReadRoot = prev })
-	lockReadRoot = func(string) (*os.File, error) { return nil, refused }
+	restore := takeLock
+	lockAnswers(t, errLockHeld)
 
 	var r readRoot
-	if _, err := r.fetchDir(noLoss(t)); !errors.Is(err, refused) {
-		t.Fatalf("fetchDir error = %v, want the lock failure", err)
+	t.Cleanup(r.close)
+	if _, err := r.fetchDir(noLoss(t)); !errors.Is(err, errLockHeld) {
+		t.Fatalf("fetchDir error = %v, want the held lock", err)
 	}
 	entries, err := os.ReadDir(tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(entries) != 0 {
-		t.Errorf("the temp directory kept %d entries after the lock failed", len(entries))
+		t.Errorf("the temp directory kept %d entries after the lock was held", len(entries))
+	}
+
+	takeLock = restore
+	if root := rootOf(t, &r); !strings.HasPrefix(filepath.Base(root), readRootPrefix) {
+		t.Errorf("the fetch after a held lock went under %q, want a read root", root)
+	}
+}
+
+// TestReadRoot_UnusableLocksFallBackToLooseFetchDirectories covers a temp
+// directory on a filesystem whose locks fail outright (ENOLCK on NFSv3 without
+// lockd, ENOSYS on a cluster filesystem mounted without flock). An unlocked
+// root would be one any other process's sweep could take and remove mid-read,
+// so none is kept: each fetch gets a loose directory under the prefix the
+// sweep never matches, the operator is told once, and the lock is not tried
+// again.
+func TestReadRoot_UnusableLocksFallBackToLooseFetchDirectories(t *testing.T) {
+	tmp := t.TempDir()
+	isolateTempDir(t, tmp)
+	tries := lockAnswers(t, errors.New("no locks on this mount"))
+	logs := captureLog(t)
+	var r readRoot
+	t.Cleanup(r.close)
+
+	for _, fetch := range []string{"first", "second"} {
+		t.Run(fetch, func(t *testing.T) {
+			dir, err := r.fetchDir(noLoss(t))
+			if err != nil {
+				t.Fatalf("fetchDir: %v", err)
+			}
+			if filepath.Dir(dir) != tmp || !strings.HasPrefix(filepath.Base(dir), legacyFetchPrefix) {
+				t.Errorf("fetch directory %q is not a loose %s* directory in %q", dir, legacyFetchPrefix, tmp)
+			}
+		})
+	}
+	if got := tries.Load(); got != 1 {
+		t.Errorf("the lock was tried %d times, want once", got)
+	}
+	if roots, _ := filepath.Glob(filepath.Join(tmp, readRootPrefix+"*")); len(roots) != 0 {
+		t.Errorf("an unlocked read root was left: %v", roots)
+	}
+	if got := strings.Count(logs.String(), "will not be cleaned up automatically"); got != 1 {
+		t.Errorf("the warning was logged %d times, want once: %q", got, logs.String())
+	}
+	if !strings.Contains(logs.String(), `"level":"WARN"`) {
+		t.Errorf("the fallback was not logged as a warning: %q", logs.String())
 	}
 }
 
@@ -284,21 +344,30 @@ func TestReadRoot_FirstUseSweepsAndSaysSo(t *testing.T) {
 	})
 }
 
-// TestHoldReadRootLock covers both ways taking the lock can fail: no file can
-// be made at the path, and another descriptor already holds it.
+// TestHoldReadRootLock covers the three ways taking the lock can fail, each
+// with the error that tells the caller which it was: no file can be made at
+// the path, another descriptor already holds the lock, and the lock cannot be
+// tried at all. Only the last is errLocksUnusable, the one that makes a
+// process give up on read roots.
 func TestHoldReadRootLock(t *testing.T) {
 	tmp := t.TempDir()
 	cases := []struct {
 		name string
 		path func(t *testing.T) string
+		want error
 	}{
 		{"the directory does not exist", func(*testing.T) string {
 			return filepath.Join(tmp, "no", "such", readRootLockName)
-		}},
+		}, fs.ErrNotExist},
 		{"another descriptor holds the lock", func(t *testing.T) string {
 			t.Helper()
 			return filepath.Join(holdRoot(t, tmp), readRootLockName)
-		}},
+		}, errLockHeld},
+		{"the lock cannot be tried", func(t *testing.T) string {
+			t.Helper()
+			lockAnswers(t, errors.New("no locks on this mount"))
+			return filepath.Join(newRootDir(t, tmp), readRootLockName)
+		}, errLocksUnusable},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -306,6 +375,12 @@ func TestHoldReadRootLock(t *testing.T) {
 			if err == nil {
 				_ = f.Close()
 				t.Fatal("holdReadRootLock succeeded")
+			}
+			if !errors.Is(err, tc.want) {
+				t.Errorf("error = %v, want %v", err, tc.want)
+			}
+			if !errors.Is(tc.want, errLocksUnusable) && errors.Is(err, errLocksUnusable) {
+				t.Errorf("error %v would make the process give up on read roots", err)
 			}
 			if f != nil {
 				t.Errorf("returned a file alongside error %v", err)
@@ -406,6 +481,12 @@ func TestAbandonedReadRoot(t *testing.T) {
 			return dir
 		}, false},
 		{"the root itself is gone", func(*testing.T) string { return filepath.Join(tmp, readRootPrefix+"gone") }, false},
+		{"its lock cannot be tried", func(t *testing.T) string {
+			t.Helper()
+			dir := deadRoot(t, tmp)
+			lockAnswers(t, errors.New("no locks on this mount"))
+			return dir
+		}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

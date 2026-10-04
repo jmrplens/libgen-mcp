@@ -3,6 +3,7 @@
 package libgen
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -27,8 +28,8 @@ func TestTryLockFile_ConflictsAcrossDescriptorsAndUnlocks(t *testing.T) {
 	if err := tryLockFile(first); err != nil {
 		t.Fatalf("first lock: %v", err)
 	}
-	if tryLockFile(second) == nil {
-		t.Fatal("a second descriptor took a lock the first holds")
+	if err := tryLockFile(second); !errors.Is(err, errLockHeld) {
+		t.Fatalf("a second descriptor trying a lock the first holds got %v, want errLockHeld", err)
 	}
 	if err := unlockFile(first); err != nil {
 		t.Fatalf("unlock: %v", err)

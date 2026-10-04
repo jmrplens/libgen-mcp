@@ -306,6 +306,41 @@ func TestFetchToTemp_LivesUnderTheReadRootAndCloseRemovesIt(t *testing.T) {
 	}
 }
 
+// TestFetchToTemp_WithoutWorkingLocksFetchesLooseAndCloseStillRemovesIt is the
+// fallback for a temp directory whose locks fail outright: the file goes into
+// a loose directory under the prefix no sweep matches, as up to 2.2.0, and a
+// clean exit still removes it, because the cache does.
+func TestFetchToTemp_WithoutWorkingLocksFetchesLooseAndCloseStillRemovesIt(t *testing.T) {
+	tmp := t.TempDir()
+	isolateTempDir(t, tmp)
+	lockAnswers(t, errors.New("no locks on this mount"))
+	payload := []byte("%PDF-1.4 unlocked payload " + string(make([]byte, 64)))
+	want := md5Hex(payload)
+	var adsHits atomic.Int32
+	srv := adsCountingServer(t, payload, &adsHits)
+	defer srv.Close()
+	c := newFetchTempClient(t, staticMirrors{srv.URL})
+
+	path, release, err := c.FetchToTemp(context.Background(), Item{MD5: want})
+	if err != nil {
+		t.Fatalf("FetchToTemp: %v", err)
+	}
+	defer release()
+	dir := filepath.Dir(path)
+	if filepath.Dir(dir) != tmp || !strings.HasPrefix(filepath.Base(dir), legacyFetchPrefix) {
+		t.Fatalf("fetched file %q is not in a loose %s* directory in %q", path, legacyFetchPrefix, tmp)
+	}
+
+	c.Close()
+	entries, err := os.ReadDir(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("Close left %d entries in the temp directory, first %q", len(entries), entries[0].Name())
+	}
+}
+
 // TestFetchToTemp_RecoversFromARemovedRoot covers the root removed from under
 // a running process, by an operator clearing the temp directory or a cleaner
 // aging it out. The cached file went with it, so the next read of the same

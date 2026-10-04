@@ -2,6 +2,7 @@ package libgen
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -28,6 +29,21 @@ const readRootLockName = ".lock"
 // read root.
 const fetchDirPattern = "fetch-*"
 
+// legacyFetchPrefix names a fetch directory made loose in the temp directory,
+// the layout every fetch had up to 2.2.0. A process whose temp directory has
+// no working lock goes back to it (see readRoot.unlocked), because the sweep
+// never matches this prefix, so no other process can take such a directory
+// for abandoned while this one still reads from it.
+const legacyFetchPrefix = "libgen-read-"
+
+// errLockHeld is what tryLockFile answers when another open file holds the
+// lock. Every other error it returns means the lock could not be tried at all.
+var errLockHeld = errors.New("the lock is held by another open file")
+
+// errLocksUnusable marks a lock that could not be tried at all, as opposed to
+// one another file holds (see holdReadRootLock).
+var errLocksUnusable = errors.New("file locks do not work here")
+
 // readRootLockGrace is how old a read root found without its lock file must be
 // before the sweep takes it for abandoned. A live process creates the root and
 // then the lock file inside it, so for an instant a live root has none; a
@@ -39,10 +55,11 @@ func readRootLockGrace() time.Duration { return time.Minute }
 // sets can land exactly on the boundary.
 var readRootNow = time.Now
 
-// lockReadRoot is holdReadRootLock, as a seam: the lock file of a root this
-// process has just created is always free, so only a substitute can make
-// taking it fail and show the half-made root is not left behind.
-var lockReadRoot = holdReadRootLock
+// takeLock is tryLockFile, as a seam: the lock of a root this process has
+// just created is always free, and a filesystem whose locks do not work is not
+// one a test can mount, so only a substitute can make taking a lock fail
+// either way.
+var takeLock = tryLockFile
 
 // readRoot is this process's directory for read fetches: one per process,
 // created on first use, holding a lock for as long as the process holds it.
@@ -57,6 +74,16 @@ type readRoot struct {
 	mu   sync.Mutex
 	dir  string
 	lock *os.File
+
+	// unlocked is set, for the rest of the process's life, once taking a new
+	// root's lock failed for any reason but another holder: the temp
+	// directory's filesystem has no lock that works (NFS without lockd, a
+	// cluster filesystem mounted without flock, a FUSE mount that refuses
+	// it). An unlocked root is the one thing this must not make, because
+	// another process's sweep could take its free lock and remove it
+	// mid-read. Each fetch's directory is made loose in the temp directory
+	// instead, as up to 2.2.0, which the sweep never matches.
+	unlocked bool
 }
 
 // fetchDir makes the directory one fetch downloads into, under the read root,
@@ -83,24 +110,29 @@ func (r *readRoot) fetchDir(onLost func(root string)) (string, error) {
 }
 
 // makeFetchDirLocked makes one fetch directory under the root, making the
-// root first when there is none. The caller holds r.mu.
+// root first when there is none, or loose in the temp directory when this
+// process has no root to make (see unlocked). The caller holds r.mu.
 func (r *readRoot) makeFetchDirLocked() (string, error) {
 	root, err := r.pathLocked()
 	if err != nil {
 		return "", err
 	}
+	if root == "" {
+		return os.MkdirTemp("", legacyFetchPrefix+"*")
+	}
 	return os.MkdirTemp(root, fetchDirPattern)
 }
 
-// pathLocked returns the read root, creating it on first use. The caller holds
-// r.mu.
+// pathLocked returns the read root, creating it on first use, or "" once
+// this process has found its temp directory cannot lock one (see unlocked).
+// The caller holds r.mu.
 //
 // The first creation also sweeps the roots dead processes left behind, so a
 // server that never fetches a file never touches the temp directory. A failure
 // is returned and not remembered, so a temp directory that comes back serves
 // the next read rather than failing every read for the life of the process.
 func (r *readRoot) pathLocked() (string, error) {
-	if r.dir != "" {
+	if r.dir != "" || r.unlocked {
 		return r.dir, nil
 	}
 	tmp := os.TempDir()
@@ -111,13 +143,19 @@ func (r *readRoot) pathLocked() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	lock, err := lockReadRoot(filepath.Join(dir, readRootLockName))
-	if err != nil {
-		_ = os.RemoveAll(dir)
+	lock, err := holdReadRootLock(filepath.Join(dir, readRootLockName))
+	if err == nil {
+		r.dir, r.lock = dir, lock
+		return dir, nil
+	}
+	_ = os.RemoveAll(dir)
+	if !errors.Is(err, errLocksUnusable) {
 		return "", err
 	}
-	r.dir, r.lock = dir, lock
-	return dir, nil
+	r.unlocked = true
+	slog.Warn("file locks do not work in the temp directory, so read files a killed server leaves there will not be cleaned up automatically",
+		"dir", tmp, "error", err)
+	return "", nil
 }
 
 // close removes the read root with everything under it and gives up its lock.
@@ -144,31 +182,31 @@ func (r *readRoot) dropLocked() {
 // holdReadRootLock creates the lock file at path and takes its lock, keeping
 // the file open so the lock lasts until close or until the process ends.
 //
-// Where the platform has no usable lock, the file is still created and held,
-// so the root has the same shape everywhere; the sweep simply never removes a
-// root there (see fileLocksWork).
+// Only errLockHeld means another file holds the lock. Any other failure to
+// take it (ENOLCK on NFSv3 without lockd, ENOSYS on a cluster filesystem
+// mounted without flock, ENOTSUP, a platform with no lock at all) is wrapped
+// in errLocksUnusable, because there it says nothing about who holds what:
+// the lock cannot be relied on, here or in any other process's sweep.
 func holdReadRootLock(path string) (*os.File, error) {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, err
 	}
-	if !fileLocksWork {
+	lockErr := takeLock(f)
+	if lockErr == nil {
 		return f, nil
 	}
-	if lockErr := tryLockFile(f); lockErr != nil {
-		_ = f.Close()
+	_ = f.Close()
+	if errors.Is(lockErr, errLockHeld) {
 		return nil, lockErr
 	}
-	return f, nil
+	return nil, fmt.Errorf("%w: %w", errLocksUnusable, lockErr)
 }
 
 // sweepReadRoots removes every read root under tmp whose process is gone, and
 // returns how many it removed. Nothing else is touched: a directory without
 // the read root's prefix is not ours to judge.
 func sweepReadRoots(tmp string) int {
-	if !fileLocksWork {
-		return 0
-	}
 	entries, err := os.ReadDir(tmp)
 	if err != nil {
 		return 0
@@ -192,9 +230,11 @@ func sweepReadRoots(tmp string) int {
 // Its lock answers that: a process that is alive holds it, and the operating
 // system releases it when the process ends, however it ended. Taking it here
 // is therefore proof the owner is gone, and it is released again at once,
-// before the root is removed. A root with no lock file at all is judged by
-// its age instead (see readRootLockGrace), and anything that cannot be read is
-// left where it is.
+// before the root is removed. A lock that cannot be tried at all is no proof
+// of anything, so a root whose lock fails for any reason is left where it is,
+// held or not. A root with no lock file at all is judged by its age instead
+// (see readRootLockGrace), and anything that cannot be read is left where it
+// is too.
 func abandonedReadRoot(dir string) bool {
 	f, err := os.OpenFile(filepath.Join(dir, readRootLockName), os.O_RDWR, 0)
 	if err != nil {
@@ -205,7 +245,7 @@ func abandonedReadRoot(dir string) bool {
 		return statErr == nil && readRootNow().Sub(info.ModTime()) >= readRootLockGrace()
 	}
 	defer func() { _ = f.Close() }()
-	if tryLockFile(f) != nil {
+	if takeLock(f) != nil {
 		return false
 	}
 	_ = unlockFile(f)
