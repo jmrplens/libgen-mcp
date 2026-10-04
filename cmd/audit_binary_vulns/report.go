@@ -57,14 +57,8 @@ func judge(scans []scanned, declared map[string]declaration) report {
 				merged[key] = j
 				order = append(order, key)
 			}
-			if name := s.binary.target.String(); !slices.Contains(j.targets, name) {
-				j.targets = append(j.targets, name)
-			}
-			for _, path := range s.result.imports[key] {
-				if !slices.Contains(j.imports, path) {
-					j.imports = append(j.imports, path)
-				}
-			}
+			j.targets = appendNew(j.targets, s.binary.target.String())
+			j.imports = appendNew(j.imports, s.result.imports[key]...)
 		}
 	}
 
@@ -84,6 +78,16 @@ func judge(scans []scanned, declared map[string]declaration) report {
 	}
 	sort.Strings(rep.stale)
 	return rep
+}
+
+// appendNew appends each value the list does not hold yet, in order.
+func appendNew(list []string, values ...string) []string {
+	for _, v := range values {
+		if !slices.Contains(list, v) {
+			list = append(list, v)
+		}
+	}
+	return list
 }
 
 // undeclared counts the findings no declaration accepts.
