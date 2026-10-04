@@ -6,11 +6,11 @@ mentions:
     wikidata: Q133436854
   - name: "OpenTelemetry"
     wikidata: Q121746046
-datePublished: "2026-10-03"
+datePublished: "2026-10-04"
 # Traducción de PRIVACY.md. El digest de abajo fija la versión del original de la
 # que procede: scripts/sync-privacy.mjs --check falla cuando el original cambia y
 # esta traducción se queda atrás.
-privacySource: "76dc65f0adac77d9"
+privacySource: "d2aa72551a5db409"
 head:
   - tag: script
     attrs:
@@ -199,7 +199,7 @@ destinos son:
   Project Gutenberg a través de la API de terceros
   [Gutendex](https://gutendex.com) (`gutendex.com`; los ficheros de libro a los
   que enlaza viven en `gutenberg.org`, que solo se contacta si obtienes uno),
-  [dblp](https://dblp.org) (`dblp.org`),
+  [dblp](https://dblp.org) (su servicio SPARQL, `sparql.dblp.org`),
   [PubMed](https://pubmed.ncbi.nlm.nih.gov) (`eutils.ncbi.nlm.nih.gov`) y
   [ERIC](https://eric.ed.gov) (`api.ies.ed.gov`). Cuándo ocurre esto está bajo tu
   control, mediante el argumento `extra_sources` o `LIBGEN_MCP_EXTRA_SOURCES`:

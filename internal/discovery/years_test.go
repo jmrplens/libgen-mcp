@@ -195,7 +195,9 @@ func TestRangeSearchers_PushTheRangeIntoTheirQuery(t *testing.T) {
 		want  string
 	}{
 		{name: "arxiv", p: NewArxiv(), years: YearRange{From: 2015, To: 2016}, want: "search_query=%28all:q%29+AND+submittedDate:%5B201501010000+TO+201612312359%5D"},
-		{name: "arxiv open side", p: NewArxiv(), years: YearRange{To: 1999}, want: "submittedDate:%5B100001010000+TO+199912312359%5D"},
+		// The second arXiv case asks the same base again, inside arXiv's
+		// three-second pace, so it uses a provider that does not wait for a token.
+		{name: "arxiv open side", p: newUnpacedArxiv(), years: YearRange{To: 1999}, want: "submittedDate:%5B100001010000+TO+199912312359%5D"},
 		{name: "crossref", p: NewCrossref(""), years: YearRange{From: 2015, To: 2016}, want: "filter=" + url.QueryEscape("from-pub-date:2015,until-pub-date:2016")},
 		{name: "crossref open side", p: NewCrossref(""), years: YearRange{From: 2015}, want: "filter=" + url.QueryEscape("from-pub-date:2015")},
 		{name: "openalex", p: NewOpenAlex("key"), years: YearRange{From: 2015, To: 2016}, want: "filter=" + url.QueryEscape("publication_year:2015-2016")},
@@ -223,9 +225,9 @@ func TestRangeSearchers_PushTheRangeIntoTheirQuery(t *testing.T) {
 
 // TestExtraProviders_WhichFilterThemselves pins the providers that cannot take a
 // range and so are filtered after they answer, which the search tool's
-// documentation names: dblp (its search API takes no year range), Gutenberg
-// (Gutendex dates authors, not editions, so its hits carry no year and a range
-// drops them all) and Anna's Archive (an HTML search page).
+// documentation names: Gutenberg (Gutendex dates authors, not editions, so its
+// hits carry no year and a range drops them all) and Anna's Archive (an HTML
+// search page). dblp is not among them: its SPARQL query filters on the year.
 func TestExtraProviders_WhichFilterThemselves(t *testing.T) {
 	var unranged []string
 	for _, p := range ExtraProviders(Settings{AnnasMirrors: staticMirrors{"https://annas-archive.invalid"}}) {
@@ -233,7 +235,7 @@ func TestExtraProviders_WhichFilterThemselves(t *testing.T) {
 			unranged = append(unranged, p.Name())
 		}
 	}
-	if got, want := strings.Join(unranged, ","), "gutenberg,dblp,annas"; got != want {
+	if got, want := strings.Join(unranged, ","), "gutenberg,annas"; got != want {
 		t.Errorf("providers filtered after the fact = %s, want %s", got, want)
 	}
 }

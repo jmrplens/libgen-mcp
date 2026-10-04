@@ -197,16 +197,18 @@ you whatever the inbound limit says.
 The extra searchers are paced the same way, each against its own upstream and each for the
 whole process: arXiv at one request every three seconds, PubMed at three per second, OpenLibrary
 at one per second (three with a contact address), Crossref, OpenAlex and Europe PMC at one per
-second with a burst of two, and dblp, ERIC and Gutenberg at one per second. Concurrent searches share those
-buckets rather than each starting with a full one, so a provider whose token cannot arrive
-within the search's six-second budget is skipped for that search, and the search requests to an
-upstream never exceed that provider's rate. Other paths keep buckets of their own and are not
+second with a burst of two, ERIC and Gutenberg at one per second, and dblp at one request every
+ten seconds, the crawl delay its SPARQL service asks for. Concurrent searches share those
+buckets rather than each starting with a full one. A search waits at most one second for a
+provider's token, so a provider whose token is further away is skipped for that search instead of
+holding the whole answer back, and the search requests to an upstream never exceed that
+provider's rate. Other paths keep buckets of their own and are not
 counted against these. For example, Crossref is also asked by `get_details` enrichment and
 citation lookups, and OpenAlex by the `openalex` download source.
 
 Under concurrent HTTP load this is visible in the results. arXiv at one request every three
-seconds against a six-second budget serves about two searches in flight, and the others come
-back without arXiv results.
+seconds serves one search in each three-second window, and dblp one in each ten. The other
+searches in that window come back at once without that provider's results.
 
 They are not the same guarantee and neither derives from the other: raise the inbound limit and
 callers queue on the outbound one instead of being refused, which is slower rather than faster.
