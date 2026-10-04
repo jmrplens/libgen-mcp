@@ -20,7 +20,7 @@ datePublished: "2026-10-03"
 
 import { Aside } from "@astrojs/starlight/components";
 
-Tú hablas con el asistente, y el asistente llama a las herramientas. Esta página recorre seis peticiones habituales de principio a fin: qué pedir, qué llamadas hace el asistente y en qué orden, y en qué fijarse en la respuesta. Las llamadas se muestran con los argumentos que envía el asistente, para que las reconozcas en un cliente que enseña las llamadas a herramientas, y cada nombre de argumento es el que documenta [Herramientas](/libgen-mcp/es/tools/).
+Tú hablas con el asistente, y el asistente llama a las herramientas. Esta página recorre siete peticiones habituales de principio a fin: qué pedir, qué llamadas hace el asistente y en qué orden, y en qué fijarse en la respuesta. Las llamadas se muestran con los argumentos que envía el asistente, para que las reconozcas en un cliente que enseña las llamadas a herramientas, y cada nombre de argumento es el que documenta [Herramientas](/libgen-mcp/es/tools/).
 
 Dos cosas valen para todas:
 
@@ -78,11 +78,14 @@ Para los artículos, el asistente busca más allá del catálogo a propósito, p
 {
 	"query": "retrieval-augmented generation",
 	"topics": ["articles"],
-	"extra_sources": "always"
+	"extra_sources": "always",
+	"year_from": 2023
 }
 ```
 
-Las coincidencias del catálogo, y las de Anna's Archive, vuelven como filas, y las de los demás proveedores en una lista `open_access` aparte, cada una marcada con su `origin`. El origen dice qué hacer después: un resultado de `crossref`, `dblp` o `pubmed` lleva un DOI para `download`, uno de `arxiv` lleva un `pdf_url` que el asistente descarga directamente, y solo uno marcado `open_access: true` afirma que se puede leer gratis. Una segunda búsqueda sin `topics` encuentra los libros. [Cómo funciona la búsqueda](/libgen-mcp/es/how-search-works/) explica las etiquetas.
+`year_from` es lo que lo hace reciente. A los proveedores cuya API puede filtrar por año se les pide que lo hagan, y cualquier otro resultado, incluidos los del catálogo, se comprueba al llegar, de modo que el intervalo se cumple en toda la respuesta. Un registro del catálogo sin año se deja fuera y se cuenta en `year_filtered`.
+
+Las coincidencias del catálogo, y las de Anna's Archive, vuelven como filas, y las de los demás proveedores en una lista `open_access` aparte, cada una marcada con su `origin`. El origen dice qué hacer después: un resultado de `crossref`, `europepmc`, `dblp` o `pubmed` suele llevar un DOI para `download`, uno de `arxiv`, y uno de `openalex` cuya copia gratuita conoce OpenAlex, lleva un `pdf_url` que el asistente descarga directamente, y solo uno marcado `open_access: true` afirma que se puede leer gratis. Una segunda búsqueda sin `topics` encuentra los libros. [Cómo funciona la búsqueda](/libgen-mcp/es/how-search-works/) explica las etiquetas.
 
 El prompt `research_topic` hace esta revisión por ti, con `topic`, `kind` (`articles`, `books` o ambos) y `limit`, y pide al final una bibliografía anotada.
 
@@ -102,6 +105,38 @@ Para cada elemento, el asistente llama a `get_details` con el identificador que 
 
 El registro lleva un campo `citations` con una entrada `bibtex` y un registro `ris`, más `doi_status`, que dice si Crossref confirmó el DOI. Un DOI que no se pudo confirmar se deja fuera de las entradas en lugar de pegarlo en una referencia a la que quizá no pertenece. La respuesta en Markdown solo muestra el BibTeX, así que pide el RIS de forma explícita cuando lo quieras. Qué identificador da la entrada más completa, y por qué falta a veces un DOI, está en [Citas](/libgen-mcp/es/citations/).
 
+Una bibliografía en un estilo concreto es un argumento más:
+
+```json
+{ "doi": "10.1016/j.cell.2011.02.013", "cite_as": ["apa", "vancouver"] }
+```
+
+`cite_as` acepta cualquiera de `apa`, `mla`, `chicago`, `harvard`, `vancouver`, `ieee` y `csl-json`, y cada estilo vuelve bajo su propio encabezado, que dice cómo se hizo. Un registro cuyo DOI confirmó Crossref lo formatea la agencia que registró el DOI, a través de doi.org. Cualquier otro registro, un libro encontrado por md5 por ejemplo, recibe el estilo construido a partir de sus propios campos, y una parte se omite en lugar de adivinarse cuando el campo está vacío.
+
+Una referencia que llega como texto, copiada de la lista de referencias de un artículo, no necesita búsqueda previa:
+
+```json
+{ "citation": "LeCun Y, Bengio Y, Hinton G. Deep learning. Nature 2015" }
+```
+
+Crossref la resuelve al DOI de la única obra que coincide con claridad, y la respuesta nombra ese DOI para que compruebes que es la obra que querías. Cuando ningún candidato gana con claridad, la respuesta lista los candidatos y no devuelve registro, en lugar de citar una obra que el texto nunca nombró.
+
+## Seguir las referencias y las citas de un artículo
+
+> ¿En qué artículos se apoya _Deep learning_ de LeCun, Bengio y Hinton, y qué artículos posteriores lo citan más?
+
+El asistente pide a `get_details` las obras relacionadas, una vez en cada dirección:
+
+```json
+{ "doi": "10.1038/nature14539", "related": "references", "related_limit": 10 }
+```
+
+```json
+{ "doi": "10.1038/nature14539", "related": "cited_by", "related_limit": 10 }
+```
+
+Las dos respuestas vienen de OpenAlex: el total que cuenta y después una tabla de obras con título, año, DOI, una marca de acceso abierto y cuántas veces se cita cada una, las más citadas primero. Cada DOI de la tabla va directo a `download`, o de vuelta a `get_details` para seguir el recorrido. `related_limit` va de 1 a 25 y vale 10 por defecto. Un registro sin DOI, o con uno que Crossref no confirmó, dice que la lista no está disponible, porque a OpenAlex se le pregunta por DOI. Sin clave, las consultas comparten la cuota diaria que OpenAlex concede a una dirección, y `LIBGEN_MCP_OPENALEX_KEY` la amplía.
+
 ## Leer y resumir un capítulo
 
 > Resume el capítulo sobre análisis amortizado de este libro y cita dónde define el método del potencial.
@@ -112,13 +147,13 @@ El registro lleva un campo `citations` con una entrada `bibtex` y un registro `r
 { "md5": "<md5>", "outline": true, "max_depth": 1 }
 ```
 
-El índice da la página de cada capítulo, y el asistente lee a partir de ahí:
+El índice numera cada entrada y da su página, y el asistente lee el capítulo por su número, o por su título:
 
 ```json
-{ "md5": "<md5>", "start_page": 451, "max_pages": 20 }
+{ "md5": "<md5>", "section": "17" }
 ```
 
-Cuando `has_more` es true, devuelve el `cursor` recibido para el siguiente fragmento. Para encontrar un pasaje en lugar de leer de corrido, busca dentro del documento:
+Una lectura por sección empieza donde empieza la entrada y se detiene donde comienza la siguiente entrada del mismo nivel o de uno superior, y el campo `section` de la respuesta dice hasta dónde llega el capítulo. Cuando `has_more` es true, devuelve el `cursor` recibido para el siguiente fragmento del mismo capítulo, y `has_more` pasa a false al final del capítulo, no del libro. Un título que coincide con más de una entrada, como un "Exercises" que se repite, se rechaza con las entradas coincidentes listadas, para que el asistente elija una por número. Para encontrar un pasaje en lugar de leer de corrido, busca dentro del documento:
 
 ```json
 { "md5": "<md5>", "find": "potential method", "max_matches": 5 }
@@ -143,7 +178,7 @@ El asistente consulta el DOI en lugar de fiarse de él:
 { "doi": "10.1371/journal.pmed.0020124" }
 ```
 
-La respuesta muestra el título del registro al que llega el DOI, y `get_details` pregunta a Crossref a qué título tiene registrado ese DOI. Aquí no coinciden: Crossref lo tiene registrado para el artículo de Ioannidis _Why Most Published Research Findings Are False_, así que un registro que lo empareja con el libro vuelve con `doi_status: "mismatch"`, y su línea `provenance` nombra la obra real. Cuando el catálogo no tiene el DOI en absoluto, los metadatos de Crossref ocupan su lugar, marcados `origin: "crossref"`. Para una referencia sin DOI, una búsqueda de su título en la colección `articles`, o el prompt `get_paper` con la referencia como `citation`, encuentra los candidatos que comparar.
+La respuesta muestra el título del registro al que llega el DOI, y `get_details` pregunta a Crossref a qué título tiene registrado ese DOI. Aquí no coinciden: Crossref lo tiene registrado para el artículo de Ioannidis _Why Most Published Research Findings Are False_, así que un registro que lo empareja con el libro vuelve con `doi_status: "mismatch"`, y su línea `provenance` nombra la obra real. Cuando el catálogo no tiene el DOI en absoluto, los metadatos de Crossref ocupan su lugar, marcados `origin: "crossref"`, y un DOI que tampoco conoce Crossref, un conjunto de datos de DataCite o un artículo de mEDRA, recibe el registro que sirve su propio registro a través de doi.org, marcado `origin: "doi.org"`. Para una referencia sin DOI, `get_details` con la referencia como `citation` encuentra el DOI que nombra, o lista los candidatos que comparar cuando ninguno coincide con claridad.
 
 ## Adónde ir después
 

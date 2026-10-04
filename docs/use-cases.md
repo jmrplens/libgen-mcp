@@ -2,7 +2,7 @@
 
 **How-to guide** — for anyone deciding what to ask an assistant once the server is connected.
 
-You talk to the assistant, and the assistant calls the tools. This page walks through six
+You talk to the assistant, and the assistant calls the tools. This page walks through seven
 requests people make, end to end: what to ask, which calls the assistant makes and in what
 order, and what to look at in the answer. The calls are shown as the arguments the assistant
 sends, so you can recognise them in a client that displays tool calls, and every argument name
@@ -72,12 +72,18 @@ For papers, the assistant asks beyond the catalog on purpose, because preprints 
 work often live only there:
 
 ```json
-{ "query": "retrieval-augmented generation", "topics": ["articles"], "extra_sources": "always" }
+{ "query": "retrieval-augmented generation", "topics": ["articles"], "extra_sources": "always", "year_from": 2023 }
 ```
+
+`year_from` is what makes it recent. The providers whose APIs can filter by year are asked to,
+and every other result, the catalog's included, is checked once it arrives, so the range holds
+across the whole answer. A catalog record with no year is left out and counted in
+`year_filtered`.
 
 The catalog's matches, and Anna's Archive's, come back as rows, and the other providers' as a
 separate `open_access` list, each labelled with its `origin`. The origin says what to do
-next: a `crossref`, `dblp` or `pubmed` hit carries a DOI for `download`, an `arxiv` hit carries a `pdf_url` the assistant
+next: a `crossref`, `europepmc`, `dblp` or `pubmed` hit usually carries a DOI for `download`, an `arxiv`
+hit, and an `openalex` hit whose free copy OpenAlex knows, carries a `pdf_url` the assistant
 fetches directly, and only a hit marked `open_access: true` claims to be free to read. A second
 search without `topics` finds the books. [How search works](how-search-works.md) explains the
 labels.
@@ -106,6 +112,51 @@ Markdown answer shows only the BibTeX, so ask for the RIS explicitly when you wa
 identifier gives the fullest entry, and why a DOI goes missing, is in
 [Citations](https://jmrp.io/docs/libgen-mcp/citations/).
 
+A bibliography in a house style is one argument more:
+
+```json
+{ "doi": "10.1016/j.cell.2011.02.013", "cite_as": ["apa", "vancouver"] }
+```
+
+`cite_as` takes any of `apa`, `mla`, `chicago`, `harvard`, `vancouver`, `ieee` and `csl-json`,
+and each style comes back under its own heading saying how it was made. A record whose DOI
+Crossref confirmed is formatted by the agency that registered the DOI, through doi.org. Any
+other record, a book found by md5 for instance, has the style built from its own fields, with
+a part left out rather than guessed when the field is empty.
+
+A reference that arrives as text, copied from a paper's reference list, needs no search
+first:
+
+```json
+{ "citation": "LeCun Y, Bengio Y, Hinton G. Deep learning. Nature 2015" }
+```
+
+Crossref resolves it to the DOI of the one work that clearly matches, and the answer names
+that DOI so you can check it is the work you meant. When no candidate clearly wins, the answer
+lists the candidates and returns no record, rather than citing a work the text never named.
+
+## Follow a paper's references and citations
+
+> Which papers does *Deep learning* by LeCun, Bengio and Hinton build on, and which later
+> papers cite it most?
+
+The assistant asks `get_details` for the related works, once in each direction:
+
+```json
+{ "doi": "10.1038/nature14539", "related": "references", "related_limit": 10 }
+```
+
+```json
+{ "doi": "10.1038/nature14539", "related": "cited_by", "related_limit": 10 }
+```
+
+Both answers come from OpenAlex: the total it counts, then a table of works with title, year,
+DOI, an open-access flag and how often each is cited, the most cited first. Every DOI in the
+table goes straight to `download`, or back into `get_details` to keep walking. `related_limit`
+runs from 1 to 25 and defaults to 10. A record with no DOI, or one Crossref did not confirm,
+says the list is not available, since OpenAlex is asked by DOI. With no key the lookups share
+the daily allowance OpenAlex grants an address, which `LIBGEN_MCP_OPENALEX_KEY` raises.
+
 ## Read and summarise one chapter
 
 > Summarise the chapter on amortized analysis in this book, and quote where it defines the
@@ -118,13 +169,19 @@ for the table of contents, top level only:
 { "md5": "<md5>", "outline": true, "max_depth": 1 }
 ```
 
-The outline gives each chapter's page, and the assistant reads from there:
+The outline numbers each entry and gives its page, and the assistant reads the chapter by its
+number, or by its title:
 
 ```json
-{ "md5": "<md5>", "start_page": 451, "max_pages": 20 }
+{ "md5": "<md5>", "section": "17" }
 ```
 
-When `has_more` is true it passes back the returned `cursor` for the next chunk. To find one
+A section read starts where the entry starts and stops where the next entry at the same or a
+higher level begins, and the answer's `section` field says how far the chapter reaches. When
+`has_more` is true it passes back the returned `cursor` for the next chunk of the same chapter,
+and `has_more` turns false at the chapter's end rather than the book's. A title that matches
+more than one entry, such as a recurring "Exercises", is refused with the matching entries
+listed, so the assistant can pick one by number. To find one
 passage rather than read sequentially, it searches inside the document:
 
 ```json
@@ -155,9 +212,10 @@ which title it registers that DOI to. Here they disagree: Crossref registers it 
 paper *Why Most Published Research Findings Are False*, so a record pairing it with the book
 comes back `doi_status: "mismatch"`, and its `provenance` line names the real work. When the
 catalog does not carry a DOI at all, Crossref's own metadata stands in, labelled
-`origin: "crossref"`. For a reference with no DOI, a search on its title in the `articles`
-collection, or the `get_paper` prompt with the reference as `citation`, finds the candidates
-to compare.
+`origin: "crossref"`, and a DOI Crossref does not know either, a DataCite dataset or a mEDRA
+article, gets the record its own registry serves through doi.org, labelled `origin: "doi.org"`.
+For a reference with no DOI, `get_details` with the reference as `citation` finds the DOI it
+names, or lists the candidates to compare when none clearly matches.
 
 ## Where to go next
 

@@ -92,7 +92,13 @@ anyone else to redistribute, so libgen-mcp keeps only records Gutenberg marks as
 domain and drops the rest. In every case the outcome is reported as a miss. A refusal is
 never dressed up as a file.
 
-All three refusals are checked by the
+A fourth refusal is about the record rather than the licence, and it is narrower. The
+`europepmc` source declines any article Europe PMC types as a retracted publication. It is
+the only source that checks: the chain then moves on, and another source further down may
+still serve a copy of the same paper, so check the article's retraction notice before
+relying on a file.
+
+Two of the licence refusals are also checked by the
 [evaluation suite](https://jmrplens.github.io/libgen-mcp/eval-results/) against the live
 services, not only by unit tests: scenario S53 asserts that OAPEN refuses an identifier it
 does not hold cleanly, and S55 that a lending-restricted Internet Archive book is refused
@@ -112,10 +118,11 @@ anything from the fact that a search returned it.
 
 Only the requests a tool call actually needs, and only to the services that call reaches.
 There is no analytics and no phone-home, and telemetry is off by default: the server
-contacts the Library Genesis mirrors and the specific search and download providers a call
-invokes, and nothing else. If you turn on its OpenTelemetry export, that goes to a collector
-you run, never to the maintainer. No email address is transmitted unless you set one
-yourself for the Unpaywall API, and per-call credentials are used for that request and never
+contacts the Library Genesis mirrors and the specific search, metadata and download
+providers a call invokes, and nothing else. If you turn on its OpenTelemetry export, that
+goes to a collector you run, never to the maintainer. No email address is transmitted
+unless you set one yourself, in `LIBGEN_MCP_UNPAYWALL_EMAIL`, and then only as the contact
+address Unpaywall and the scholarly APIs ask for, and per-call credentials are used for that request and never
 written to disk. The full list of destinations, per tool, is in the
 [privacy policy](../PRIVACY.md).
 

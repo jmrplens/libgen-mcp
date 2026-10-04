@@ -1,6 +1,6 @@
 # libgen-mcp
 
-Books and papers for your AI assistant: a [Model Context Protocol](https://modelcontextprotocol.io) server that searches, cites, downloads and reads across Library Genesis and the open-access web — arXiv, Crossref, OpenLibrary, Unpaywall, Europe PMC, the RFC Editor, Zenodo and more. Four tools (`search`, `get_details`, `download`, `read`), no account, no API key.
+Books and papers for your AI assistant: a [Model Context Protocol](https://modelcontextprotocol.io) server that searches, cites, downloads and reads across Library Genesis and the open-access web — arXiv, OpenAlex, Crossref, OpenLibrary, Unpaywall, Europe PMC, the RFC Editor, Zenodo and more. Four tools (`search`, `get_details`, `download`, `read`), no account, no API key.
 
 This is a .NET tool whose entry point is the native `libgen-mcp` binary (written in Go). The package you install is a pointer: it names one package per runtime identifier, and the SDK downloads only the one your host needs. Nothing here is .NET code and nothing is compiled at install time.
 

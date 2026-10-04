@@ -45,13 +45,17 @@ command is not found afterwards, that directory is not on your `PATH` —
 ## Tools
 
 - `search` — search the Library Genesis catalog, escalating to Anna's Archive
-  and the open-access providers (arXiv, Crossref, OpenLibrary, Project
-  Gutenberg, dblp, PubMed, ERIC) when the catalog comes up empty.
-- `get_details` — full metadata for a record by md5, edition/file id or DOI,
-  with an optional BibTeX/RIS citation export.
-- `download` — resolve and download a book (by md5) or article (by DOI) through
-  an ordered source chain with transparent failover.
-- `read` — extract text, search within, and outline a downloaded PDF/EPUB/TXT.
+  and the open-access providers (arXiv, OpenAlex, Europe PMC, Crossref,
+  OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) when the catalog comes up
+  empty, optionally bounded to a range of publication years.
+- `get_details` — full metadata for a record by md5, edition/file id, DOI or a
+  reference pasted as free text, with BibTeX and RIS exports, APA, MLA,
+  Chicago, Harvard, Vancouver, IEEE or CSL-JSON on request, and the works it
+  cites or that cite it.
+- `download` — resolve and download a book (by md5 or ISBN) or article (by DOI)
+  through an ordered source chain with transparent failover.
+- `read` — extract text, search within, outline, and read one chapter or
+  section of a downloaded PDF/EPUB/TXT.
 
 Four prompts (`acquire_book`, `research_topic`, `get_paper`,
 `download_troubleshoot`) turn common requests into ready-to-run tool plans.

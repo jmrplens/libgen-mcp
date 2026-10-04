@@ -56,15 +56,16 @@ belongs to `dnx`: `["libgen-mcp", "--", "--env-file", "/absolute/path/libgen.env
 
 ### Keys and other settings
 
-The server needs no configuration, and nothing on this page sets any. Three optional
-settings are credentials, each of which turns on a source the keyless server leaves off or
-slow:
+The server needs no configuration, and nothing on this page sets any. Four optional
+settings are credentials, each of which lifts something the keyless server leaves off, slow
+or rationed:
 
-| Variable                     | What it enables                                                       |
-| ---------------------------- | --------------------------------------------------------------------- |
-| `LIBGEN_MCP_UNPAYWALL_EMAIL` | the `unpaywall` source, which needs a contact address on every lookup |
-| `LIBGEN_MCP_CORE_KEY`        | the `core` source, with a free API key from core.ac.uk                |
-| `LIBGEN_MCP_ANNAS_KEY`       | Anna's Archive member downloads, with a paid membership's secret key  |
+| Variable                     | What it enables                                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------------------------------- |
+| `LIBGEN_MCP_UNPAYWALL_EMAIL` | the `unpaywall` source, which needs a contact address on every lookup                             |
+| `LIBGEN_MCP_CORE_KEY`        | the `core` source, with a free API key from core.ac.uk                                            |
+| `LIBGEN_MCP_ANNAS_KEY`       | Anna's Archive member downloads, with a paid membership's secret key                              |
+| `LIBGEN_MCP_OPENALEX_KEY`    | a larger daily OpenAlex allowance for search and related works, with a free key from openalex.org |
 
 They have no command-line flags, on purpose: a secret in an argument is visible to every
 user on the machine through `ps`. Give them to the server in one of three ways, highest

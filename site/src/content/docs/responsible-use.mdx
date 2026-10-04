@@ -70,7 +70,7 @@ head:
             "name": "What does libgen-mcp send, and to whom?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Only the requests a tool call actually needs, and only to the services that call reaches. There is no analytics and no phone-home, and telemetry is off by default: the server contacts the Library Genesis mirrors and the specific search and download providers a call invokes, and nothing else. If you turn on its OpenTelemetry export, that goes to a collector you run, never to the maintainer. No email address is transmitted unless you set one yourself for the Unpaywall API, and per-call credentials are used for that request and never written to disk. The full list of destinations, per tool, is in the privacy policy."
+              "text": "Only the requests a tool call actually needs, and only to the services that call reaches. There is no analytics and no phone-home, and telemetry is off by default: the server contacts the Library Genesis mirrors and the specific search, metadata and download providers a call invokes, and nothing else. If you turn on its OpenTelemetry export, that goes to a collector you run, never to the maintainer. No email address is transmitted unless you set one yourself, in LIBGEN_MCP_UNPAYWALL_EMAIL, and then only as the contact address Unpaywall and the scholarly APIs ask for, and per-call credentials are used for that request and never written to disk. The full list of destinations, per tool, is in the privacy policy."
             }
           },
           {
@@ -152,7 +152,9 @@ the chain, never promote a fallback above the open-access providers.
 
 Three refusals are implemented in the sources themselves, and each one costs a result rather than gaining one. OAPEN's search is free text with no exact-identifier mode, so a request for an identifier OAPEN does not hold would otherwise return an unrelated monograph; libgen-mcp checks the item's own recorded DOI or ISBN against the identifier you asked for and serves nothing when they disagree. Internet Archive book items are often controlled-digital-lending copies that advertise ordinary PDF and EPUB files, so libgen-mcp requires an item to carry no access-restricted-item flag and to belong to neither the `inlibrary` nor the `printdisabled` collection before it will download it. Project Gutenberg hosts some in-copyright texts with the rightsholder's permission, which are not free for anyone else to redistribute, so libgen-mcp keeps only records Gutenberg marks as public domain and drops the rest. In every case the outcome is reported as a miss. A refusal is never dressed up as a file.
 
-All three refusals are checked by the [evaluation suite](/libgen-mcp/eval-results/) against
+A fourth refusal is about the record rather than the licence, and it is narrower. The `europepmc` source declines any article Europe PMC types as a retracted publication. It is the only source that checks: the chain then moves on, and another source further down may still serve a copy of the same paper, so check the article's retraction notice before relying on a file.
+
+Two of the licence refusals are also checked by the [evaluation suite](/libgen-mcp/eval-results/) against
 the live services, not only by unit tests: scenario S53 asserts that OAPEN
 refuses an identifier it does not hold cleanly, and S55 that a lending-restricted
 Internet Archive book is refused rather than served.
@@ -163,7 +165,7 @@ No, and you should not read it that way. When search escalates beyond the Librar
 
 ## What does libgen-mcp send, and to whom?
 
-Only the requests a tool call actually needs, and only to the services that call reaches. There is no analytics and no phone-home, and telemetry is off by default: the server contacts the Library Genesis mirrors and the specific search and download providers a call invokes, and nothing else. If you turn on its OpenTelemetry export, that goes to a collector you run, never to the maintainer. No email address is transmitted unless you set one yourself for the Unpaywall API, and per-call credentials are used for that request and never written to disk. The full list of destinations, per tool, is in the [privacy policy](/libgen-mcp/privacy/).
+Only the requests a tool call actually needs, and only to the services that call reaches. There is no analytics and no phone-home, and telemetry is off by default: the server contacts the Library Genesis mirrors and the specific search, metadata and download providers a call invokes, and nothing else. If you turn on its OpenTelemetry export, that goes to a collector you run, never to the maintainer. No email address is transmitted unless you set one yourself, in `LIBGEN_MCP_UNPAYWALL_EMAIL`, and then only as the contact address Unpaywall and the scholarly APIs ask for, and per-call credentials are used for that request and never written to disk. The full list of destinations, per tool, is in the [privacy policy](/libgen-mcp/privacy/).
 
 ## How do I report a concern?
 

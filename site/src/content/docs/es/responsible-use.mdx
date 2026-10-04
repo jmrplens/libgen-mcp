@@ -70,7 +70,7 @@ head:
             "name": "¿Qué envía libgen-mcp, y a quién?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Solo las peticiones que una llamada de herramienta necesita realmente, y solo a los servicios que esa llamada alcanza. No hay analítica ni llamadas a casa, y la telemetría está apagada por defecto: el servidor contacta con los mirrors de Library Genesis y con los proveedores concretos de búsqueda y descarga que invoca la llamada, y con nada más. Si activas su exportación OpenTelemetry, va a un colector que ejecutas tú, nunca al mantenedor. No se transmite ninguna dirección de correo salvo que la configures tú para la API de Unpaywall, y las credenciales por llamada se usan para esa petición y nunca se escriben en disco. La lista completa de destinos, herramienta por herramienta, está en la política de privacidad."
+              "text": "Solo las peticiones que una llamada de herramienta necesita realmente, y solo a los servicios que esa llamada alcanza. No hay analítica ni llamadas a casa, y la telemetría está apagada por defecto: el servidor contacta con los mirrors de Library Genesis y con los proveedores concretos de búsqueda, metadatos y descarga que invoca la llamada, y con nada más. Si activas su exportación OpenTelemetry, va a un colector que ejecutas tú, nunca al mantenedor. No se transmite ninguna dirección de correo salvo que la configures tú, en LIBGEN_MCP_UNPAYWALL_EMAIL, y entonces solo como la dirección de contacto que piden Unpaywall y las API académicas, y las credenciales por llamada se usan para esa petición y nunca se escriben en disco. La lista completa de destinos, herramienta por herramienta, está en la política de privacidad."
             }
           },
           {
@@ -154,7 +154,9 @@ abierto.
 
 Hay tres rechazos implementados en las propias fuentes, y cada uno cuesta un resultado en lugar de ganarlo. La búsqueda de OAPEN es de texto libre y no tiene modo de identificador exacto, así que una petición de un identificador que OAPEN no posee devolvería una monografía sin relación; libgen-mcp compara el DOI o ISBN que el propio ítem declara con el identificador que has pedido y no sirve nada cuando no coinciden. Los libros de Internet Archive son a menudo copias de préstamo digital controlado que anuncian ficheros PDF y EPUB normales, así que libgen-mcp exige que el ítem no lleve la marca `access-restricted-item` y que no pertenezca ni a la colección `inlibrary` ni a `printdisabled` antes de descargarlo. Project Gutenberg aloja algunos textos protegidos con permiso del titular de derechos, que no son libres para que los redistribuya nadie más, así que libgen-mcp conserva solo los registros que Gutenberg marca como dominio público y descarta el resto. En todos los casos el resultado se informa como una ausencia. Un rechazo nunca se disfraza de fichero.
 
-Los tres rechazos los comprueba la [suite de evaluación](/libgen-mcp/es/eval-results/) contra
+Un cuarto rechazo tiene que ver con el registro y no con la licencia, y es más estrecho. La fuente `europepmc` declina cualquier artículo que Europe PMC clasifica como publicación retractada. Es la única fuente que lo comprueba: la cadena sigue después, y otra fuente más abajo puede servir aun así una copia del mismo artículo, así que consulta el aviso de retractación del artículo antes de fiarte de un fichero.
+
+Dos de los rechazos por licencia los comprueba además la [suite de evaluación](/libgen-mcp/es/eval-results/) contra
 los servicios en vivo, no solo los tests unitarios: el escenario S53 verifica que
 OAPEN rechaza limpiamente un identificador que no posee, y el S55 que un libro de
 Internet Archive restringido a préstamo se rechaza en lugar de servirse.
@@ -165,7 +167,7 @@ No, y no deberías leerlo así. Cuando la búsqueda escala más allá del catál
 
 ## ¿Qué envía libgen-mcp, y a quién?
 
-Solo las peticiones que una llamada de herramienta necesita realmente, y solo a los servicios que esa llamada alcanza. No hay analítica ni llamadas a casa, y la telemetría está apagada por defecto: el servidor contacta con los mirrors de Library Genesis y con los proveedores concretos de búsqueda y descarga que invoca la llamada, y con nada más. Si activas su exportación OpenTelemetry, va a un colector que ejecutas tú, nunca al mantenedor. No se transmite ninguna dirección de correo salvo que la configures tú para la API de Unpaywall, y las credenciales por llamada se usan para esa petición y nunca se escriben en disco. La lista completa de destinos, herramienta por herramienta, está en la [política de privacidad](/libgen-mcp/es/privacy/).
+Solo las peticiones que una llamada de herramienta necesita realmente, y solo a los servicios que esa llamada alcanza. No hay analítica ni llamadas a casa, y la telemetría está apagada por defecto: el servidor contacta con los mirrors de Library Genesis y con los proveedores concretos de búsqueda, metadatos y descarga que invoca la llamada, y con nada más. Si activas su exportación OpenTelemetry, va a un colector que ejecutas tú, nunca al mantenedor. No se transmite ninguna dirección de correo salvo que la configures tú, en `LIBGEN_MCP_UNPAYWALL_EMAIL`, y entonces solo como la dirección de contacto que piden Unpaywall y las API académicas, y las credenciales por llamada se usan para esa petición y nunca se escriben en disco. La lista completa de destinos, herramienta por herramienta, está en la [política de privacidad](/libgen-mcp/es/privacy/).
 
 ## ¿Cómo comunico un problema?
 

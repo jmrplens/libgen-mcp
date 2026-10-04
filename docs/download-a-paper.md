@@ -38,6 +38,10 @@ Two optional settings each add one source to the chain:
   checking that it still serves a PDF. The key is sent to CORE's API and nowhere else. See
   [Configuration](configuration.md#libgen_mcp_core_key).
 
+`LIBGEN_MCP_OPENALEX_KEY` is not one of them. The lookup the `openalex` source makes, one work
+by its DOI, costs nothing against OpenAlex's daily allowance with or without a key, so a key
+changes nothing about downloads. It matters to search and to `get_details`' related works.
+
 Files are saved to `LIBGEN_MCP_DOWNLOAD_DIR`, which defaults to `~/Downloads` on the machine
 running the server.
 
@@ -60,7 +64,9 @@ running the server.
 
    There is no need to search first: `download` accepts a DOI directly. If your client
    offers MCP prompts, the `get_paper` prompt with the same DOI gives the model the same
-   plan.
+   plan. If all you have is the reference as text, copied from a bibliography, the model
+   can pass it to `get_details` as `citation` first: that resolves it through Crossref to
+   the DOI of the work it names, or lists the candidates when none clearly matches.
 
 3. **The model calls `download` with the DOI.**
 
@@ -111,7 +117,8 @@ running the server.
 
    A `path` is read straight from disk and nothing is fetched, whereas `read` with the `doi`
    would run the chain again to fetch its own copy. `find` returns the passages that match a
-   phrase, and `outline` the table of contents. The file must sit in the download directory,
+   phrase, `outline` the table of contents, and `section` one entry of it, by its number or
+title. The file must sit in the download directory,
    the working directory, the temporary directory or a directory listed in
    `LIBGEN_MCP_ALLOWED_READ_DIRS`, which the default download directory satisfies. `read`
    runs no OCR, so a scanned PDF comes back as `extractable: false` with a reason. When the
@@ -127,9 +134,9 @@ running the server.
 When every source that can serve the DOI declines, `download` saves nothing and returns an
 error that opens with "Download failed — no file was saved." and lists one line per source
 it tried: `source <name>:` followed by that source's reason. The reasons come in two kinds.
-An answer about the paper, such as `is not open access` or
-`the publisher deposited no full-text PDF link`, means that provider has no copy it can
-serve. A transport error, a timeout or an HTTP 5xx or 429 is a statement about the provider
+An answer about the paper, such as `is not open access`,
+`the publisher deposited no full-text PDF link` or Europe PMC's `is a retracted publication`,
+means that provider has no copy it can serve. A transport error, a timeout or an HTTP 5xx or 429 is a statement about the provider
 instead, and that provider is set aside for five minutes: a repeat within that time skips
 it, unless every source is set aside, and the list of errors comes back shorter.
 [Troubleshooting](troubleshooting.md#article-not-found-open-access-vs-sci-hub) goes through
