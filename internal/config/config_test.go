@@ -374,7 +374,9 @@ func TestLoadUnpaywallEmailOverride(t *testing.T) {
 
 // TestValidateBadUnpaywallEmail covers rejected Unpaywall contact emails.
 func TestValidateBadUnpaywallEmail(t *testing.T) {
-	cases := []string{"no-at-sign", "no-dot@localhost", "trailing@dot."}
+	// The last three would carry a parenthesis into the User-Agent comment the
+	// contact rides in, which the off-origin strip could then leave half behind.
+	cases := []string{"no-at-sign", "no-dot@localhost", "trailing@dot.", "a)b@c.d", "a(b@c.d", "me@example.org) (x"}
 	for _, bad := range cases {
 		t.Run(bad, func(t *testing.T) {
 			cfg := validConfig(t)
