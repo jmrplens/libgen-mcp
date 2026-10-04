@@ -946,3 +946,67 @@ func TestOutline_NCXHrefNoMatch(t *testing.T) {
 		t.Errorf("want no entries when the spine toc id matches nothing, got %+v", res.Entries)
 	}
 }
+
+// TestOutline_EPUB3NavShapes pins how a nav document is read where its markup
+// strays from the simplest shape: an element in a list that is not an <li> is
+// not an entry, nesting is read from an <ol> and nothing else (EPUB 3 nav uses
+// <ol>), a link's href is found whatever attributes come before it, the nav
+// typed toc wins over a landmarks nav that precedes it and over one whose id
+// merely says toc, and a document with no typed nav reads its first <nav>, not
+// the first list in the document.
+func TestOutline_EPUB3NavShapes(t *testing.T) {
+	for _, tc := range []struct {
+		name, nav, want, wantTarget string
+	}{
+		{
+			name: "a stray element in a list",
+			nav: `<nav epub:type="toc"><ol><div><a href="chapter1.xhtml">Stray</a></div>` +
+				`<li><a href="chapter1.xhtml">One</a></li></ol></nav>`,
+			want: "0 0 One\n",
+		},
+		{
+			name: "a nested list that is not an ol",
+			nav: `<nav epub:type="toc"><ol><li><a href="chapter1.xhtml">One</a>` +
+				`<ul><li><a href="chapter1.xhtml#s">Not nested</a></li></ul></li></ol></nav>`,
+			want: "0 0 One\n",
+		},
+		{
+			name:       "an attribute before the href",
+			nav:        `<nav epub:type="toc"><ol><li><a class="entry" href="chapter1.xhtml#part">Classed</a></li></ol></nav>`,
+			want:       "0 0 Classed\n",
+			wantTarget: "OEBPS/chapter1.xhtml#part",
+		},
+		{
+			name: "a landmarks nav first",
+			nav: `<nav epub:type="landmarks"><ol><li><a href="chapter1.xhtml">Landmark</a></li></ol></nav>` +
+				`<nav epub:type="toc"><ol><li><a href="chapter1.xhtml">Contents entry</a></li></ol></nav>`,
+			want: "0 0 Contents entry\n",
+		},
+		{
+			name: "a nav whose id says toc first",
+			nav: `<nav id="toc"><ol><li><a href="chapter1.xhtml">Id only</a></li></ol></nav>` +
+				`<nav epub:type="toc"><ol><li><a href="chapter1.xhtml">Typed</a></li></ol></nav>`,
+			want: "0 0 Typed\n",
+		},
+		{
+			name: "no typed nav, and a list before it",
+			nav: `<ol><li><a href="chapter1.xhtml">Outside</a></li></ol>` +
+				`<nav><ol><li><a href="chapter1.xhtml">Inside</a></li></ol></nav>`,
+			want: "0 0 Inside\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := writeEPUB(t, t.TempDir(), "nav.epub", epub3NavFiles(tc.nav))
+			res, err := Outline(context.Background(), openFile(t, path))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := entryLines(res.Entries); got != tc.want {
+				t.Errorf("outline:\n%s\nwant:\n%s", got, tc.want)
+			}
+			if tc.wantTarget != "" && (len(res.Entries) == 0 || res.Entries[0].target != tc.wantTarget) {
+				t.Errorf("entries = %+v, want the first to point at %q", res.Entries, tc.wantTarget)
+			}
+		})
+	}
+}

@@ -70,6 +70,24 @@ func TestExtract_TXTOverCapMarksTruncated(t *testing.T) {
 	}
 }
 
+// TestExtract_TXTAtTheCapIsWhole is the other side of the cap: a file of
+// exactly maxTextFileBytes is read whole, so nothing is said about a cap it did
+// not exceed.
+func TestExtract_TXTAtTheCapIsWhole(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "at-cap.txt")
+	if err := os.WriteFile(path, bytes.Repeat([]byte("a"), maxTextFileBytes), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Extract(context.Background(), openFile(t, path), Req{MaxChars: maxTextFileBytes})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Truncated || strings.Contains(c.Reason, "extraction cap") || c.CharEnd != maxTextFileBytes {
+		t.Errorf("a file at the cap must be read whole and not flagged, got Truncated=%t CharEnd=%d Reason=%q",
+			c.Truncated, c.CharEnd, c.Reason)
+	}
+}
+
 // TestExtract_TXTOffsetPastEnd verifies that an Offset at or beyond the end of
 // the file yields an empty chunk with no remaining content, rather than an
 // error or an out-of-range slice.

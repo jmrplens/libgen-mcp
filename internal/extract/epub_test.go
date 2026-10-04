@@ -512,26 +512,7 @@ func TestExtract_EPUBNoExtractableText(t *testing.T) {
 // oversized chapter is built in-test to avoid committing a large fixture.
 func TestExtract_EPUBOverCapTruncated(t *testing.T) {
 	big := "<html><body><p>" + strings.Repeat("a", maxTextFileBytes+1) + "</p></body></html>"
-	files := map[string]string{
-		"META-INF/container.xml": `<?xml version="1.0"?>
-<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
-  <rootfiles>
-    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
-  </rootfiles>
-</container>`,
-		"OEBPS/content.opf": `<?xml version="1.0" encoding="utf-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
-  <metadata/>
-  <manifest>
-    <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
-  </manifest>
-  <spine>
-    <itemref idref="c1"/>
-  </spine>
-</package>`,
-		"OEBPS/chapter1.xhtml": big,
-	}
-	path := writeEPUB(t, t.TempDir(), "oversized.epub", files)
+	path := writeEPUB(t, t.TempDir(), "oversized.epub", oneChapterEPUB(big))
 	c, err := Extract(context.Background(), openFile(t, path), Req{MaxChars: 100})
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
@@ -548,5 +529,45 @@ func TestExtract_EPUBOverCapTruncated(t *testing.T) {
 	// Sanity: the clipped chapter still yields some extracted text.
 	if len([]rune(c.Text)) == 0 {
 		t.Error("expected some extracted text from the clipped chapter")
+	}
+}
+
+// TestExtract_EPUBAtTheCapIsWhole is the other side of the cap: a chapter
+// document of exactly maxTextFileBytes is read whole, so nothing is said about
+// a cap it did not exceed.
+func TestExtract_EPUBAtTheCapIsWhole(t *testing.T) {
+	const open, closing = "<html><body><p>", "</p></body></html>"
+	chapter := open + strings.Repeat("a", maxTextFileBytes-len(open)-len(closing)) + closing
+	path := writeEPUB(t, t.TempDir(), "at-cap.epub", oneChapterEPUB(chapter))
+	c, err := Extract(context.Background(), openFile(t, path), Req{MaxChars: 100})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if strings.Contains(c.Reason, "extraction cap") {
+		t.Errorf("a chapter at the cap must not be flagged, got Reason=%q", c.Reason)
+	}
+}
+
+// oneChapterEPUB is the file set of an EPUB 3 whose spine is one chapter
+// document, chapter1.xhtml, holding chapter.
+func oneChapterEPUB(chapter string) map[string]string {
+	return map[string]string{
+		"META-INF/container.xml": `<?xml version="1.0"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`,
+		"OEBPS/content.opf": `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
+  <metadata/>
+  <manifest>
+    <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="c1"/>
+  </spine>
+</package>`,
+		"OEBPS/chapter1.xhtml": chapter,
 	}
 }

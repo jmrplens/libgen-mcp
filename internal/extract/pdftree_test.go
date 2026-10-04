@@ -1,6 +1,7 @@
 package extract
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -241,5 +242,37 @@ func TestWalkPageTree_KidBudget(t *testing.T) {
 	}
 	if generous >= maxPageTreeKids {
 		t.Error("the walk should have spent budget on the document's pages")
+	}
+}
+
+// TestWalkPageTree_ExactBudget pins the kid budget at its edge on a two-page
+// tree: a budget of two inspections walks it, and a budget of one, spent on the
+// first page, refuses it at the second.
+func TestWalkPageTree_ExactBudget(t *testing.T) {
+	data := buildPDF([]string{
+		"<</Type/Catalog/Pages 2 0 R>>",
+		"<</Type/Pages/Kids[3 0 R 4 0 R]/Count 2>>",
+		"<</Type/Page>>",
+		"<</Type/Page>>",
+	})
+	r, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := r.Trailer().Key("Root").Key("Pages")
+	for _, tc := range []struct {
+		name   string
+		budget int
+		want   bool
+	}{
+		{"one inspection per kid", 2, true},
+		{"one inspection short", 1, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			kids := tc.budget
+			if got := walkPageTree(root, 0, &kids); got != tc.want {
+				t.Errorf("walkPageTree with a budget of %d = %t, want %t", tc.budget, got, tc.want)
+			}
+		})
 	}
 }

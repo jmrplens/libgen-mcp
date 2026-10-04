@@ -500,6 +500,33 @@ func TestOutline_PDFDamagedOutline(t *testing.T) {
 	}
 }
 
+// TestOutline_PDFCyclicPageTreeWithAnOutline holds the outline read to the
+// page-tree pre-flight even when the file has an outline to offer: a /Pages
+// node that lists itself is refused with the shared diagnosis, as every mode
+// refuses it, and no entry is returned from a document no mode can read.
+func TestOutline_PDFCyclicPageTreeWithAnOutline(t *testing.T) {
+	data := buildPDF([]string{
+		"<</Type/Catalog/Pages 2 0 R/Outlines 3 0 R>>",
+		"<</Type/Pages/Kids[2 0 R]/Count 1>>",
+		"<</Type/Outlines/First 4 0 R>>",
+		"<</Title(A chapter)/Dest[2 0 R/Fit]>>",
+	})
+	f := openFile(t, writeBytes(t, t.TempDir(), "cycle.pdf", data))
+	var (
+		res OutlineResult
+		err error
+	)
+	mustReturnWithin(t, 10*time.Second, "Outline", func() {
+		res, err = Outline(context.Background(), f)
+	})
+	if err != nil {
+		t.Fatalf("Outline: %v", err)
+	}
+	if len(res.Entries) != 0 || res.Extractable || res.Reason != cyclicPDFReason {
+		t.Errorf("want no entries and the cyclic page-tree reason, got %+v", res)
+	}
+}
+
 // TestOutline_PDFTruncatedFile covers the commonest damaged file, an
 // interrupted download: the first 5,000 bytes of the sections fixture. It is
 // reported as damaged, in the words the text path uses, and not as a document

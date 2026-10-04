@@ -692,3 +692,18 @@ func TestHTMLText_SkipsTheTitleAndRecordsAnchors(t *testing.T) {
 		t.Errorf("anchors = %v, want %v", got, want)
 	}
 }
+
+// TestHTMLText_AStrayCloseAndAnEmptyId covers two malformed inputs: a closing
+// </title> with no opening one before it must not make the next <title> count
+// as text, and an element whose id is empty names no anchor.
+func TestHTMLText_AStrayCloseAndAnEmptyId(t *testing.T) {
+	doc := `<html><body></title>stray<title>Head</title><p id="">ab</p><p id="c">cd</p></body></html>`
+	got := map[string]int{}
+	text := htmlText(strings.NewReader(doc), func(id string, at int) { got[id] = at })
+	if text != "strayabcd" {
+		t.Errorf("text = %q, want %q", text, "strayabcd")
+	}
+	if len(got) != 1 || got["c"] != 7 {
+		t.Errorf("anchors = %v, want only c at 7", got)
+	}
+}
