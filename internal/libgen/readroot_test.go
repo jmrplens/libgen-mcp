@@ -38,6 +38,16 @@ func backdate(t *testing.T, path string) {
 	}
 }
 
+// oldDir makes a directory at path, backdated past the grace, and returns it.
+func oldDir(t *testing.T, path string) string {
+	t.Helper()
+	if err := os.Mkdir(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	backdate(t, path)
+	return path
+}
+
 // holdRoot makes a read root under tmp the way a live process leaves one: the
 // directory, with its lock held on a descriptor this test owns until it ends.
 // It is backdated, so only the lock keeps it. It returns the root's path.
@@ -417,14 +427,8 @@ func TestSweepReadRoots(t *testing.T) {
 	deadA, deadB := deadRoot(t, tmp), deadRoot(t, tmp)
 	live := holdRoot(t, tmp)
 	young := youngDeadRoot(t, tmp)
-	legacy := filepath.Join(tmp, legacyFetchPrefix+"123")
-	unrelated := filepath.Join(tmp, "someone-elses-dir")
-	for _, dir := range []string{legacy, unrelated} {
-		if err := os.Mkdir(dir, 0o700); err != nil {
-			t.Fatal(err)
-		}
-		backdate(t, dir)
-	}
+	legacy := oldDir(t, filepath.Join(tmp, legacyFetchPrefix+"123"))
+	unrelated := oldDir(t, filepath.Join(tmp, "someone-elses-dir"))
 	plainFile := filepath.Join(tmp, readRootPrefix+"file")
 	if err := os.WriteFile(plainFile, nil, 0o600); err != nil {
 		t.Fatal(err)
