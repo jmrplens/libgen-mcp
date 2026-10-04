@@ -797,7 +797,7 @@ jobs:
           fi
           for repo in "${repos[@]}"; do
             bash .github/scripts/verify-vex-attestation.sh "${repo}@${INDEX_DIGEST}" \
-              "$RUNNER_TEMP/vex/libgen-mcp.openvex.json" release.yml "refs/tags/${tag}"
+              "$RUNNER_TEMP/vex/libgen-mcp.openvex.json" "${tag}"
           done
 
       - name: Nothing to verify in a rehearsal

@@ -87,7 +87,10 @@ of any release target, built with that target's environment and flags. An
 advisory that names no package covers the whole module, which the binaries link,
 so it is reported `UNCHECKED` and fails too. The declaration's reason, which
 becomes the statement's `impact_statement`, says the same: the statement is
-false as soon as an `openpgp` package is linked.
+false as soon as an `openpgp` package is linked. The check is part of `make
+check-binary-vulns`, so it runs wherever that gate does: CI's `Release binaries`
+job on every pull request, the release's `binary-vulns` gate, the GoReleaser
+job's check of its own output, and the `vex` job below.
 
 **Every product is pinned to a version.** The products are the identifiers the
 scanners compute, measured rather than guessed. Trivy matches the main module's
@@ -103,6 +106,12 @@ the version in `VERSION`, so `check-vex` fails a version bump until
 `make gen-vex` has run, and it carries no OCI purl, because before the image is
 pushed there is no digest to pin it to.
 
+**The statement first ships with 2.2.1.** No earlier release carries it. Their
+GitHub releases are immutable, so no asset can be added to them. Attaching the
+statement to their published images afterwards was decided against: a dispatch
+workflow holding `id-token` for that one use is surface with no purpose once the
+next release carries it.
+
 Three jobs carry it through a release:
 
 - **`vex`** runs `make vex-release` after `binary-vulns` and `docker`. That
@@ -117,9 +126,11 @@ Three jobs carry it through a release:
   subjects as the SBOM (index and both platform manifests, on both registries),
   predicate type `https://openvex.dev/ns/v0.2.0`, `push-to-registry: true`.
   That is where `trivy image --vex oci` reads it. Skipped in a rehearsal.
-- **`release`** uploads the copy as the `libgen-mcp.openvex.json` asset before
-  the release is un-drafted, and attests its provenance on its own, since it is
-  written after `checksums.txt` is signed.
+- **`release`** uploads the copy as the `libgen-mcp.openvex.json` asset while
+  the release is still a draft, beside the `.mcpb` bundles and before "Publish
+  the release": once published, the release is immutable and accepts no asset.
+  It attests the asset's provenance on its own, since it is written after
+  `checksums.txt` is signed.
 
 **`verify-published` reads it back the way a scanner does.**
 `.github/scripts/verify-vex-attestation.sh` runs `gh attestation verify
@@ -127,10 +138,10 @@ Three jobs carry it through a release:
 workflow at this tag as the signer and the index digest as the subject, and
 at least one such bundle carrying exactly the release asset. Other OpenVEX
 bundles on the same digest are reported and not failed on: an attestation cannot
-be withdrawn, so an image attached again after the declarations changed keeps
-the earlier one, and requiring every bundle to match would fail forever after.
-An attestation that reached GitHub's store and not the registry is one no
-scanner sees, and fails there.
+be withdrawn, so a re-run of the signing job leaves one beside the first, and
+requiring every bundle to match would fail that release forever after. An
+attestation that reached GitHub's store and not the registry is one no scanner
+sees, and fails there.
 
 What was measured, on 2026-10-04 against the 2.2.0 image (which carries no
 statement): Trivy 0.75 reports GO-2026-5932 at `usr/local/bin/libgen-mcp` and
@@ -144,35 +155,6 @@ report the advisory against the binary at all. Docker Scout requires a Docker
 login even for a public image, so its reading of the statement is not measured;
 `docker scout attestation add` writes into the image index by default, which
 would move the digest `server.json` pins, and is deliberately not used.
-
-### Attaching it to a release published before it existed
-
-`.github/workflows/vex-attach.yml` attaches the statement to an image already
-published, without rebuilding it: an attestation changes the referrers of the
-index and its platform manifests, never the index, so the digest `server.json`,
-the MCP Registry and every client configuration pin is untouched. It is run by
-hand, from `main`, and a dry run is the default:
-
-```bash
-gh workflow run vex-attach.yml --ref main -f tag=v2.2.0                   # resolve, gate, write; attach nothing
-gh workflow run vex-attach.yml --ref main -f tag=v2.2.0 -f dry_run=false  # attach and verify
-```
-
-Its jobs keep the release's shape. `resolve` reads the index the tag points at
-on both registries, refuses them if they differ, and requires the release
-workflow's own cosign signature for that tag on it. It also refuses an attach
-dispatched from any ref but `main`, which would otherwise skip `attest` and
-finish green. `gate` runs `make vex-release` with `VEX_DIR` set to the tagged
-checkout: the whole gate, the linkage check included, on the tagged tree's six
-targets with `main`'s declarations and today's database, and the copy for that
-version and digest only if it passes. Both hold `contents: read` and no secret.
-`attest`, the only job with `id-token`, runs no build: it writes the six
-attestations and repairs the ghcr.io referrers fallback tags as `sign-attest`
-does. `verify` reads the statement back from both registries with the same
-script, requiring `vex-attach.yml` on `main` as the signer. Nothing is uploaded
-to the GitHub release, because a published release is immutable. The registry
-attestation is the copy of the statement for such a release, since the committed
-document names only the version in `VERSION`.
 
 ## What the GoReleaser job checks before anything leaves the draft
 

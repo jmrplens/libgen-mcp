@@ -201,7 +201,7 @@ La puerta de la release (`make check-binary-vulns`) falla ante cualquier aviso a
 La declaración se publica como una declaración [OpenVEX](https://openvex.dev), `not_affected` con la justificación `vulnerable_code_not_present`:
 
 - [`.vex/libgen-mcp.openvex.json`](https://github.com/jmrplens/libgen-mcp/blob/main/.vex/libgen-mcp.openvex.json), en el repositorio, nombra la release actual (la versión de `VERSION`) y ninguna otra. Se genera a partir de las declaraciones, y una comprobación de CI falla cuando las dos no coinciden, así que una declaración no puede sobrevivir a la evidencia que la sostiene.
-- Desde la release siguiente a la 2.2.0, cada release escribe su propia copia, fijada a su versión y al digest de su imagen, solo después de que la puerta haya pasado sobre esa release. Adjunta esa copia a la imagen en GHCR y en Docker Hub como attestation firmada y la publica como el asset `libgen-mcp.openvex.json` de la release.
+- Desde la 2.2.1, cada release escribe su propia copia, fijada a su versión y al digest de su imagen, solo después de que la puerta haya pasado sobre esa release. Adjunta esa copia a la imagen en GHCR y en Docker Hub como attestation firmada y la publica como el asset `libgen-mcp.openvex.json` de la release. Las releases hasta la 2.2.0 no llevan declaración propia.
 
 Todos los productos de ambos ficheros llevan versión, así que una declaración no puede suprimir el aviso en una release contra la que no se comprobó. Usa la copia que corresponde a la release que ejecutas.
 
@@ -215,7 +215,7 @@ Todos los productos de ambos ficheros llevan versión, así que una declaración
 Para comprobarlo tú mismo:
 
 ```bash
-# La declaración aplicada desde el registro (adjunta desde la release siguiente a la 2.2.0)
+# La declaración aplicada desde el registro (adjunta desde la 2.2.1)
 trivy image --vex oci --show-suppressed ghcr.io/jmrplens/libgen-mcp:latest
 
 # La declaración del repositorio, que nombra solo la release actual

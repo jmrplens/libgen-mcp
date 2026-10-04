@@ -361,10 +361,11 @@ The declaration is published as an [OpenVEX](https://openvex.dev) statement,
   repository names the current release (the version in `VERSION`) and nothing
   else. It is generated from the declarations, and a CI check fails when the two
   disagree, so a statement cannot outlive the evidence behind it.
-- From the release after 2.2.0, each release writes its own copy, pinned to its
-  version and image digest, only after the gate has passed on that release. It
-  attaches that copy to the image on GHCR and Docker Hub as a signed attestation
-  and publishes it as the `libgen-mcp.openvex.json` release asset.
+- From 2.2.1 on, each release writes its own copy, pinned to its version and
+  image digest, only after the gate has passed on that release. It attaches that
+  copy to the image on GHCR and Docker Hub as a signed attestation and publishes
+  it as the `libgen-mcp.openvex.json` release asset. Releases up to 2.2.0 carry
+  no statement of their own.
 
 Every product in either file carries a version, so a statement cannot suppress
 the finding on a release it was not checked against. Use the copy that belongs to
@@ -380,7 +381,7 @@ the release you run.
 To check it yourself:
 
 ```bash
-# The statement applied from the registry (attached from the release after 2.2.0)
+# The statement applied from the registry (attached from 2.2.1 on)
 trivy image --vex oci --show-suppressed ghcr.io/jmrplens/libgen-mcp:latest
 
 # The committed statement, which names the current release only

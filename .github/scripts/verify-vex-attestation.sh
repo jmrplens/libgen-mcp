@@ -3,33 +3,32 @@
 # verify-vex-attestation.sh holds an image's OpenVEX attestation to the
 # document it was made from, reading it the way a scanner does.
 #
-#   verify-vex-attestation.sh <image@sha256:digest> <expected.openvex.json> <workflow file> <source ref>
+#   verify-vex-attestation.sh <image@sha256:digest> <expected.openvex.json> <tag>
 #
 #   e.g. verify-vex-attestation.sh ghcr.io/jmrplens/libgen-mcp@sha256:... \
-#          dist/libgen-mcp.openvex.json release.yml refs/tags/v2.3.0
+#          dist/libgen-mcp.openvex.json v2.2.1
 #
 # The attestation is read from the registry's referrers (--bundle-from-oci),
 # never from GitHub's attestation store: Trivy's `--vex oci` reads the
 # registry, so an attestation present in the store and missing from the
-# registry is one no scanner sees. The bundle must verify against the named
-# workflow of this repository run from the named ref (release.yml from the tag
-# for a release, vex-attach.yml from main for an image published before
-# releases carried the statement), the statement must name the digest, and its
-# predicate must be the expected document once both are normalized by jq: a
-# copy that verifies and says something else is the failure this exists for.
+# registry is one no scanner sees. The bundle must verify against this
+# repository's release workflow run from refs/tags/<tag>, the statement must
+# name the digest, and its predicate must be the expected document once both
+# are normalized by jq: a copy that verifies and says something else is the
+# failure this exists for.
 #
 # It needs no credential. A public image's referrers and the Sigstore trust root
 # are both readable anonymously, so the job that runs it can hold nothing.
 set -euo pipefail
 
-if [ "$#" -ne 4 ]; then
-	echo "usage: verify-vex-attestation.sh <image@sha256:digest> <expected.openvex.json> <workflow file> <source ref>" >&2
+if [ "$#" -ne 3 ]; then
+	echo "usage: verify-vex-attestation.sh <image@sha256:digest> <expected.openvex.json> <tag>" >&2
 	exit 2
 fi
 ref="$1"
 expected="$2"
-workflow="jmrplens/libgen-mcp/.github/workflows/$3"
-source_ref="$4"
+workflow="jmrplens/libgen-mcp/.github/workflows/release.yml"
+source_ref="refs/tags/$3"
 
 case "$ref" in
 *@sha256:*) ;;
@@ -53,11 +52,11 @@ gh attestation verify "oci://${ref}" \
 
 digest="${ref##*@sha256:}"
 # At least one verified bundle must name this digest and carry exactly the
-# expected document. Others may legitimately exist beside it: a re-run leaves
-# an identical one, and an image attached again after the declarations
-# changed keeps the earlier statement, since an attestation cannot be
-# withdrawn. Those are reported, not failed on, because requiring every bundle
-# to match would make the check fail forever after a second attach.
+# expected document. Others may legitimately exist beside it: a re-run of the
+# signing job writes the statement again, with the document the re-run's vex
+# job wrote, and an attestation cannot be withdrawn. Those are reported, not
+# failed on, because requiring every bundle to match would make a release that
+# was re-run fail this check forever.
 count=$(jq 'length' "$out")
 if [ "${count:-0}" -lt 1 ]; then
 	echo "::error::no OpenVEX attestation on ${ref}" >&2
