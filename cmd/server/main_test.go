@@ -1819,9 +1819,9 @@ func registeredSurface(t *testing.T, httpAddr string) (names []string, instructi
 func hasTool(names []string, want string) bool { return slices.Contains(names, want) }
 
 // instructionStep matches the numbered workflow lines of the handshake
-// Instructions ("3. download — …"), whose leading word is a tool name the text
+// Instructions ("3. download: ..."), whose leading word is a tool name the text
 // is telling the model to call.
-var instructionStep = regexp.MustCompile(`(?m)^\d+\. (\w+) —`)
+var instructionStep = regexp.MustCompile(`(?m)^\d+\. (\w+):`)
 
 // assertInstructionsMatchSurface checks the handshake text and the tool list
 // agree: every tool the Instructions walk a model through must be one the
@@ -1920,7 +1920,7 @@ func TestRemoteDownloadsImpliesNoFetch(t *testing.T) {
 // paragraphs later is not enough — the numbered step is what a model follows.
 func TestInstructionsStateTheDownloadContract(t *testing.T) {
 	saves := serverInstructions(true, false)
-	if !strings.Contains(saves, "download — save the file") {
+	if !strings.Contains(saves, "download: save the file") {
 		t.Errorf("a saving deployment should say download saves the file; got:\n%s", saves)
 	}
 
