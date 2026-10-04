@@ -65,10 +65,10 @@ type ncxNavPoint struct {
 // Outline reads the open file f and returns its table of contents. It reads f
 // and never reopens the file by name; the caller keeps ownership of f. It
 // dispatches on the lowercased extension of f's name: EPUB outlines are parsed
-// natively; PDF outlines are
-// read best-effort via pdfcpu bookmarks; TXT has no outline; DjVu, comic
-// archives and proprietary e-book formats are reported as unsupported. A
-// canceled ctx yields the context error.
+// natively; PDF outlines are read from the document's bookmarks with the same
+// PDF reader the text path uses; TXT has no outline; DjVu, comic archives and
+// proprietary e-book formats are reported as unsupported. A canceled ctx
+// yields the context error.
 //
 // The whole read runs behind the time budget in guard.go, so a document no
 // parser can finish yields a not-extractable result rather than a call that

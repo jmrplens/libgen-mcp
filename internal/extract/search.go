@@ -146,7 +146,7 @@ func searchPDF(ctx context.Context, d document, query string, o SearchOpts) (res
 func scanPDFMatches(ctx context.Context, d document, query string, o SearchOpts) (SearchResult, error) {
 	r, err := pdf.NewReader(d.r, d.size)
 	if err != nil {
-		return SearchResult{Format: "pdf", Reason: invalidPDFReason(err)}, nil
+		return SearchResult{Format: "pdf", Reason: openPDFReason(err)}, nil
 	}
 
 	if cyclic := pageTreeReason(r); cyclic != "" {

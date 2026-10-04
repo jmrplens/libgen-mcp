@@ -15,8 +15,8 @@ import (
 // decided on a descriptor (internal/pathguard.OpenReadableFile), and a reader
 // that reopened the file by its name would read whatever the name resolves to
 // now, which a local principal writing in an allowed root can change after the
-// check. Every reader here — the PDF parser, the zip reader, pdfcpu, the text
-// leg and the format sniffer — reads from r, so nothing can reopen by name.
+// check. Every reader here — the PDF parser, the zip reader, the text leg and
+// the format sniffer — reads from r, so nothing can reopen by name.
 type document struct {
 	// name is the file's name, used for its extension and in a diagnosis only.
 	name string
@@ -34,12 +34,6 @@ func newDocument(f *os.File) (document, error) {
 		return document{}, fmt.Errorf("stat %s: %w", f.Name(), err)
 	}
 	return document{name: f.Name(), r: f, size: info.Size()}, nil
-}
-
-// section returns a fresh reader over the whole document, positioned at its
-// start, for readers that want a seeker of the document's recorded size.
-func (d document) section() *io.SectionReader {
-	return io.NewSectionReader(d.r, 0, d.size)
 }
 
 // prefix returns a fresh stream of at most limit bytes from the document's

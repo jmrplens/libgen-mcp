@@ -2,8 +2,10 @@ package extract
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/ledongthuc/pdf"
@@ -32,6 +34,80 @@ func invalidPDFReason(err error) string {
 	return fmt.Sprintf("not a valid PDF: %v", err)
 }
 
+// encryptedPDFReason is the diagnosis for a PDF the reader will not open
+// because of how it is encrypted. ledongthuc/pdf decrypts the standard security
+// handler's RC4 (V=1 and V=2) and its AES-128 crypt filter (V=4 with AESV2), and
+// nothing else: not AES-256 (V=5), not RC4 under crypt filters (V=4 with V2),
+// and not a certificate-based handler. Such a file is valid, so calling it
+// invalid would send the caller looking for a better copy of a file that is
+// fine. Shared so every read mode words it the same way.
+const encryptedPDFReason = "cannot read PDF: it is encrypted in a way this reader cannot decrypt " +
+	"(AES-256, RC4 under crypt filters, or a certificate-based security handler), " +
+	"so neither its text nor its table of contents can be read"
+
+// passwordPDFReason is the diagnosis for a PDF that needs a password to open.
+// The read tool takes none, so this is final for the file as it is. Shared so
+// every read mode words it the same way.
+const passwordPDFReason = "cannot read PDF: it needs a password to open, and this reader is given none, " +
+	"so neither its text nor its table of contents can be read"
+
+// damagedPDFReason is the diagnosis for a file that opens as a PDF and whose
+// structure the reader cannot follow: a truncated download, a cross-reference
+// table that does not lead to the objects, a trailer cut short. ledongthuc/pdf
+// does not rebuild a broken cross-reference table the way some viewers do, so
+// a file one of them repairs on opening is refused here, and the hint that
+// another copy may be intact is the useful part of the answer for a file this
+// server downloaded. Shared so every read mode words it the same way.
+func damagedPDFReason(err error) string {
+	return fmt.Sprintf("cannot read PDF: the file is damaged (%s), and this reader does not repair one, "+
+		"so neither its text nor its table of contents can be read; another copy of the file may be intact",
+		pdfErrorDetail(err))
+}
+
+// maxPDFErrorDetail bounds how much of the reader's own error a diagnosis
+// quotes. The reader's lexer puts the bytes it could not parse into its error,
+// up to a buffer's worth of whatever the file holds, which is noise to the
+// caller and untrusted text besides.
+const maxPDFErrorDetail = 120
+
+// pdfErrorDetail returns the reader's error as one short line: invalid UTF-8
+// and control characters become spaces, runs of them collapse, and anything
+// past maxPDFErrorDetail runes is cut and marked as cut.
+func pdfErrorDetail(err error) string {
+	detail := strings.Join(strings.FieldsFunc(strings.ToValidUTF8(err.Error(), " "), func(r rune) bool {
+		return unicode.IsSpace(r) || unicode.IsControl(r)
+	}), " ")
+	if utf8.RuneCountInString(detail) <= maxPDFErrorDetail {
+		return detail
+	}
+	return string([]rune(detail)[:maxPDFErrorDetail]) + "..."
+}
+
+// openPDFReason is the diagnosis for a file the PDF reader would not open.
+//
+// The reader reports a password it could not match with a sentinel, and the
+// rest only in its error's words. Every refusal of an encryption it does not
+// implement names the encryption ("unsupported PDF: encryption version V=5",
+// "256-bit encryption key" and the rest), and a file that does not even start
+// as a PDF is "not a PDF file: invalid header"; anything else opened as a PDF
+// and broke. The fixtures pin the matching: an AES-256 and an RC4 V=4 file are
+// held to encryptedPDFReason and a truncated one to damagedPDFReason, so a
+// release of the reader that words it differently fails a test rather than
+// changing a diagnosis in silence.
+func openPDFReason(err error) string {
+	msg := err.Error()
+	switch {
+	case errors.Is(err, pdf.ErrInvalidPassword):
+		return passwordPDFReason
+	case strings.Contains(msg, "encryption"):
+		return encryptedPDFReason
+	case strings.HasPrefix(msg, "not a PDF file: invalid header"):
+		return invalidPDFReason(err)
+	default:
+		return damagedPDFReason(err)
+	}
+}
+
 // malformedPDFReason is the diagnosis for a PDF that made the reader panic —
 // malformed or encrypted input. Shared so every read mode words it the same way.
 func malformedPDFReason(rec any) string {
@@ -55,7 +131,7 @@ func probePDFTextLayer(ctx context.Context, d document) (state pdfTextState, rea
 	}()
 	r, oerr := pdf.NewReader(d.r, d.size)
 	if oerr != nil {
-		return pdfTextUnreadable, invalidPDFReason(oerr), nil
+		return pdfTextUnreadable, openPDFReason(oerr), nil
 	}
 
 	if cyclic := pageTreeReason(r); cyclic != "" {
@@ -158,7 +234,7 @@ func readPDFRange(ctx context.Context, d document, pr pdfRange) (chunk Chunk, er
 func readPDFPages(ctx context.Context, d document, pr pdfRange) (Chunk, error) {
 	r, err := pdf.NewReader(d.r, d.size)
 	if err != nil {
-		return Chunk{Format: "pdf", Reason: invalidPDFReason(err)}, nil
+		return Chunk{Format: "pdf", Reason: openPDFReason(err)}, nil
 	}
 
 	if cyclic := pageTreeReason(r); cyclic != "" {

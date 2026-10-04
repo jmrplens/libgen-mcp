@@ -1,0 +1,26 @@
+%!PS-Adobe-3.0
+%%Title: outline targets fixture
+% The source of outline-targets.pdf. Regenerate it with:
+%   gs -q -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -dCompatibilityLevel=1.7 -sOutputFile=outline-targets.pdf outline-targets.ps
+% Five pages, and an outline that reaches its pages every way a producer
+% writes one: a named destination, a direct page, a closed item, a GoTo
+% action naming a destination, and a title in UTF-16. Two titles carry
+% control characters, a tab between a number and a title and a bell in the
+% middle of a word, which is what the title cleaning is tested on.
+/pg { /n exch def /Helvetica findfont 20 scalefont setfont 72 700 moveto (Page ) show n 3 string cvs show } def
+[ /Dest /intro /View [/XYZ null null null] /DEST pdfmark
+1 pg showpage
+[ /Dest /methods /View [/XYZ null null null] /DEST pdfmark
+2 pg showpage
+3 pg showpage
+[ /Dest /results /View [/XYZ null null null] /DEST pdfmark
+4 pg showpage
+5 pg showpage
+[ /Count 2 /Dest /intro /Title (Part I: named dest) /OUT pdfmark
+[ /Page 2 /View [/XYZ null null null] /Title (1.1 Direct page) /OUT pdfmark
+[ /Count -1 /Dest /methods /Title (1.2 Named, closed) /OUT pdfmark
+[ /Page 3 /View [/XYZ null null null] /Title (1.2.1 Deep) /OUT pdfmark
+[ /A << /S /GoTo /D (results) >> /Title (Part II: GoTo action) /OUT pdfmark
+[ /Page 5 /View [/Fit] /Title (\376\377\000E\000s\000p\000a\000\361\000o\000l) /OUT pdfmark
+[ /Page 4 /View [/Fit] /Title (3\tTabbed) /OUT pdfmark
+[ /Page 5 /View [/Fit] /Title (Bel\007l) /OUT pdfmark
