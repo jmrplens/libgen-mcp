@@ -44,7 +44,11 @@ const (
 
 	// vexModulePURL is the server's own main module, which Trivy reports as
 	// the root of every Go binary it reads, in an image or on its own.
-	vexModulePURL = "pkg:golang/github.com/jmrplens/libgen-mcp/v2"
+	vexModulePURL = golangPURLPrefix + "github.com/jmrplens/libgen-mcp/v2"
+
+	// golangPURLPrefix opens the purl of a Go module, which is how a
+	// statement names the module an advisory is filed against.
+	golangPURLPrefix = "pkg:golang/"
 
 	// vexImageName is the image's last path element, the name an OCI purl
 	// carries.
@@ -198,7 +202,7 @@ func vexStatements(declared map[string]declaration, rel *vexRelease) []vexStatem
 		for _, id := range products {
 			statement.Products = append(statement.Products, vexProduct{
 				ID:            id,
-				Subcomponents: []vexComponent{{ID: "pkg:golang/" + module}},
+				Subcomponents: []vexComponent{{ID: golangPURLPrefix + module}},
 			})
 		}
 		statements = append(statements, statement)
@@ -212,7 +216,7 @@ func statementKeys(s vexStatement) []string {
 	var keys []string
 	for _, product := range s.Products {
 		for _, sub := range product.Subcomponents {
-			module, isGo := strings.CutPrefix(sub.ID, "pkg:golang/")
+			module, isGo := strings.CutPrefix(sub.ID, golangPURLPrefix)
 			if module, _, _ = strings.Cut(module, "@"); !isGo || module == "" {
 				continue
 			}
@@ -241,7 +245,7 @@ func vexDrift(doc vexDocument, declared map[string]declaration) []string {
 
 	want := map[string]vexStatement{}
 	for _, s := range vexStatements(declared, nil) {
-		want[declarationKey(s.Vulnerability.Name, strings.TrimPrefix(s.Products[0].Subcomponents[0].ID, "pkg:golang/"))] = s
+		want[declarationKey(s.Vulnerability.Name, strings.TrimPrefix(s.Products[0].Subcomponents[0].ID, golangPURLPrefix))] = s
 	}
 	seen := map[string]bool{}
 	for _, s := range doc.Statements {
