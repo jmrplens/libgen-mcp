@@ -154,6 +154,33 @@ func TestRenderOutline_NoPageEntry(t *testing.T) {
 	}
 }
 
+// TestRenderOutline_AnEmptyOutlineSaysWhy covers the two arms of an empty
+// outline. With a reason, the reason is written beside the headline as inline
+// text, a line break in it folded so it cannot open a heading of its own,
+// because a document whose table of contents is damaged and one that has none
+// are both empty and only the reason tells them apart. With none, the headline
+// stands alone.
+func TestRenderOutline_AnEmptyOutlineSaysWhy(t *testing.T) {
+	for _, tc := range []struct {
+		name, reason, want string
+	}{
+		{
+			name:   "with a reason",
+			reason: "the embedded table of contents is damaged and could not be read\n# not a heading",
+			want:   "No table of contents found (pdf): the embedded table of contents is damaged and could not be read # not a heading\n",
+		},
+		{name: "without one", want: "No table of contents found (pdf).\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var b strings.Builder
+			renderOutline(&b, ReadOutput{Format: "pdf", Extractable: true, OutlineRequested: true, Reason: tc.reason})
+			if got := b.String(); got != tc.want {
+				t.Errorf("rendered = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestResultIdentifier covers the doi and empty arms of resultIdentifier that the
 // md5-keyed search fixtures never reach.
 func TestResultIdentifier(t *testing.T) {

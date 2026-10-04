@@ -369,7 +369,7 @@ func readNextSteps(out ReadOutput) []string {
 		}
 	case out.OutlineRequested:
 		steps = append(steps,
-			"This document has no embedded table of contents; read it sequentially or use find.",
+			"No table of contents could be listed for this document (the reason says whether it has none or a damaged one); read it sequentially or use find.",
 			"The outline is empty. Say so; do not present chapter titles that were not returned.")
 	case out.HasMore && findMode:
 		steps = append(steps, "Call read again with the same find and cursor=\""+out.Cursor+"\" for more matches.")

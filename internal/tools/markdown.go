@@ -487,9 +487,15 @@ func renderMatches(b *strings.Builder, out ReadOutput) {
 // number in brackets (what section takes) and with the (PDF) page in
 // parentheses when known. Entry titles are UNTRUSTED document/catalog content, so
 // each goes through mdInline. A zero-entry outline (a valid document with no
-// embedded TOC) renders an explicit "No table of contents found." line instead
-// of an empty list, so it can never be mistaken for a sequential read.
+// embedded TOC, or with one too damaged to read) renders an explicit "No table
+// of contents found" line, with the reason the reader gave, instead of an empty
+// list, so it can never be mistaken for a sequential read and a damaged table
+// of contents is not mistaken for a missing one.
 func renderOutline(b *strings.Builder, out ReadOutput) {
+	if len(out.Outline) == 0 && out.Reason != "" {
+		fmt.Fprintf(b, "No table of contents found (%s): %s\n", mdInline(out.Format), mdInline(out.Reason))
+		return
+	}
 	if len(out.Outline) == 0 {
 		fmt.Fprintf(b, "No table of contents found (%s).\n", mdInline(out.Format))
 		return
