@@ -41,7 +41,7 @@
         "LIBGEN_MCP_LOG_LEVEL": "${user_config.log_level}",
         "LIBGEN_MCP_UNPAYWALL_EMAIL": "${user_config.unpaywall_email}",
         "LIBGEN_MCP_CORE_KEY": "${user_config.core_key}",
-      "LIBGEN_MCP_OPENALEX_KEY": "${user_config.openalex_key}",
+        "LIBGEN_MCP_OPENALEX_KEY": "${user_config.openalex_key}",
         "LIBGEN_MCP_ENV_FILE": "${user_config.env_file}"
       },
       "platform_overrides": {

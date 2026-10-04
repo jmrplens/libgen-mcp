@@ -35,9 +35,67 @@
   "packages": [
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v2.1.0/libgen-mcp.mcpb",
-      "version": "2.1.0",
-      "fileSha256": "d49710eee80bfedf69919265aa26da5da56d7ac65ef4de541c9172f2d8d123b6",
+      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v2.2.0/libgen-mcp-darwin.mcpb",
+      "version": "2.2.0",
+      "fileSha256": "4985ad945c1d4dd1311daf16f7b74d965ec1315f2b9e4506aa9f1e9d45ad60d6",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "LIBGEN_MIRROR",
+          "description": "Force a specific libgen mirror base URL (default: auto-discovered, preferred https://libgen.li)",
+          "isRequired": false,
+          "placeholder": "https://libgen.li"
+        },
+        {
+          "name": "LIBGEN_MCP_DOWNLOAD_DIR",
+          "description": "Directory where the download tool saves files (default: ~/Downloads)",
+          "isRequired": false,
+          "placeholder": "~/Downloads"
+        },
+        {
+          "name": "LIBGEN_MCP_TIMEOUT",
+          "description": "Per-request HTTP timeout (default: 10s)",
+          "isRequired": false,
+          "default": "10s"
+        }
+      ]
+    },
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v2.2.0/libgen-mcp-windows.mcpb",
+      "version": "2.2.0",
+      "fileSha256": "2358b47a959bde863e825c02ac26f6fd4234e00600edd3d88c3edbd330819aa6",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "LIBGEN_MIRROR",
+          "description": "Force a specific libgen mirror base URL (default: auto-discovered, preferred https://libgen.li)",
+          "isRequired": false,
+          "placeholder": "https://libgen.li"
+        },
+        {
+          "name": "LIBGEN_MCP_DOWNLOAD_DIR",
+          "description": "Directory where the download tool saves files (default: ~/Downloads)",
+          "isRequired": false,
+          "placeholder": "~/Downloads"
+        },
+        {
+          "name": "LIBGEN_MCP_TIMEOUT",
+          "description": "Per-request HTTP timeout (default: 10s)",
+          "isRequired": false,
+          "default": "10s"
+        }
+      ]
+    },
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v2.2.0/libgen-mcp-linux.mcpb",
+      "version": "2.2.0",
+      "fileSha256": "5caedb6d716be3e5361b7867bd368bef5c940e18ad5df27de029b138a9747c3b",
       "transport": {
         "type": "stdio"
       },
@@ -64,7 +122,7 @@
     },
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/jmrplens/libgen-mcp:2.1.0@sha256:98854e3e78ce5f0e08a57ba69e3d8a8982a96190ac62539bc71ba1235e6519ec",
+      "identifier": "ghcr.io/jmrplens/libgen-mcp:2.2.0@sha256:150400bcb4b20a26b2a14d342a48dd314736e71390a096ba8a8c01b9b77a5a0e",
       "transport": {
         "type": "stdio"
       },
@@ -91,7 +149,7 @@
     },
     {
       "registryType": "oci",
-      "identifier": "docker.io/jmrplens/libgen-mcp:2.1.0@sha256:98854e3e78ce5f0e08a57ba69e3d8a8982a96190ac62539bc71ba1235e6519ec",
+      "identifier": "docker.io/jmrplens/libgen-mcp:2.2.0@sha256:150400bcb4b20a26b2a14d342a48dd314736e71390a096ba8a8c01b9b77a5a0e",
       "transport": {
         "type": "stdio"
       },
