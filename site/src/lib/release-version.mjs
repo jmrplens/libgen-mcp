@@ -28,7 +28,9 @@ import { readFileSync } from "node:fs";
 export const VERSION_TOKEN = "%%VERSION%%";
 
 /** What the VERSION file must hold: a release number, nothing around it. */
-const RELEASE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+// The prerelease suffix is non-empty fields joined by `.` or `-`, the same
+// shape cmd/gen_doc_versions accepts, so `2.1.0-..` is refused by both.
+const RELEASE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$/;
 
 /**
  * Reads the repository's VERSION file. Throws, rather than falling back, when

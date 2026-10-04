@@ -127,6 +127,12 @@ func TestRun_Refusals(t *testing.T) {
 			want:    `VERSION holds "next"`,
 		},
 		{
+			name:    "VERSION has an empty prerelease field",
+			version: "2.2.0-rc..1",
+			files:   map[string]string{},
+			want:    `VERSION holds "2.2.0-rc..1"`,
+		},
+		{
 			name:    "no Starlight pages",
 			version: "1.0.0",
 			files:   map[string]string{},

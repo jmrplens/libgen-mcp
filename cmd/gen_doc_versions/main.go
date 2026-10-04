@@ -29,7 +29,10 @@ const twinDir = "site/src/content/docs"
 var versionPattern = regexp.MustCompile(`\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?`)
 
 // releasePattern is what the VERSION file must hold.
-var releasePattern = regexp.MustCompile(`^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$`)
+// It is versionPattern anchored, so every value it accepts is one the scan
+// finds whole again: an empty prerelease field (`2.2.0-rc..1`) would be
+// written by a rewrite and then read back by --check as `2.2.0-rc`.
+var releasePattern = regexp.MustCompile(`^` + versionPattern.String() + `$`)
 
 // errStale reports that check mode found docs/ naming another release.
 var errStale = errors.New("docs/ disagrees with VERSION")
