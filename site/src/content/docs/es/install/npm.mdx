@@ -85,7 +85,7 @@ Tras una instalación global la orden es `libgen-mcp`:
 
 ```bash
 libgen-mcp --version
-# libgen-mcp 2.1.0 (commit 5493887)
+# libgen-mcp %%VERSION%% (commit <commit>)
 ```
 
 ## Verificar lo que instalaste
@@ -182,11 +182,11 @@ Un cliente que ya tiene el servidor en marcha conserva el proceso viejo hasta qu
 Nombra la versión allí donde nombras el paquete:
 
 ```bash
-npx -y @jmrp.io/libgen-mcp@2.1.0
-npm install -g @jmrp.io/libgen-mcp@2.1.0
+npx -y @jmrp.io/libgen-mcp@%%VERSION%%
+npm install -g @jmrp.io/libgen-mcp@%%VERSION%%
 ```
 
-En la configuración de un cliente es `"args": ["-y", "@jmrp.io/libgen-mcp@2.1.0"]`. Una entrada de `npx` fijada no se mueve hasta que la editas, que es lo que quieres cuando todo un equipo debe ejecutar el mismo servidor.
+En la configuración de un cliente es `"args": ["-y", "@jmrp.io/libgen-mcp@%%VERSION%%"]`. Una entrada de `npx` fijada no se mueve hasta que la editas, que es lo que quieres cuando todo un equipo debe ejecutar el mismo servidor.
 
 ## Desinstalar
 

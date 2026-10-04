@@ -41,7 +41,7 @@ Then:
 
 ```bash
 dnx libgen-mcp -- --version
-# libgen-mcp 2.1.0 (commit 5493887)
+# libgen-mcp 2.1.0 (commit <commit>)
 ```
 
 ## Verify what you installed

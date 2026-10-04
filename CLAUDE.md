@@ -991,6 +991,16 @@ Docs are **bilingual and kept in parity**:
 - The `tools` and `prompts` arrays in `lhm.plugin.json` are generated the same
   way by `go run ./cmd/gen_lhm_manifest/` (`make check-lhm-manifest` verifies).
   See the LobeHub section under Release Process for why they exist at all.
+- **The current release is a token on the site, a number in `docs/`.** A
+  Starlight page that shows how to pin the current release (`@jmrp.io/libgen-mcp@…`,
+  an image tag, `releases/download/v…/`, `--version` output) writes
+  `%%VERSION%%`, which `site/src/lib/release-version.mjs` replaces from
+  `VERSION` in the HTML, the Markdown copies and `llms-docs.txt`; the build fails
+  if one survives into `dist`. `docs/*.md` keeps the literal number, and
+  `make gen-doc-versions` rewrites exactly the spots where the English twin
+  holds the token (`make check-doc-versions` gates it). A version that is a
+  fact about the past — "up to 2.1.0", a changelog section, a measured build —
+  is never the token. A token in frontmatter is not replaced.
 - Architecture Decision Records live in `docs/decisions/`.
 
 ## Testing

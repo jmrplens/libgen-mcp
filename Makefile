@@ -7,7 +7,7 @@
         coverage-conditions coverage-mutants check-coverage-recipes \
         test test-short test-race test-e2e test-e2e-http test-e2e-stdio test-e2e-collector eval coverage cover-check \
         lint golangci-lint govulncheck check-binary-vulns test-binary-vulns godoc-check-binary-vulns analyze analyze-fix fmt tidy vet \
-        format-md-tables check-md-tables check-doc-links \
+        format-md-tables check-md-tables check-doc-links gen-doc-versions check-doc-versions \
         godoc-audit godoc-check \
         gen-llms check-llms gen-lhm-manifest check-lhm-manifest \
         gen-icon-webp check-icon-webp \
@@ -308,6 +308,7 @@ ANALYZE_STEPS = \
 	check-test-subtests \
 	check-test-goroutines \
 	check-md-tables \
+	check-doc-versions \
 	check-doc-links \
 	check-stats \
 	check-doc-names \
@@ -381,6 +382,15 @@ format-md-tables: ## Normalize Markdown pipe tables in README.md and docs/
 
 check-md-tables: ## Fail if any Markdown table needs formatting (CI mode)
 	go run ./cmd/format_md_tables/ --check
+
+# The table pass follows because a longer number (2.9.0 to 2.10.0) widens a
+# cell, and docs/ tables are held to their normalized widths.
+gen-doc-versions: ## Write VERSION into docs/ wherever the Starlight twin writes %%VERSION%%
+	go run ./cmd/gen_doc_versions/
+	go run ./cmd/format_md_tables/
+
+check-doc-versions: ## Fail if docs/ names another release where the Starlight twin writes %%VERSION%%
+	go run ./cmd/gen_doc_versions/ --check
 
 check-doc-links: ## Fail if any tracked Markdown/MDX local link, path or anchor is broken
 	node scripts/check-doc-links.mjs

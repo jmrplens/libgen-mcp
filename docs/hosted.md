@@ -114,7 +114,7 @@ curl -sS https://mcp.jmrp.io/libgen/health
 ```
 
 ```json
-{"status":"ok","version":"2.1.0","commit":"549388719c56a8622aebe62c90ad1ba45c34be4b","build":"2.1.0+5493887","config_digest":"baa37d9944ce","started_at":"2026-10-03T13:33:16Z","uptime_seconds":13509}
+{"status":"ok","version":"2.1.0","commit":"<commit>","build":"2.1.0+<short commit>","config_digest":"baa37d9944ce","started_at":"2026-10-03T13:33:16Z","uptime_seconds":13509}
 ```
 
 ## Limits a caller meets

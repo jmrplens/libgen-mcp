@@ -472,6 +472,13 @@ jobs:
       - name: Markdown tables are normalized
         if: env.FRESHNESS == 'checked'
         run: make check-md-tables
+      # The site writes %%VERSION%% where it shows the current release and the
+      # build fills it in; docs/ is read raw on GitHub and carries the number.
+      # This holds those spots to the VERSION file, so a bump that skipped
+      # `make gen-doc-versions` does not leave docs/ pinning the old release.
+      - name: docs/ names the VERSION file's release wherever the site pins it
+        if: env.FRESHNESS == 'checked'
+        run: make check-doc-versions
       # The README's counts are read from the source — the registered tools and
       # prompts, config.KnownSources, config.KnownEnvNames, and a walk of the
       # tree — so a sentence that says four when the server registers five is a

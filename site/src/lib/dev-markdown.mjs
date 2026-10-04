@@ -60,7 +60,7 @@ export function devMarkdown({ root, base }) {
 					if (!source) return next();
 
 					try {
-						const { labels, schema, chain } = loadInputs(root);
+						const { labels, schema, chain, version } = loadInputs(root);
 						const locale =
 							slug.startsWith("es/") || slug === "es" ? "es" : "en";
 						const markdown = absolutizeLinks(
@@ -69,6 +69,7 @@ export function devMarkdown({ root, base }) {
 								labels[locale],
 								schema,
 								chain,
+								version,
 							),
 							pageUrlFor(slug),
 						);

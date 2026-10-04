@@ -33,7 +33,15 @@ citation file. To cut a release:
    opening line, so a bump leaves them stale. They are **not** covered by
    `check-manifests` — `make check-llms` is the gate that catches it, in a
    different CI job.
-5. Open a PR; once merged, **rehearse it** (below), then tag `vX.Y.Z` on main to
+5. Run `make gen-doc-versions`. The Starlight pages write `%%VERSION%%` where
+   they show how to pin the current release, and the site build fills it in
+   from `VERSION`, so they need nothing. `docs/*.md` is read raw on GitHub and
+   carries the number: this rewrites exactly the spots where the English twin
+   holds the token, and leaves "up to 2.1.0" and the changelog's own sections
+   alone. `make check-doc-versions` (CI's `Generated docs` job) fails a bump
+   that skipped it. Release notes that add a new *current-release* example
+   write `%%VERSION%%` on the site pages and the literal number in `docs/`.
+6. Open a PR; once merged, **rehearse it** (below), then tag `vX.Y.Z` on main to
    trigger the release.
 
 ## Rehearsing a release

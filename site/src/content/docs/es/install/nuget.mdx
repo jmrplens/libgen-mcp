@@ -70,7 +70,7 @@ Después:
 
 ```bash
 dnx libgen-mcp -- --version
-# libgen-mcp 2.1.0 (commit 5493887)
+# libgen-mcp %%VERSION%% (commit <commit>)
 ```
 
 ## Verificar lo que instalaste
@@ -102,7 +102,7 @@ Usa tu identificador de runtime en lugar de `linux-x64`.
 **Los propios paquetes (desde la 2.1.0).** El workflow de release atesta los siete paquetes tal como eran antes de que nuget.org añadiera su firma de repositorio. Quita esa única entrada de una copia descargada y verifica lo que queda:
 
 ```bash
-version=2.1.0
+version=%%VERSION%%
 curl -sSLO https://api.nuget.org/v3-flatcontainer/libgen-mcp/$version/libgen-mcp.$version.nupkg
 zip -q -d libgen-mcp.$version.nupkg .signature.p7s
 gh attestation verify libgen-mcp.$version.nupkg -R jmrplens/libgen-mcp \
@@ -155,11 +155,11 @@ Un cliente que ya tiene el servidor en marcha conserva el proceso viejo hasta qu
 ## Fijar una versión
 
 ```bash
-dnx libgen-mcp@2.1.0
-dotnet tool install -g libgen-mcp --version 2.1.0
+dnx libgen-mcp@%%VERSION%%
+dotnet tool install -g libgen-mcp --version %%VERSION%%
 ```
 
-En la configuración de un cliente es `"args": ["libgen-mcp@2.1.0"]`. Para un repositorio que debe ejecutar una sola versión para todos, un manifiesto de herramientas local la fija en el árbol: `dotnet new tool-manifest`, luego `dotnet tool install libgen-mcp --version 2.1.0`, y `dotnet tool run libgen-mcp` la arranca.
+En la configuración de un cliente es `"args": ["libgen-mcp@%%VERSION%%"]`. Para un repositorio que debe ejecutar una sola versión para todos, un manifiesto de herramientas local la fija en el árbol: `dotnet new tool-manifest`, luego `dotnet tool install libgen-mcp --version %%VERSION%%`, y `dotnet tool run libgen-mcp` la arranca.
 
 ## Desinstalar
 

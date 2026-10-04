@@ -36,7 +36,7 @@ La imagen es `ghcr.io/jmrplens/libgen-mcp` (y `docker.io/jmrplens/libgen-mcp`). 
 La regla de la entrada estándar es la que falla en silencio. Un contenedor arrancado con una tubería en stdin, que es lo que le dan `stdin_open: true` en Compose y `docker run -i`, es un servidor stdio; su comprobación de salud lo da por en marcha, porque una instancia que sirve stdio no tiene listener que sondear, mientras el puerto publicado rechaza todas las conexiones. Medido con la orden por defecto:
 
 ```text
-$ docker run -d -i -p 127.0.0.1:8080:8080 ghcr.io/jmrplens/libgen-mcp:2.1.0
+$ docker run -d -i -p 127.0.0.1:8080:8080 ghcr.io/jmrplens/libgen-mcp:%%VERSION%%
 $ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/health
 000
 $ docker exec <container> libgen-mcp --healthcheck
@@ -50,7 +50,7 @@ Por qué la imagen decide a partir de stdin, y cómo lo lee `auto`, está en [Un
 ```yaml
 services:
   libgen-mcp:
-    image: ghcr.io/jmrplens/libgen-mcp:2.1.0
+    image: ghcr.io/jmrplens/libgen-mcp:%%VERSION%%
     command:
       - --http=0.0.0.0:8080
       - --public-url=https://mcp.example.org
@@ -107,7 +107,7 @@ El servidor escucha en un socket dentro de un volumen que montan los dos contene
 ```yaml
 services:
   libgen-mcp:
-    image: ghcr.io/jmrplens/libgen-mcp:2.1.0
+    image: ghcr.io/jmrplens/libgen-mcp:%%VERSION%%
     # 101 es el grupo de nginx en las imágenes oficiales de nginx. El socket se
     # crea 0660 con el grupo de este proceso, así que los workers de nginx
     # pueden abrirlo tal cual.
@@ -212,7 +212,7 @@ Cada opción HTTP tiene una variable `LIBGEN_MCP_*`, que es con lo que tiene que
 ```yaml
 services:
   libgen-mcp:
-    image: ghcr.io/jmrplens/libgen-mcp:2.1.0
+    image: ghcr.io/jmrplens/libgen-mcp:%%VERSION%%
     command: ["--transport", "http"]
     environment:
       LIBGEN_MCP_HTTP_ADDR: "0.0.0.0:8080"
@@ -296,7 +296,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: libgen-mcp
-          image: ghcr.io/jmrplens/libgen-mcp:2.1.0
+          image: ghcr.io/jmrplens/libgen-mcp:%%VERSION%%
           # Sustituye a la orden por defecto de la imagen, cuyo --http ganaría
           # si no a LIBGEN_MCP_HTTP_ADDR.
           args: ["--transport=http"]

@@ -9,6 +9,7 @@
 /godoc_tool
 /audit_tokens
 /format_md_tables
+/gen_doc_versions
 /gen_eval_pages
 /gen_stats
 /audit_surface_quality
