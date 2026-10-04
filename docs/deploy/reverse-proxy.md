@@ -420,7 +420,7 @@ services:
     restart: unless-stopped
 
   libgen-mcp:
-    image: ghcr.io/jmrplens/libgen-mcp:2.1.0
+    image: ghcr.io/jmrplens/libgen-mcp:2.2.0
     command:
       - --http=0.0.0.0:8080
       - --public-url=https://mcp.example.org

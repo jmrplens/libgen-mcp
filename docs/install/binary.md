@@ -65,7 +65,7 @@ Then:
 
 ```bash
 libgen-mcp --version
-# libgen-mcp 2.1.0 (commit <commit>)
+# libgen-mcp 2.2.0 (commit <commit>)
 ```
 
 ## Verify what you installed
@@ -98,7 +98,7 @@ Every binary also carries SLSA build provenance in GitHub's attestation store, w
 ```bash
 gh attestation verify libgen-mcp-linux-amd64 -R jmrplens/libgen-mcp \
   --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml \
-  --source-ref refs/tags/v2.1.0
+  --source-ref refs/tags/v2.2.0
 ```
 
 `--source-ref` holds it to the release you meant; use the version you downloaded.
@@ -137,7 +137,7 @@ Every release keeps its files at a fixed address. Replace `latest/download` with
 
 ```bash
 curl -fL -o libgen-mcp \
-  https://github.com/jmrplens/libgen-mcp/releases/download/v2.1.0/libgen-mcp-linux-amd64
+  https://github.com/jmrplens/libgen-mcp/releases/download/v2.2.0/libgen-mcp-linux-amd64
 ```
 
 A downloaded binary never updates itself, so it stays pinned until you replace it.
@@ -164,9 +164,9 @@ go install github.com/jmrplens/libgen-mcp/v2/cmd/server@latest
 > go build -o libgen-mcp ./cmd/server
 > ```
 
-The `/v2` in the path is required: from major version 2, Go resolves a module only under its suffixed path, and the unsuffixed one stops at the last 1.x release. Pin a version with `@v2.1.0` in place of `@latest`; upgrade by running the command again; uninstall by deleting the file from `$(go env GOPATH)/bin`.
+The `/v2` in the path is required: from major version 2, Go resolves a module only under its suffixed path, and the unsuffixed one stops at the last 1.x release. Pin a version with `@v2.2.0` in place of `@latest`; upgrade by running the command again; uninstall by deleting the file from `$(go env GOPATH)/bin`.
 
-**Verify.** The Go toolchain checks every module it downloads against the public checksum database. That verifies the **source** it built from, not a binary this project published: the result is your build, which is why it carries no release signature. A `go install` build reports its version from the module (`libgen-mcp 2.1.0 (commit none)`), since no commit is stamped into it.
+**Verify.** The Go toolchain checks every module it downloads against the public checksum database. That verifies the **source** it built from, not a binary this project published: the result is your build, which is why it carries no release signature. A `go install` build reports its version from the module (`libgen-mcp 2.2.0 (commit none)`), since no commit is stamped into it.
 
 ## Platform notes
 
@@ -182,6 +182,6 @@ The `/v2` in the path is required: from major version 2, Go resolves a module on
 
 **`sha256sum: checksums.txt: no file was verified`.** No file in the directory has a name `checksums.txt` lists. Keep the asset's own name until the check is done, and rename it afterwards.
 
-**`go install` reports `libgen-mcp 1.7.3`, or fails with `unknown revision cmd/server/v2.1.0`.** The `/v2` is missing from the path: without it `@latest` resolves the last 1.x release, and a 2.x version is not found at all.
+**`go install` reports `libgen-mcp 1.7.3`, or fails with `unknown revision cmd/server/v2.2.0`.** The `/v2` is missing from the path: without it `@latest` resolves the last 1.x release, and a 2.x version is not found at all.
 
 Other channels are compared on the [installation overview](overview.md).

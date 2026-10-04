@@ -80,7 +80,7 @@ A host that already has the server running keeps the old process until it restar
 
 ## Pin a version
 
-In your local copy of the entry, name the version: `"args": ["-y", "@jmrp.io/libgen-mcp@2.1.0"]`. The [npm page](npm.md#pin-a-version) has the details.
+In your local copy of the entry, name the version: `"args": ["-y", "@jmrp.io/libgen-mcp@2.2.0"]`. The [npm page](npm.md#pin-a-version) has the details.
 
 ## Uninstall
 
