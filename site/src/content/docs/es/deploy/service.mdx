@@ -127,6 +127,7 @@ LIBGEN_MCP_HTTP_IDLE_TIMEOUT=5m
 #LIBGEN_MCP_UNPAYWALL_EMAIL=you@example.org
 #LIBGEN_MCP_CORE_KEY=
 #LIBGEN_MCP_ANNAS_KEY=
+#LIBGEN_MCP_OPENALEX_KEY=
 ```
 
 Cada variable es un nombre `LIBGEN_MCP_*` de los que lista [Configuración](/libgen-mcp/es/configuration/), más `LIBGEN_MIRROR`. Un valor que no se puede interpretar detiene el servidor al arrancar, nombrando la variable. Cada opción HTTP tiene también su variable (la de `--http` es `LIBGEN_MCP_HTTP_ADDR`), así que el listener entero puede vivir en este fichero en lugar de en `ExecStart=`; una opción escrita en `ExecStart=` gana a su variable. Las claves van aquí o en un almacén de credenciales, nunca en la línea de órdenes, donde cualquier cuenta local las lee con `ps`.
@@ -191,7 +192,7 @@ llamadas retenidas = (límite - límite/8 - 64) / 12
 Con `LimitNOFILE=` sin fijar, un servicio de systemd recibe un límite blando de 1024 y uno duro de 524288, y el runtime de Go sube el blando hasta el duro, así que la cifra sigue a 524288. No hay opción para el techo: el límite de descriptores es el ajuste. Elígelo pensando en la memoria, porque una llamada retenida también cuesta memoria, y acótala con `MemoryMax=` si el host es compartido. La línea de arranque confirma lo que recibió el proceso:
 
 ```text
-"msg":"process ceilings","held_calls_per_process":5728,"descriptor_limit":65536,"descriptor_limit_source":"RLIMIT_NOFILE"
+"msg":"process ceilings","held_calls_per_process":4773,"descriptor_limit":65536,"descriptor_limit_source":"RLIMIT_NOFILE"
 ```
 
 Qué pasa cuando se alcanza el techo, y por qué `/health` sigue siendo alcanzable, está en [Qué puede retener el proceso entero](/libgen-mcp/es/http-server-mode/#qué-puede-retener-el-proceso-entero).

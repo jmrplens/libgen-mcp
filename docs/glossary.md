@@ -38,8 +38,44 @@ result as `edition_id` and `file_id`. `get_details` takes either as `id`, with `
 
 What `get_details` returns for one identifier: the catalog's file and edition metadata, a
 `citations` block when the record has a title, and optional enrichment. When the catalog has no
-record, Anna's Archive or Crossref may stand in, labelled by `origin`. See
-[Tools](tools.md#records-the-catalog-does-not-carry).
+record, Anna's Archive, Crossref or the DOI's own registry through doi.org may stand in,
+labelled by `origin`. See [Tools](tools.md#records-the-catalog-does-not-carry).
+
+### Citation lookup (`citation`)
+
+A reference pasted into `get_details` as free text, in any style, instead of an identifier. It
+is resolved to a DOI through Crossref only when the best candidate clearly wins, by score and
+by how much of its title the reference contains. Otherwise `citation_match` lists the
+candidates and nothing is chosen for you. See [Tools](tools.md#get_details-input).
+
+## Citing
+
+### Confirmed DOI
+
+A DOI that names the work it is attached to: one Crossref confirmed against the record's title,
+or one whose record came from Crossref or the DOI's registry in the first place. Only a
+confirmed DOI goes into BibTeX and RIS, is sent to doi.org for `cite_as` and is used for
+`related`, because a catalog DOI that fails the check belongs to another work. See
+[Citations](citations.md#why-a-doi-can-be-missing-from-the-citation).
+
+### Citation styles (`cite_as`)
+
+The extra formats `get_details` can add beside BibTeX and RIS: `apa`, `mla`, `chicago`,
+`harvard`, `vancouver`, `ieee` and `csl-json`. Each says which path produced it: `doi.org`
+(the DOI's registration agency formatted it), `local` (built from the record's own fields) or
+`unavailable`. See [Citations](citations.md#other-citation-styles).
+
+### CSL and CSL-JSON
+
+The Citation Style Language, the open standard reference managers and doi.org use to describe
+a citation style. CSL-JSON is its record format, which `cite_as: ["csl-json"]` returns and
+tools such as Zotero and pandoc read. See [Citations](citations.md#other-citation-styles).
+
+### Related works (`related`)
+
+The references a record cites, or the works citing it, listed by `get_details` from OpenAlex
+with `related: "references"` or `"cited_by"`, most cited first. It needs a confirmed DOI. See
+[Tools](tools.md#related-works).
 
 ## Where results come from
 
@@ -94,6 +130,35 @@ The label on every result naming the searcher that produced it (`libgen`, `annas
 the result carries, and so which argument the next call takes. See
 [How search works](how-search-works.md#what-comes-back-origins-and-downloads).
 
+### Year range (`year_from`, `year_to`)
+
+The inclusive bounds a search keeps to, either side open. Most providers take the range in
+their own query. The catalog cannot, so its page is filtered after it arrives and
+`year_filtered` counts what that page lost, undated records included. See
+[How search works](how-search-works.md#narrowing-by-year).
+
+### OpenAlex credits
+
+The allowance OpenAlex meters its API in: 1000 a day per address without a key, reset at
+midnight UTC, where a search costs 10, a filtered list 1 and a single-record lookup nothing.
+Every OpenAlex request this server makes draws on the same allowance, and keyless the search
+provider stops short of a reserve kept for `related`. `LIBGEN_MCP_OPENALEX_KEY` moves it onto
+the key's larger allowance. See [Configuration](configuration.md#libgen_mcp_openalex_key).
+
+### Pacing
+
+The rate each provider is asked at, kept for the whole process rather than per search: arXiv
+once every 3 seconds, dblp once every 10, most others once a second. A provider whose next
+request is more than a second away sits the search out instead of delaying it. See
+[How search works](how-search-works.md#when-a-source-sits-a-search-out).
+
+### Refusal window
+
+The fifteen minutes a provider is left alone after it refuses to answer: dblp's bot check or
+rate limit, an Anna's Archive mirror's browser challenge. The server logs the refusal once and
+the provider returns nothing until the window ends. See
+[How search works](how-search-works.md#when-a-source-sits-a-search-out).
+
 ## Downloading
 
 ### Source
@@ -121,6 +186,13 @@ A pause on something that just proved unreachable: 45 seconds for a mirror, 5 mi
 source. A source that answered "I do not hold this item" is never set aside, because that says
 nothing about its health. See [Architecture](architecture.md#per-source-cooldown).
 
+### PMC Article Datasets
+
+NCBI's copy of the PubMed Central open-access articles, published on AWS Open Data for
+automated reuse. The `europepmc` source checks with Europe PMC that an article is open access
+and not retracted, then takes the PDF from this dataset, because Europe PMC's own PDF links
+answer automated clients with a challenge page. See [Download sources](sources.md#europepmc).
+
 ### Resolve only (`resolve_only`)
 
 The `download` mode that returns the direct link, with any headers it needs, instead of saving
@@ -144,8 +216,14 @@ chunk of text, or the next page of matches for a `find`. See
 ### Outline
 
 A document's table of contents, from PDF bookmarks or EPUB navigation, returned by `read` with
-`outline: true`. `max_depth` trims it to the levels you need. See
-[Tools](tools.md#table-of-contents).
+`outline: true`. Each entry carries a number, `index`, and `max_depth` trims it to the levels
+you need without renumbering. See [Tools](tools.md#table-of-contents).
+
+### Section (`section`)
+
+One outline entry read on its own, named by its `index` or by its title: from where it starts
+to where the next entry at the same or a higher level starts. A PDF section ends on a whole
+page, so it may include the start of the next one. See [Tools](tools.md#read-one-section).
 
 ### Untrusted text
 
@@ -159,7 +237,8 @@ lands in. See [Security model](security.md).
 
 Working with no account, API key or token. Search, details and downloads all have a keyless
 path. A credential only adds something: the `unpaywall` source (a contact email), the `core`
-source (an API key) and Anna's Archive's member downloads (a member key). See
+source (an API key), Anna's Archive's member downloads (a member key) and a larger OpenAlex
+allowance (an API key). See
 [Configuration](configuration.md).
 
 ### Per-call key
@@ -232,8 +311,9 @@ at most a number sized from its descriptor limit, and refuses past it with `503`
 
 ### Outbound budget
 
-The one token bucket every request to a mirror or provider waits on, `LIBGEN_MCP_RATE_RPS` (one
-a second by default). It is shared by every caller of a process, which is why an inbound limit
+The one token bucket every catalog request to a mirror and every download waits on,
+`LIBGEN_MCP_RATE_RPS` (one a second by default). The providers are paced on buckets of their
+own (see [Pacing](#pacing)). It is shared by every caller of a process, which is why an inbound limit
 above it only moves the queue. See [Scaling and capacity](deploy/scaling.md).
 
 ### Drain

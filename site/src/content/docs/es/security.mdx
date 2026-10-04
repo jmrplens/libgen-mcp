@@ -44,7 +44,7 @@ Dos consecuencias merecen decirse claramente.
 
 ### Sin claves por defecto
 
-La búsqueda, los detalles, las descargas y la lectura funcionan sin cuenta, sin clave y sin configuración. Las credenciales de abajo son opcionales, y cada una añade una fuente o un camino más rápido en lugar de desbloquear una capacidad que el servidor no tendría.
+La búsqueda, los detalles, las descargas y la lectura funcionan sin cuenta, sin clave y sin configuración. Las credenciales de abajo son opcionales, y cada una añade una fuente, un camino más rápido o un cupo mayor en lugar de desbloquear una capacidad que el servidor no tendría.
 
 ### Claves que configura el operador
 
@@ -52,6 +52,7 @@ La búsqueda, los detalles, las descargas y la lectura funcionan sin cuenta, sin
 | ---------------------------- | ------------------------------------------------ |
 | `LIBGEN_MCP_ANNAS_KEY`       | Descargas de miembro (rápidas) de Anna's Archive |
 | `LIBGEN_MCP_CORE_KEY`        | La fuente de acceso abierto CORE                 |
+| `LIBGEN_MCP_OPENALEX_KEY`    | Un cupo diario de OpenAlex diez veces mayor      |
 | `LIBGEN_MCP_UNPAYWALL_EMAIL` | La fuente Unpaywall, que exige un contacto       |
 
 Se fijan en el entorno o en un fichero dotenv y **no tienen flags de línea de órdenes**, a propósito: un secreto en una línea de órdenes es visible para cualquier cuenta local a través de `ps` y acaba en el historial del shell. En un despliegue HTTP una clave configurada es del despliegue, así que la gastan todos los llamantes. Un resultado de `download` no informa de una cuenta de Anna's Archive ni de cuánto le queda de cupo salvo que la llamada haya pedido el nivel de miembro. Una clave que habilita una fuente se ve de otra manera: la fuente aparece en el enum `source` de `download`. Consulta [el ADR sobre lo que revela un resultado](https://github.com/jmrplens/libgen-mcp/blob/main/docs/decisions/2026-08-08-result-reveals-only-what-the-call-revealed.md).
@@ -67,10 +68,11 @@ Una clave va en una cabecera de la petición siempre que el servicio la acepte a
 | Credencial                         | Se envía como                    | Por qué                                           |
 | ---------------------------------- | -------------------------------- | ------------------------------------------------- |
 | Clave de CORE                      | Cabecera `Authorization: Bearer` | La API la recibe ahí                              |
+| Clave de OpenAlex                  | Cabecera `Authorization: Bearer` | La API la recibe ahí                              |
 | Clave de Anna's Archive            | Parámetro de consulta `key`      | Es el único sitio donde la lee la API de miembros |
 | Dirección de contacto de Unpaywall | Parámetro de consulta `email`    | Es el único sitio donde la lee la API             |
 
-Una dirección de contacto configurada se ofrece también a las API de acceso abierto que mantienen un polite pool para los llamantes identificados, Crossref entre ellas, en un parámetro `mailto` o en el `User-Agent`. Una dirección por llamada va solo a Unpaywall.
+Una dirección de contacto configurada se ofrece también a las API de acceso abierto que mantienen un polite pool para los llamantes identificados, Crossref entre ellas, en un parámetro `mailto` o en el `User-Agent`. Una dirección por llamada va solo a Unpaywall. A OpenAlex no se le envía la dirección de contacto, porque retiró su polite pool. Una clave de OpenAlex configurada que OpenAlex rechaza se registra una sola vez en `WARN`, nombrando la variable y nunca la clave.
 
 Una URL con un secreto dentro se filtra de dos maneras previsibles, y las dos están cerradas:
 
@@ -127,6 +129,8 @@ El título de un registro, la descripción de un libro y el texto extraído de u
 **Está marcado.** La descripción de cada herramienta le dice al modelo que lo que devuelve es texto de terceros `UNTRUSTED`, que se lee como datos y nunca se sigue como instrucciones. El resultado lo repite donde empieza el texto — antes de una lista de resultados de búsqueda, de un pasaje extraído, de las coincidencias de una búsqueda dentro de un documento, de un índice de contenidos — y los prompts llevan la misma advertencia. Consulta [Herramientas → salida de read](/libgen-mcp/es/tools/#salida-de-read).
 
 **Se escapa según dónde cae.** Un valor que va a una celda de tabla, un elemento de lista, un encabezado, un bloque de código o un enlace pasa por el helper de esa construcción, que quita lo que cambiaría ahí la forma del documento: una barra vertical que cierra una celda, un salto de línea que abre un encabezado, una valla cerrada desde dentro. Los bytes de control se quitan antes de cualquier comprobación, y solo se escribe un enlace para una dirección `http` o `https` absoluta, porque un destino `javascript:` es un enlace entero que algunos clientes renderizan activo. `make check-md-escaping` recorre los paquetes de renderizado e informa de un valor en tiempo de ejecución que llega a una construcción Markdown sin un escapador de por medio.
+
+**El texto de un registro bibliográfico también es de terceros.** Una referencia que `get_details` formatea a través de `doi.org` para `cite_as` la escribe la agencia de registro del DOI, y los candidatos que devuelve una consulta por `citation` son registros de Crossref. La referencia formateada se reduce a una sola línea de texto plano antes de mostrarse (se quitan las etiquetas de formato con nombre `i`, `b`, `em`, `strong`, `sub`, `sup`, `sc`, `span` y `u` y las entidades, y se descartan los caracteres de control y los controles bidireccionales) y va en un bloque delimitado, donde cualquier otro corchete angular queda como texto, y los candidatos pasan por los helpers de celda de tabla como cualquier registro del catálogo.
 
 **El encabezado de orientación está reservado.** La sección `Next steps` al final de un resultado es la única parte escrita con la voz del propio servidor. Si un registro trae ese encabezado exacto, `💡 **Next steps:**`, se reescribe como una entidad HTML que se ve igual pero ya no es la marca. La reescritura solo reconoce la cadena exacta, así que un encabezado parecido pasa como texto; lo que sigue aplicándose es la marca `UNTRUSTED` que lo rodea.
 
@@ -202,7 +206,7 @@ Recórrela en orden; los últimos puntos dan por hechos los primeros.
 8. **Deja `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES` sin fijar.** Si necesitas un mirror privado, nómbralo en `LIBGEN_MIRROR` en su lugar, sabiendo que eso levanta el nivel de direcciones privadas para todas las URL de descarga y redirecciones que sigue el cliente de catálogo. Sin un mirror privado, nombra solo hosts públicos y conserva el nivel estricto.
 9. **Deja `LIBGEN_MCP_SERVER_FETCH` en su valor remoto por defecto** salvo que la dirección de salida sea solo tuya.
 10. **Mantén los límites activos**, y dimensiona `--max-inflight-per-client` y `LIBGEN_MCP_ACTION_TIMEOUT` para los llamantes que esperas.
-11. **Saca las claves de las líneas de órdenes.** `LIBGEN_MCP_ANNAS_KEY`, `LIBGEN_MCP_CORE_KEY` y `LIBGEN_MCP_UNPAYWALL_EMAIL` van en el entorno o en un fichero dotenv que solo pueda leer la cuenta del servicio.
+11. **Saca las claves de las líneas de órdenes.** `LIBGEN_MCP_ANNAS_KEY`, `LIBGEN_MCP_CORE_KEY`, `LIBGEN_MCP_OPENALEX_KEY` y `LIBGEN_MCP_UNPAYWALL_EMAIL` van en el entorno o en un fichero dotenv que solo pueda leer la cuenta del servicio.
 12. **Deja `--pprof-addr` sin fijar** en producción.
 13. **Mantén `LIBGEN_MCP_TELEMETRY_IDENTITY=none`** si la telemetría está encendida, salvo que tengas un motivo y una base legal para registrar a los llamantes.
 14. **Ejecuta la imagen tal como se publica**, con su usuario no root y con la comprobación de salud que declara.

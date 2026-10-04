@@ -98,9 +98,9 @@ index that backs Unpaywall — and reachable without a credential of any kind.
   defect. A paywalled DOI and an open-access DOI with no fetchable location are reported as
   two different misses, and a DOI outside the catalogue answers 404, which is read as a clean
   miss so the source is never cooled down for being honest.
-- **Keys** keyless, and not merely by default. OpenAlex meters its API in credits — a search
-  costs 10 and a filtered list 1, against a daily budget of $0.10 without a key and $1 with
-  one — but the single-entity lookup this source uses is billed at **zero** and is not capped
+- **Keys** keyless by default, and this lookup needs no key at all. OpenAlex meters its API in
+  credits — a search costs 10 and a filtered list 1, against a daily budget of 1000 credits
+  ($0.10) without a key and $1 with one — but the single-entity lookup this source uses is billed at **zero** and is not capped
   (re-measured 2026-10-03: `X-RateLimit-Credits-Used: 0`). A key is optional:
   `LIBGEN_MCP_OPENALEX_KEY` is sent on every OpenAlex request, as a bearer token and never in
   the URL, and buys this lookup nothing; it is there for the `openalex` search provider, which

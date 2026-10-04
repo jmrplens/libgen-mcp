@@ -1,6 +1,6 @@
 ---
 title: Solución de problemas
-description: "Soluciones por síntoma: un cliente que no ve el servidor, un arranque rechazado, cada código HTTP, proxies, búsquedas lentas, descargas fallidas, rechazos de read, telemetría y cada canal de instalación."
+description: "Soluciones por síntoma: un cliente que no ve el servidor, un arranque rechazado, cada código HTTP, proxies, búsquedas lentas, consultas de citas, descargas fallidas, rechazos de read, telemetría y cada canal de instalación."
 chips:
   - text: "Síntoma, significado, soluciones"
   - text: "Mensajes de error literales"
@@ -61,7 +61,7 @@ datePublished: "2026-07-19"
 import Facts from "../../../components/docs/Facts.astro";
 import Fact from "../../../components/docs/Fact.astro";
 
-Las entradas siguientes se agrupan por el sitio donde aparece el síntoma: en el cliente, al arrancar, en la red, detrás de un proxy, en una búsqueda, en una descarga, en `read`, en un colector o durante una instalación. Cada una cita lo que ves, explica qué significa aquí, dice qué hacer y enlaza la página que explica el mecanismo. Todo mensaje entre comillas invertidas es texto literal del servidor, así que buscarlo en el log funciona.
+Las entradas siguientes se agrupan por el sitio donde aparece el síntoma: en el cliente, al arrancar, en la red, detrás de un proxy, en una búsqueda, en una consulta de ficha, en una descarga, en `read`, en un colector o durante una instalación. Cada una cita lo que ves, explica qué significa aquí, dice qué hacer y enlaza la página que explica el mecanismo. Todo mensaje entre comillas invertidas es texto literal del servidor, así que buscarlo en el log funciona.
 
 Tres comprobaciones resuelven la mayoría de dudas antes que cualquier entrada:
 
@@ -90,14 +90,23 @@ Tres comprobaciones resuelven la mayoría de dudas antes que cualquier entrada:
 | Cada búsqueda tarda segundos, o se encolan unas tras otras                     | [Búsquedas lentas](#las-búsquedas-son-lentas-o-se-encolan-unas-tras-otras)                                                  |
 | `truncated: true` y un `hint`                                                  | [Resultados truncados](#resultados-de-búsqueda-truncados)                                                                   |
 | Un resultado con `origin: "annas"` que no se descarga                          | [Resultados de Anna's Archive](#un-resultado-que-no-se-descarga-origin-annas)                                               |
+| Un proveedor no aparece nunca en `open_access`                                 | [Un proveedor no aporta nada](#un-proveedor-de-acceso-abierto-no-aporta-nada)                                               |
+| `OpenAlex rejected the configured API key …`                                   | [Un proveedor no aporta nada](#un-proveedor-de-acceso-abierto-no-aporta-nada)                                               |
+| `dblp search: the SPARQL service answered with a bot check …`                  | [Un proveedor no aporta nada](#un-proveedor-de-acceso-abierto-no-aporta-nada)                                               |
+| `year_filtered` y pocos o ningún resultado del catálogo                        | [Un rango de años vacía la página](#un-rango-de-años-vacía-la-página)                                                       |
+| `citation_match` con `status: "unresolved"`                                    | [Una cita que no se resuelve](#una-cita-pegada-no-se-resuelve)                                                              |
+| Un estilo de `cite_as` con `source: "local"` o `"unavailable"`                 | [Estilos de cita](#cite_as-vuelve-con-local-o-unavailable)                                                                  |
+| `related` sin obras y con una nota                                             | [Obras relacionadas](#related-no-lista-nada)                                                                                |
 | `integrity check failed: MD5 mismatch`, u otro error de descarga               | [Descarga fallida](#descarga-fallida--discrepancia-de-md5)                                                                  |
 | Un DOI que no se descarga                                                      | [Artículo no encontrado](#artículo-no-encontrado-acceso-abierto-vs-sci-hub)                                                 |
+| `… is a retracted publication, so it is not served`                            | [Artículo no encontrado](#artículo-no-encontrado-acceso-abierto-vs-sci-hub)                                                 |
 | Un ISBN que no se descarga                                                     | [Libro no encontrado por ISBN](#libro-no-encontrado-por-isbn-solo-acceso-abierto)                                           |
 | Falta una fuente en los errores de un segundo intento                          | [Una fuente en enfriamiento](#falta-una-fuente-en-los-errores-de-una-descarga-repetida)                                     |
 | `not enough free disk space in …`                                              | [Espacio en disco](#espacio-en-disco)                                                                                       |
 | `download` devuelve un enlace en lugar de un archivo                           | [Enlaces en lugar de archivos](#download-devuelve-un-enlace-en-lugar-de-guardar-un-archivo)                                 |
 | `… is outside the allowed directories …`                                       | [Una ruta fuera de los directorios permitidos](#una-ruta-está-fuera-de-los-directorios-permitidos)                          |
 | `read` responde `extractable: false`                                           | [Un archivo que `read` no puede extraer](#un-archivo-que-read-no-puede-extraer)                                             |
+| `section "…" matches … entries`, u otro rechazo de `section`                   | [`section` rechazado](#section-se-rechaza)                                                                                  |
 | Nada llega al colector de OpenTelemetry                                        | [La telemetría no llega](#nada-llega-al-colector)                                                                           |
 | Una instalación por npm, PyPI, NuGet, Homebrew, Docker, `.mcpb` o `go install` | [Problemas de instalación por canal](#problemas-de-instalación-por-canal)                                                   |
 
@@ -725,6 +734,163 @@ Valen para un servidor arrancado con `--http`. Todo rechazo en el propio endpoin
 
 </Facts>
 
+### Un proveedor de acceso abierto no aporta nada
+
+<Facts>
+	<Fact kind="symptom">
+
+    Una búsqueda sale del catálogo, pero un proveedor no aparece nunca en `open_access`: no hay filas de `openalex`, `dblp` o `annas`, o hay filas de `arxiv` solo en algunas de varias búsquedas lanzadas a la vez. El log puede tener una de estas líneas:
+
+    - `OpenAlex rejected the configured API key, so OpenAlex search and the openalex download source fail until it is fixed or unset`, en `WARN`, con `variable=LIBGEN_MCP_OPENALEX_KEY` y el estado.
+    - `dblp search: the SPARQL service answered with a bot check or a rate limit instead of JSON, asking nothing for 15m0s`, en `INFO`.
+    - `annas search: mirror is serving a browser challenge, asking nothing for 15m0s`, en `WARN`.
+
+    </Fact>
+    <Fact kind="meaning">
+
+    Todo proveedor de fuera del catálogo es de mejor esfuerzo: el que no puede responder no aporta nada en lugar de hacer fallar la búsqueda. La mayoría de los motivos son deliberados:
+
+    - **El ritmo.** Cada proveedor se dosifica para todo el proceso al ritmo que pide quien lo opera: arXiv a una petición cada tres segundos y dblp a una cada diez. Una búsqueda cuyo siguiente token para un proveedor está a más de un segundo se salta ese proveedor en lugar de esperar, así que con búsquedas concurrentes solo algunas reciben arXiv o dblp. El salto no se registra.
+    - **Un rechazo.** Cuando dblp responde con una comprobación anti-bots o un límite de tasa, o un mirror de Anna's Archive con un desafío de navegador, a ese proveedor no se le pregunta nada durante quince minutos y el log lo dice una vez.
+    - **Los créditos diarios de OpenAlex.** Sin clave, OpenAlex permite 1000 créditos al día por dirección, y una búsqueda cuesta 10. El servidor deja de enviar búsquedas cuando una dejaría menos de 100, la reserva que se guarda para las listas de un crédito que pide `related` en `get_details`, y vuelve a enviarlas cuando la ventana se reinicia a medianoche UTC. Un rechazo por límite de tasa que pide un minuto o menos pausa las búsquedas sin clave y `related` solo ese tiempo, porque una búsqueda enviada con clave no consulta el presupuesto. Ninguno de los dos se registra.
+    - **Una clave de OpenAlex rechazada.** Que OpenAlex responda `401` o `403` a una petición enviada con `LIBGEN_MCP_OPENALEX_KEY` es el `WARN` de arriba, escrito una vez por proceso.
+
+    </Fact>
+    <Fact kind="fixes">
+
+    - Normalmente nada: los demás proveedores sí respondieron, y una búsqueda posterior recupera el que se saltó.
+    - Para OpenAlex, fija `LIBGEN_MCP_OPENALEX_KEY`. Una búsqueda enviada con clave no queda retenida por la reserva sin clave. Tras el `WARN`, corrige la clave o quítala.
+    - Un rechazo de dblp o de Anna's Archive es decisión del propio servicio, y ningún ajuste lo cambia. Espera los quince minutos. Una clave de miembro de Anna's Archive configurada sigue sirviendo `download` por la API de miembros.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Cómo funciona la búsqueda](/libgen-mcp/es/how-search-works/#cuándo-una-fuente-se-queda-fuera-de-una-búsqueda) y [Configuración](/libgen-mcp/es/configuration/#libgen_mcp_openalex_key).
+    </Fact>
+
+</Facts>
+
+### Un rango de años vacía la página
+
+<Facts>
+	<Fact kind="symptom">
+		Una búsqueda con `year_from` o `year_to` devuelve pocos o ningún resultado del catálogo, y la respuesta lleva `year_filtered` con una línea como `The year range left out 17 catalog records on this page (outside it or undated).` O la llamada se rechaza con `year_from must be a year between 1000 and 2100, got 990`, o `year_from (2020) is after year_to (2010): swap them, or drop one to leave that side open`.
+	</Fact>
+	<Fact kind="meaning">
+		Library Genesis no tiene filtro por año, así que el servidor filtra la página cuando llega, y un registro sin año también queda fuera, porque nada demuestra que esté en el rango. `year_filtered` cuenta solo esta página. `total_files`, `reachable` y `has_more` siguen describiendo la búsqueda sin filtrar, así que una página sin nada en el rango no demuestra que el rango esté vacío.
+	</Fact>
+	<Fact kind="fixes">
+
+    - Pide la página siguiente cuando `has_more` es true. Los pasos siguientes lo dicen antes de decir que no se encontró nada.
+    - Añade también el año al texto de la consulta, o amplía el rango.
+    - Deja que la búsqueda salga del catálogo (`extra_sources: "always"`). La mayoría de los proveedores de ahí aplican el rango en su propia consulta en lugar de después.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Herramientas](/libgen-mcp/es/tools/#acotar-por-año) y [Cómo funciona la búsqueda](/libgen-mcp/es/how-search-works/#acotar-por-año).
+    </Fact>
+
+</Facts>
+
+## Fichas y citas
+
+### Una cita pegada no se resuelve
+
+<Facts>
+	<Fact kind="symptom">
+
+    `get_details` con `citation` no devuelve ninguna ficha, y `citation_match` tiene `status: "unresolved"`, un `reason` y hasta cinco candidatos. El motivo es uno de estos:
+
+    - `Crossref offered no candidate for this citation.`
+    - `No candidate stands out: the best scores 41.2 against 40.9 for the next, and a match needs a lead of 20%.`
+    - `The best candidate leads, but only 67% of its title appears in the citation, so it may be a different work that shares some of its words.`
+
+    O la llamada se rechaza con `a citation is resolved through Crossref, which this server has turned off (LIBGEN_MCP_ENRICH=false). Pass the work's doi instead, or search for its title`, o con `citation is 1450 characters long, and the most accepted is 1000. Paste one reference, trimmed to its authors, title, venue and year`.
+
+    </Fact>
+    <Fact kind="meaning">
+
+    Una cita solo se resuelve cuando el mejor candidato de Crossref puntúa al menos un 20% más que el siguiente **y** al menos el 90% de las palabras de su título aparecen en la cita. Con menos, los candidatos se devuelven sin elegir, porque un DOI equivocado dado con seguridad mete la obra equivocada en una bibliografía. Una obra sin DOI de Crossref (un preprint que solo está en arXiv, muchos libros) no puede resolverse así de ninguna manera.
+
+    </Fact>
+    <Fact kind="fixes">
+
+    - Elige el candidato correcto y vuelve a llamar con su `doi`.
+    - Pega el título completo, con el año y la revista o congreso.
+    - Para una obra sin DOI, busca su título con `search`.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Citas](/libgen-mcp/es/citations/#obtener-una-cita) y [Herramientas](/libgen-mcp/es/tools/#entrada-de-get_details).
+    </Fact>
+
+</Facts>
+
+### `cite_as` vuelve con `local` o `unavailable`
+
+<Facts>
+	<Fact kind="symptom">
+
+    Un estilo pedido en `cite_as` tiene `source: "local"` y una nota, o `source: "unavailable"` y ningún texto. La nota es una de estas:
+
+    - `doi.org gave no usable answer for this style, so it was built from the record's fields.`
+    - `The record's DOI was not confirmed to name this work, so it was not sent to doi.org and the style was built from the record's fields.`
+    - `The record has no DOI, so the style was built from its fields.`
+    - `This server does not ask doi.org (LIBGEN_MCP_ENRICH=false), so the style was built from the record's fields.`
+    - `Neither doi.org nor the record's own fields could produce it: the record has no title.`, para `unavailable`.
+
+    </Fact>
+    <Fact kind="meaning">
+
+    Un estilo lo formatea la agencia de registro del DOI a través de doi.org solo cuando la ficha lleva un DOI que nombra esta obra, y doi.org da una respuesta utilizable en ocho segundos. Si no, se construye aquí, con las mismas reglas que la entrada BibTeX. Un estilo local es una alternativa, no un error, pero solo es tan bueno como los campos del catálogo: un nombre escrito "Nombre Apellido" se lee con el nombre de pila primero.
+
+    </Fact>
+    <Fact kind="fixes">
+
+    - Comprueba un estilo local contra la obra antes de publicarlo.
+    - Vuelve a llamar con un `doi` que `citations.doi_status` dé por confirmado para obtener el texto del registro.
+    - Si doi.org no respondió a tiempo, reintenta más tarde.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Citas](/libgen-mcp/es/citations/#otros-estilos-de-cita).
+    </Fact>
+
+</Facts>
+
+### `related` no lista nada
+
+<Facts>
+	<Fact kind="symptom">
+
+    `get_details` con `related` devuelve un objeto `related` sin obras y con una nota, como estas:
+
+    - `Not available: the record has no DOI, and OpenAlex is asked by DOI.`
+    - `Not available: the record's DOI was not confirmed to name this work, and OpenAlex is asked by DOI.`
+    - `Not available: this server does not reach OpenAlex for metadata (LIBGEN_MCP_ENRICH=false).`
+    - `OpenAlex asked this server to slow down, so the list was not fetched. Try again shortly.`
+    - `The OpenAlex daily allowance shared by this server is spent, so the list was not fetched. It resets at midnight UTC.`, seguida de `LIBGEN_MCP_OPENALEX_KEY raises it.` en un servidor sin clave.
+    - `OpenAlex refused the API key this server is configured with, so the list was not fetched. The operator's log names the variable to fix.`
+    - `OpenAlex has no work with this DOI.`, o `OpenAlex did not answer, so the list is not available now.`
+
+    </Fact>
+    <Fact kind="meaning">
+
+    La lista viene de OpenAlex, consultado por el DOI de la ficha, y solo por un DOI que nombra esta obra: un DOI del catálogo que no superó la corroboración pertenece a otra obra, cuyas referencias se listarían bajo esta. Consultar la obra es gratis, y la lista cuesta un crédito de la cuota diaria que comparten todas las peticiones de este servidor a OpenAlex, incluidas las del proveedor de búsqueda. Una respuesta vacía que dio OpenAlex (`OpenAlex lists no references for this work.`, `OpenAlex knows no work that cites this one.`) es un dato sobre la ficha, no un fallo.
+
+    </Fact>
+    <Fact kind="fixes">
+
+    - Si falta el DOI o no está confirmado, encuentra el DOI de la obra (con una consulta por `citation`, o con `search`) y vuelve a llamar con él.
+    - Ante una nota de ir más despacio, reintenta en un minuto. Con la cuota agotada, espera a medianoche UTC o fija `LIBGEN_MCP_OPENALEX_KEY`.
+    - Con una clave rechazada, el log del servidor tiene el `WARN` que nombra la variable. Corrige la clave o quítala.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Herramientas](/libgen-mcp/es/tools/#obras-relacionadas).
+    </Fact>
+
+</Facts>
+
 ## Descargas
 
 ### Descarga fallida / discrepancia de MD5
@@ -767,6 +933,7 @@ Valen para un servidor arrancado con `--http`. Todo rechazo en el propio endpoin
     - Fija tu propio `LIBGEN_MCP_UNPAYWALL_EMAIL` — hasta que lo hagas, Unpaywall está desactivado (las demás fuentes de acceso abierto y Sci-Hub se siguen probando). La API espera una dirección de contacto real.
     - Fija `LIBGEN_MCP_CORE_KEY` (una clave gratuita de la API de CORE) para añadir CORE a la cadena de acceso abierto.
     - Un error de `crossref` que nombra el navegador como la ruta que queda significa que todos los enlaces que depositó el editor rechazaron a un cliente anónimo; los grandes editores comerciales responden `403` diga lo que diga el enlace.
+    - Un error de `europepmc` que dice `… is a retracted publication, so it is not served` o `the PMC dataset marks … retracted, so it is not served` significa que el artículo se retractó. Esa fuente lo rechaza y la cadena sigue, así que revisa la nota de retractación antes de fiarte de una copia que sirva otra fuente.
     - Ten en cuenta que las descargas por DOI **no** se verifican por MD5 (`verified` es `false`) — no hay digest de LibGen para ellas.
 
     </Fact>
@@ -913,6 +1080,40 @@ Valen para un servidor arrancado con `--http`. Todo rechazo en el propio endpoin
     </Fact>
     <Fact label="Cómo funciona">
     	[Herramientas](/libgen-mcp/es/tools/#no-extraíble).
+    </Fact>
+
+</Facts>
+
+### `section` se rechaza
+
+<Facts>
+	<Fact kind="symptom">
+
+    `read` con `section` se rechaza con uno de estos:
+
+    - `section "Summary" matches 4 entries, pass the number of the one you mean: …`
+    - `no outline entry matches "…": read the outline and pass an entry number`
+    - `section 40 does not exist: the outline has 12 entries, numbered from 1`
+    - `this document has no table of contents, so section cannot address part of it: read by page with start_page (PDF) or by character with offset (EPUB/TXT), or search it with find`
+    - `section cannot be combined with outline: …`, lo mismo con `find`, o `section fixes where reading starts, so omit start_page and offset: continue a long section with the cursor`
+    - `entry 7 "…" points to no page, so it cannot be read as a section: …`
+
+    </Fact>
+    <Fact kind="meaning">
+
+    `section` nombra una entrada del índice de contenidos, por el número que muestra el modo outline o por su título. Un valor solo de dígitos es siempre un número. Un título coincide sin distinguir mayúsculas ni espacios, primero una coincidencia exacta y luego una que lo contenga, y un título que comparten varias entradas se rechaza con sus números en lugar de leerse como la primera.
+
+    </Fact>
+    <Fact kind="fixes">
+
+    - Llama a `read` con `outline: true` y pasa el número de la entrada, el `[n]` que lleva delante.
+    - Para un documento sin índice, lee por página o por desplazamiento, o búscalo con `find`.
+    - Quita el argumento que nombra el rechazo. Una sección larga continúa con su `cursor`.
+    - Para una entrada que no apunta a ninguna página, elige una entrada vecina o lee por página.
+
+    </Fact>
+    <Fact label="Cómo funciona">
+    	[Herramientas](/libgen-mcp/es/tools/#leer-una-sola-entrada).
     </Fact>
 
 </Facts>

@@ -45,7 +45,8 @@ when somebody put it where the server looks (`~/.libgen-mcp.env`) or named it de
 ### Keyless by default
 
 Search, details, downloads and reading all work with no account, no key and no configuration.
-The credentials below are opt-in, and each one adds a source or a faster path rather than
+The credentials below are opt-in, and each one adds a source, a faster path or a larger
+allowance rather than
 unlocking a capability the server otherwise lacks.
 
 ### Keys the operator configures
@@ -54,6 +55,7 @@ unlocking a capability the server otherwise lacks.
 | ---------------------------- | ---------------------------------------------- |
 | `LIBGEN_MCP_ANNAS_KEY`       | Anna's Archive member (fast) downloads         |
 | `LIBGEN_MCP_CORE_KEY`        | The CORE open-access source                    |
+| `LIBGEN_MCP_OPENALEX_KEY`    | A daily OpenAlex allowance ten times larger    |
 | `LIBGEN_MCP_UNPAYWALL_EMAIL` | The Unpaywall source, which requires a contact |
 
 They are set in the environment or a dotenv file and **have no command-line flags**, on purpose:
@@ -82,12 +84,15 @@ the query string, and there the rule moves to what happens to the URL afterwards
 | Credential                | Sent as                        | Why                                    |
 | ------------------------- | ------------------------------ | -------------------------------------- |
 | CORE key                  | `Authorization: Bearer` header | The API takes it there                 |
+| OpenAlex key              | `Authorization: Bearer` header | The API takes it there                 |
 | Anna's Archive key        | `key` query parameter          | The only place the member API reads it |
 | Unpaywall contact address | `email` query parameter        | The only place the API reads it        |
 
 A configured contact address is also offered to the open-access APIs that keep a polite pool for
 identified callers, Crossref among them, in a `mailto` parameter or the `User-Agent`. A per-call
-address goes to Unpaywall alone.
+address goes to Unpaywall alone. OpenAlex is not sent the contact address, because it retired
+its polite pool. A configured OpenAlex key that OpenAlex rejects is logged once at `WARN`, naming
+the variable and never the key.
 
 A URL with a secret in it leaks in two predictable ways, and both are closed:
 
@@ -238,6 +243,14 @@ an absolute `http` or `https` address, because a `javascript:` destination is a 
 clients render live. `make check-md-escaping` walks the renderer packages and reports a runtime
 value that reaches a Markdown construct with no escaper in between.
 
+**A registry's text is third-party text too.** A reference `get_details` formats through
+`doi.org` for `cite_as` is written by the DOI's registration agency, and the candidates a
+`citation` lookup returns are Crossref's records. The formatted reference is reduced to one plain
+line before it is shown (the named formatting tags `i`, `b`, `em`, `strong`, `sub`, `sup`, `sc`,
+`span` and `u` and the entities removed, control characters and bidirectional controls
+dropped) and lands in a fenced block, where any other angle bracket stays as text, and the candidates go through the table-cell
+helpers like any catalog record.
+
 **The guidance heading is reserved.** The `Next steps` section at the end of a result is the one
 part written in the server's own voice. A record carrying that exact heading, `💡 **Next
 steps:**`, has it rewritten to an HTML entity that renders identically but is no longer the
@@ -348,8 +361,8 @@ Go through it in order; the later items assume the earlier ones.
    alone.
 10. **Keep the limits on**, and size `--max-inflight-per-client` and `LIBGEN_MCP_ACTION_TIMEOUT`
     for the callers you expect.
-11. **Keep keys out of command lines.** `LIBGEN_MCP_ANNAS_KEY`, `LIBGEN_MCP_CORE_KEY` and
-    `LIBGEN_MCP_UNPAYWALL_EMAIL` belong in the environment or a dotenv file only the service
+11. **Keep keys out of command lines.** `LIBGEN_MCP_ANNAS_KEY`, `LIBGEN_MCP_CORE_KEY`,
+    `LIBGEN_MCP_OPENALEX_KEY` and `LIBGEN_MCP_UNPAYWALL_EMAIL` belong in the environment or a dotenv file only the service
     account can read.
 12. **Leave `--pprof-addr` unset** in production.
 13. **Keep `LIBGEN_MCP_TELEMETRY_IDENTITY=none`** if telemetry is on, unless you have a reason

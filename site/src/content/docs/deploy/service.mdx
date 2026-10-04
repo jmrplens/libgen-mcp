@@ -127,6 +127,7 @@ LIBGEN_MCP_HTTP_IDLE_TIMEOUT=5m
 #LIBGEN_MCP_UNPAYWALL_EMAIL=you@example.org
 #LIBGEN_MCP_CORE_KEY=
 #LIBGEN_MCP_ANNAS_KEY=
+#LIBGEN_MCP_OPENALEX_KEY=
 ```
 
 Every variable is a `LIBGEN_MCP_*` name listed in [Configuration](/libgen-mcp/configuration/), plus `LIBGEN_MIRROR`. A value that does not parse stops the server at startup, naming the variable. Every HTTP flag has a variable too (`--http` is `LIBGEN_MCP_HTTP_ADDR`), so the whole listener can live in this file instead of `ExecStart=`; a flag typed on `ExecStart=` wins over its variable. Keys belong here or in a credential store, never on the command line, where every local account can read them in `ps`.
@@ -191,7 +192,7 @@ held calls = (limit - limit/8 - 64) / 12
 With `LimitNOFILE=` unset, a systemd service gets a soft limit of 1024 and a hard limit of 524288, and the Go runtime raises the soft limit to the hard one, so the figure follows 524288. There is no flag for the ceiling: the descriptor limit is the setting. Choose it with memory in mind, since a held call costs memory too, and bound that with `MemoryMax=` if the host is shared. The startup line confirms what the process was given:
 
 ```text
-"msg":"process ceilings","held_calls_per_process":5728,"descriptor_limit":65536,"descriptor_limit_source":"RLIMIT_NOFILE"
+"msg":"process ceilings","held_calls_per_process":4773,"descriptor_limit":65536,"descriptor_limit_source":"RLIMIT_NOFILE"
 ```
 
 What happens when the ceiling is reached, and why `/health` stays reachable, is in [What the whole process may hold](/libgen-mcp/http-server-mode/#what-the-whole-process-may-hold).

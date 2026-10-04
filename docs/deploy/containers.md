@@ -85,7 +85,7 @@ What each part is for:
   no `chown`. The `tmpfs` at `/tmp` takes the files `read` fetches when
   `LIBGEN_MCP_SERVER_FETCH` is on. Nothing else is written: the PDF outline reader runs pdfcpu
   with a configuration of its own and never creates its configuration directory.
-- **`ulimits: nofile` sizes the process.** At 65536 the server holds up to 5728 calls at once;
+- **`ulimits: nofile` sizes the process.** At 65536 the server holds up to 4773 calls at once;
   the formula is in [Run as a service](service.md#the-descriptor-limit-sizes-the-process). Many
   runtimes already default to a high limit, and the startup line `process ceilings` says what the
   container got.
@@ -298,6 +298,7 @@ stringData:
   LIBGEN_MCP_UNPAYWALL_EMAIL: "you@example.org"
   LIBGEN_MCP_CORE_KEY: ""
   LIBGEN_MCP_ANNAS_KEY: ""
+  LIBGEN_MCP_OPENALEX_KEY: ""
 ---
 apiVersion: apps/v1
 kind: Deployment

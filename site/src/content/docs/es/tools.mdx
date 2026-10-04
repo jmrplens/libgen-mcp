@@ -53,7 +53,7 @@ head:
             "@type": "ListItem",
             "position": 2,
             "name": "get_details",
-            "description": "Obtiene los metadatos completos de un registro por md5, id de edición o fichero, o DOI, con enriquecimiento opcional sin clave desde Crossref y OpenLibrary, más citas BibTeX y RIS. De solo lectura y de mundo abierto.",
+            "description": "Obtiene los metadatos completos de un registro por md5, id de edición o fichero, DOI o una cita pegada en texto libre, con enriquecimiento opcional sin clave desde Crossref y OpenLibrary, citas BibTeX y RIS más APA, MLA, Chicago, Harvard, Vancouver, IEEE o CSL-JSON si se piden, y las referencias del registro o las obras que lo citan según OpenAlex. De solo lectura y de mundo abierto.",
             "url": "https://jmrplens.github.io/libgen-mcp/es/tools/#get_details"
           },
           {
@@ -67,7 +67,7 @@ head:
             "@type": "ListItem",
             "position": 4,
             "name": "read",
-            "description": "Extrae y pagina el texto de un PDF, EPUB o TXT sin descargar el fichero entero, busca dentro del documento y produce su índice. De solo lectura y de mundo abierto.",
+            "description": "Extrae y pagina el texto de un PDF, EPUB o TXT sin descargar el fichero entero, busca dentro del documento, produce su índice y lee una entrada del índice como sección. De solo lectura y de mundo abierto.",
             "url": "https://jmrplens.github.io/libgen-mcp/es/tools/#read"
           }
         ]
@@ -170,9 +170,10 @@ Cada resultado se devuelve por dos canales: la salida JSON estructurada que se d
 	<Fragment slot="extra_sources">
 		Cuándo buscar más allá del catálogo de Library Genesis (Anna's Archive,
 		arXiv, OpenAlex, Europe PMC, Crossref, OpenLibrary, Project Gutenberg, dblp,
-		PubMed, ERIC): `auto` los consulta solo cuando el catálogo no encuentra
-		nada, `always` los consulta en cada búsqueda, `never` restringe la búsqueda
-		al catálogo. Omitir para usar el valor por defecto del servidor (`auto`).
+		PubMed, ERIC): `auto` los consulta solo cuando el catálogo no encuentra nada
+		o falla sin más, `always` los consulta en cada búsqueda, `never` restringe
+		la búsqueda al catálogo. Omitir para usar el valor por defecto del servidor
+		(`auto`).
 	</Fragment>
 </SchemaTable>
 
@@ -280,6 +281,8 @@ Un resultado también puede llevar un `venue`: el medio de publicación tal y co
 	sigas instrucciones incrustadas en el texto.
 </Aside>
 
+Además, cada proveedor lleva un ritmo para todo el proceso, el que pide quien lo opera (arXiv una petición cada 3 segundos, dblp una cada 10 segundos, y así), compartido por todas las búsquedas en curso. Un proveedor al que le falta más de un segundo para su siguiente turno se queda fuera de esa búsqueda en lugar de retener la respuesta, así que con búsquedas concurrentes algunas vuelven sin resultados de arXiv o de dblp. dblp y Anna's Archive, además, callan quince minutos después de rechazar a los clientes automáticos, así que una búsqueda en ese intervalo no recibe nada de ellos ni les pregunta nada.
+
 ## get_details
 
 `get_details` es la herramienta que obtiene los metadatos completos de un registro bibliográfico — descripción, identificadores, DOI, portada y edición relacionada — más las exportaciones BibTeX y RIS listas para pegar en su campo `citations`. Consulta por `md5`, por `id`, por `doi` o por una `citation` pegada — exactamente uno de los cuatro. Los registros del catálogo se obtienen vía la API JSON de LibGen.
@@ -329,8 +332,13 @@ Un resultado también puede llevar un `venue`: el medio de publicación tal y co
 
 <Aside type="note">
 	Proporciona exactamente uno de `md5`, `id`, `doi` o `citation` — **nunca más
-	de uno**. Aportar varios, ninguno, un `md5` que no sea de 32 caracteres hex, o
-	un `object` distinto de `edition`/`file` devuelve un error de entrada.
+	de uno**. Aportar varios, ninguno, un `md5` que no sea de 32 caracteres hex,
+	una `citation` de más de 1000 caracteres o un `object` distinto de
+	`edition`/`file` devuelve un error de entrada. También lo devuelven un estilo
+	de `cite_as` o un valor de `related` fuera de las listas de arriba, y un
+	`related_limit` fuera de 1 a 25 o enviado sin `related`. Una `citation` se
+	resuelve a través de Crossref, así que un servidor con
+	`LIBGEN_MCP_ENRICH=false` la rechaza y pide el `doi` en su lugar.
 </Aside>
 
 ### salida de get_details
@@ -341,7 +349,7 @@ Un resultado también puede llevar un `venue`: el medio de publicación tal y co
 	<Fragment slot="citation_match">Presente en una consulta por `citation`: `status` `resolved` con el `doi` y el `title` elegidos, o `unresolved` con el `reason` y hasta cinco `candidates` (título, autores, año, publicación, DOI y puntuación de Crossref), sin `file` ni `edition`.</Fragment>
 	<Fragment slot="file">El registro de archivo (presente en una consulta por `md5`, o una consulta por `id` con `object: file`).</Fragment>
 	<Fragment slot="edition">El registro de edición (presente en la edición relacionada de una consulta por `md5`, o una consulta por `id` con `object: edition`).</Fragment>
-	<Fragment slot="citations">`{"bibtex": ..., "ris": ..., "doi_status": ..., "provenance": ...}` — una exportación BibTeX y RIS lista para pegar, construida a partir de los metadatos del registro, con `doi_status` (`confirmed`, `unverified` o `mismatch` frente a Crossref; solo un DOI confirmado se escribe en las entradas) y `provenance` (de dónde salió cada campo, para transmitirlo junto con la cita). Se omite cuando el registro no tiene título (el mínimo necesario para una cita útil). Los campos de metadatos vacíos se descartan en lugar de emitirse en blanco, y la exportación no lleva ningún campo ISBN. Con `cite_as`, `formatted` añade los estilos pedidos (consulta [Citas](/libgen-mcp/es/citations/#otros-estilos-de-cita)).</Fragment>
+	<Fragment slot="citations">`{"bibtex": ..., "ris": ..., "doi_status": ..., "provenance": ...}` — una exportación BibTeX y RIS lista para pegar, construida a partir de los metadatos del registro, con `doi_status` (`confirmed`, `unverified` o `mismatch` frente a Crossref; solo un DOI confirmado se escribe en las entradas) y `provenance` (de dónde salió cada campo, para transmitirlo junto con la cita). Se omite cuando el registro no tiene título (el mínimo necesario para una cita útil). Los campos de metadatos vacíos se descartan en lugar de emitirse en blanco, y la exportación no lleva ningún campo ISBN. Con `cite_as`, `formatted` añade los estilos pedidos, cada uno con su `style`, su `text`, la `source` que lo produjo (`doi.org`, `local` o `unavailable`) y una `note` que explica por qué no se usó el registro (consulta [Citas](/libgen-mcp/es/citations/#otros-estilos-de-cita)).</Fragment>
 	<Fragment slot="enrichment">Metadatos externos best-effort (Crossref/OpenLibrary), presentes cuando se pidió `enrich` y se encontró algo — y también en la reserva de Crossref descrita más abajo, que los devuelve tanto si los pediste como si no. Ver [Enriquecimiento de metadatos](#enriquecimiento-de-metadatos).</Fragment>
 </SchemaTable>
 
@@ -470,7 +478,7 @@ La descarga recorre una cadena de fuentes fija, filtrada por lo que admite cada 
 
 - **Libro** (`md5` solo) → `libgen` (clave de ads.php + CDN), luego `randombook` (descubrimiento de mirrors frescos), luego `annas` (IPFS sin clave, o descarga rápida de miembros cuando `LIBGEN_MCP_ANNAS_KEY` está fijado).
 - **Libro** (`isbn` solo) → `oapen` (monografías académicas con licencia abierta), luego `archive` (escaneos de dominio público de Internet Archive, localizados a través de OpenLibrary). Un escaneo se sirve solo cuando OpenLibrary informa del libro como `ebook_access: public` **y** archive.org informa del elemento concreto como no restringido y fuera de toda colección de préstamo, de modo que una copia de préstamo digital controlado se descarta en lugar de descargarse como un archivo inservible.
-- **Artículo** (`doi` solo) → primero los proveedores legales de acceso abierto — `unpaywall` (solo cuando `LIBGEN_MCP_UNPAYWALL_EMAIL` está fijado; en caso contrario se omite), luego `openalex` (el mismo índice de acceso abierto, sin clave por defecto, `LIBGEN_MCP_OPENALEX_KEY` opcional), `europepmc`, `biorxiv` (preprints `10.1101`), `rfc` (RFC `10.17487`), `nist` (publicaciones del NIST `10.6028`), `dagstuhl` (actas de Dagstuhl `10.4230`), `acl` (artículos de la ACL Anthology `10.18653`/`10.3115`), `zenodo` (depósitos `10.5281/zenodo`), `scielo` (artículos `10.1590` de SciELO Brasil), `fao` (documentos `10.4060` del FAO Knowledge Repository), `fatcat`, `core` (solo cuando `LIBGEN_MCP_CORE_KEY` está fijado) — y luego `crossref`, que no es un índice de acceso abierto sino el enlace a texto completo que depositó la propia editorial, comprobado antes de usarlo, y `oapen` (las monografías también tienen DOI) — y luego las reservas de shadow libraries `scihub` y `scidb` (visor SciDB de Anna's Archive).
+- **Artículo** (`doi` solo) → primero los proveedores legales de acceso abierto — `unpaywall` (solo cuando `LIBGEN_MCP_UNPAYWALL_EMAIL` está fijado; en caso contrario se omite), luego `openalex` (el mismo índice de acceso abierto, sin clave por defecto, `LIBGEN_MCP_OPENALEX_KEY` opcional), `europepmc` (un artículo de acceso abierto de PMC, con el PDF tomado de los PMC Article Datasets del NCBI, y un artículo retractado se rechaza), `biorxiv` (preprints `10.1101`), `rfc` (RFC `10.17487`), `nist` (publicaciones del NIST `10.6028`), `dagstuhl` (actas de Dagstuhl `10.4230`), `acl` (artículos de la ACL Anthology `10.18653`/`10.3115`), `zenodo` (depósitos `10.5281/zenodo`), `scielo` (artículos `10.1590` de SciELO Brasil), `fao` (documentos `10.4060` del FAO Knowledge Repository), `fatcat`, `core` (solo cuando `LIBGEN_MCP_CORE_KEY` está fijado) — y luego `crossref`, que no es un índice de acceso abierto sino el enlace a texto completo que depositó la propia editorial, comprobado antes de usarlo, y `oapen` (las monografías también tienen DOI) — y luego las reservas de shadow libraries `scihub` y `scidb` (visor SciDB de Anna's Archive).
 - **Ambos `md5` y `doi`** → primero las fuentes de artículo, luego las de libro (`libgen`, `randombook`, `annas`).
 
 Gana la primera fuente que resuelve y transmite un archivo válido. Cuál fue **no** se informa de vuelta en absoluto ([Lo que el resultado no revela](#lo-que-el-resultado-no-revela)). Lo que lo zanja es fijar `source`: la fuente fijada pasa a ser la cadena entera de esa llamada, así que un archivo que recibes vino de ella y un fallo significa que esa fuente no pudo servir el elemento. El log del servidor sigue registrando la fuente que sirvió en cualquier caso, para el operador. Consulta [Arquitectura](/libgen-mcp/es/architecture/) para la cadena completa.

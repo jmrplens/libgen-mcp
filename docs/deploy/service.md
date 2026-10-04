@@ -131,6 +131,7 @@ LIBGEN_MCP_HTTP_IDLE_TIMEOUT=5m
 #LIBGEN_MCP_UNPAYWALL_EMAIL=you@example.org
 #LIBGEN_MCP_CORE_KEY=
 #LIBGEN_MCP_ANNAS_KEY=
+#LIBGEN_MCP_OPENALEX_KEY=
 ```
 
 Every variable is a `LIBGEN_MCP_*` name listed in [Configuration](../configuration.md), plus
@@ -215,7 +216,7 @@ mind, since a held call costs memory too, and bound that with `MemoryMax=` if th
 The startup line confirms what the process was given:
 
 ```text
-"msg":"process ceilings","held_calls_per_process":5728,"descriptor_limit":65536,"descriptor_limit_source":"RLIMIT_NOFILE"
+"msg":"process ceilings","held_calls_per_process":4773,"descriptor_limit":65536,"descriptor_limit_source":"RLIMIT_NOFILE"
 ```
 
 What happens when the ceiling is reached, and why `/health` stays reachable, is in

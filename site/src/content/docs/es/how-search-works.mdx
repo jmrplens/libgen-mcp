@@ -62,7 +62,7 @@ head:
             "name": "¿Cómo se tratan los resultados duplicados?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Se eliminan por huella del fichero. El mismo md5 aportado por dos fuentes aparece una sola vez. Cuando un fichero aparece a la vez en el catálogo y en Anna's Archive, gana el registro del catálogo, porque lleva metadatos más ricos — editoriales, idiomas, ISBN y los demás campos que el catálogo se molesta en recopilar — y la copia de Anna's se descarta en lugar de mostrarse dos veces en una forma más pobre."
+              "text": "Se eliminan por huella del fichero. El mismo md5 aportado por dos fuentes aparece una sola vez. Cuando un fichero aparece a la vez en el catálogo y en Anna's Archive, gana el registro del catálogo, porque lleva metadatos más ricos — editoriales, idiomas, ISBN y los demás campos que el catálogo se molesta en recopilar — y la copia de Anna's se descarta en lugar de mostrarse dos veces en una forma más pobre. Entre los resultados de acceso abierto, que no llevan md5, un resultado también se descarta cuando un proveedor anterior en un orden fijo ya devolvió el mismo DOI o el mismo título y año."
             }
           },
           {
@@ -121,9 +121,23 @@ flowchart TD
     G --> H[devolver resultados combinados]
 ```
 
-En prosa: `never` consulta el catálogo de Library Genesis y se detiene ahí. `always` consulta el catálogo y todas las fuentes extra a la vez. `auto`, el valor por defecto, consulta primero el catálogo y solo recurre a las fuentes extra cuando este no devolvió nada o falló directamente. Siempre que se ejecutan las fuentes extra, sus resultados vuelven por dos canales: Anna's Archive se identifica por md5, así que sus ficheros se deduplican contra el catálogo y se unen a la lista principal `results`; los otros siete caen en un array aparte, `open_access`. Ambos se etiquetan por `origin`.
+En prosa: `never` consulta el catálogo de Library Genesis y se detiene ahí. `always` consulta el catálogo y todas las fuentes extra a la vez. `auto`, el valor por defecto, consulta primero el catálogo y solo recurre a las fuentes extra cuando este no devolvió nada o falló directamente. Siempre que se ejecutan las fuentes extra, sus resultados vuelven por dos canales: Anna's Archive se identifica por md5, así que sus ficheros se deduplican contra el catálogo y se unen a la lista principal `results`; los otros nueve caen en un array aparte, `open_access`. Ambos se etiquetan por `origin`.
 
-Cuando se consultan las fuentes adicionales, se consulta a cada fuente y las respuestas se fusionan. Los duplicados se eliminan por **digest de archivo** (el md5): el mismo archivo que aparece en dos fuentes se muestra una sola vez. Cuando ese mismo archivo aparece tanto en el catálogo como en Anna's, **gana el registro del catálogo**, porque lleva metadatos más ricos — editoriales, idiomas, ISBNs y el resto de campos que el catálogo se esfuerza en recoger. La copia de Anna's se descarta en lugar de mostrarse dos veces en una forma más pobre.
+Cuando se consultan las fuentes adicionales, se consulta a todas a la vez y las respuestas se fusionan. Los duplicados se eliminan por **digest de archivo** (el md5): el mismo archivo que aparece en dos fuentes se muestra una sola vez. Cuando ese mismo archivo aparece tanto en el catálogo como en Anna's, **gana el registro del catálogo**, porque lleva metadatos más ricos — editoriales, idiomas, ISBNs y el resto de campos que el catálogo se esfuerza en recoger. La copia de Anna's se descarta en lugar de mostrarse dos veces en una forma más pobre.
+
+Los resultados de acceso abierto no llevan md5, así que entre ellos un resultado también se descarta cuando uno anterior ya traía el mismo **DOI**, o el mismo **título y año**. «Anterior» es un orden fijo, no el de quien respondió antes: arXiv, OpenAlex, Europe PMC, Crossref, OpenLibrary, Gutenberg y después dblp, PubMed y ERIC. El orden está elegido para que, ante el mismo artículo, sobreviva la fila que puede llevar a un fichero: el PDF de arXiv es un fichero que aloja el propio arXiv, el veredicto de acceso abierto de OpenAlex sirve más que la marca de licencia de Crossref, y los índices bibliográficos van al final porque sus filas describen un artículo sin ofrecerlo.
+
+### Acotar por año
+
+`year_from` y `year_to` acotan una búsqueda a un rango de años de publicación, ambos inclusive, y cualquiera de los dos lados puede quedar abierto. El catálogo no tiene filtro por año, así que su página se filtra después de llegar y `year_filtered` cuenta los registros de esa página que el rango dejó fuera. De las fuentes extra, arXiv, OpenAlex, Europe PMC, Crossref, OpenLibrary, dblp, PubMed y ERIC aplican el rango en su propia consulta. Gutenberg y Anna's no pueden, así que sus resultados se filtran cuando responden, y ahí se descarta el resultado que no trae año propio: los registros de Gutendex no llevan año de publicación, así que con un rango no queda ningún resultado de Gutenberg. Sea cual sea la fuente, nada fuera del rango sobrevive. Los detalles de los argumentos están en la [página de herramientas](/libgen-mcp/es/tools/).
+
+### Cuándo una fuente se queda fuera de una búsqueda
+
+A cada fuente extra se le pregunta con un presupuesto propio (seis segundos), y una lenta o que falla no aporta nada en lugar de retener la respuesta. Otras tres cosas pueden hacer que una fuente no devuelva nada en una búsqueda sin que a la búsqueda le pase nada:
+
+- **El ritmo.** Cada fuente lleva un ritmo para todo el proceso, no por búsqueda, al que pide quien la opera: arXiv una petición cada tres segundos, dblp una cada diez (el crawl delay que publica su servicio de consultas), PubMed tres por segundo, OpenLibrary una por segundo (tres con dirección de contacto), y OpenAlex, Europe PMC, Crossref, ERIC y Gutenberg una por segundo. Cuando a la siguiente petición de una fuente le falta más de un segundo, esa búsqueda se la salta en lugar de esperar, así que con búsquedas concurrentes solo algunas reciben arXiv o dblp.
+- **Los rechazos.** Cuando dblp responde con una comprobación anti-bots o un límite de ritmo, o un mirror de Anna's Archive con un desafío de navegador, a esa fuente no se le vuelve a preguntar durante quince minutos, y el servidor lo registra una sola vez.
+- **Los créditos diarios de OpenAlex**, descritos más arriba. Un rechazo por ritmo que pide un minuto o menos pausa las búsquedas sin clave y `related` ese tiempo, no el resto del día. Una búsqueda enviada con clave no consulta el presupuesto.
 
 ## Qué vuelve: orígenes y descargas
 
@@ -182,7 +196,7 @@ Diez: Anna's Archive y los nueve proveedores de acceso abierto y bibliográficos
 
 ### ¿Cómo se tratan los resultados duplicados?
 
-Se eliminan por huella del fichero. El mismo md5 aportado por dos fuentes aparece una sola vez. Cuando un fichero aparece a la vez en el catálogo y en Anna's Archive, gana el registro del catálogo, porque lleva metadatos más ricos — editoriales, idiomas, ISBN y los demás campos que el catálogo se molesta en recopilar — y la copia de Anna's se descarta en lugar de mostrarse dos veces en una forma más pobre.
+Se eliminan por huella del fichero. El mismo md5 aportado por dos fuentes aparece una sola vez. Cuando un fichero aparece a la vez en el catálogo y en Anna's Archive, gana el registro del catálogo, porque lleva metadatos más ricos — editoriales, idiomas, ISBN y los demás campos que el catálogo se molesta en recopilar — y la copia de Anna's se descarta en lugar de mostrarse dos veces en una forma más pobre. Entre los resultados de acceso abierto, que no llevan md5, un resultado también se descarta cuando un proveedor anterior en un orden fijo ya devolvió el mismo DOI o el mismo título y año.
 
 ### ¿Un resultado de búsqueda me dice si una obra es libre de leer?
 

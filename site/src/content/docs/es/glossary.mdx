@@ -40,7 +40,29 @@ Los números propios del catálogo para la edición de una obra y para uno de su
 
 ### Registro
 
-Lo que `get_details` devuelve para un identificador: los metadatos de fichero y de edición del catálogo, un bloque `citations` cuando el registro tiene título, y un enriquecimiento opcional. Cuando el catálogo no tiene el registro, pueden ocupar su lugar Anna's Archive o Crossref, marcados con `origin`. Consulta [Herramientas](/libgen-mcp/es/tools/#registros-que-el-catálogo-no-tiene).
+Lo que `get_details` devuelve para un identificador: los metadatos de fichero y de edición del catálogo, un bloque `citations` cuando el registro tiene título, y un enriquecimiento opcional. Cuando el catálogo no tiene el registro, pueden ocupar su lugar Anna's Archive, Crossref o el propio registro del DOI a través de doi.org, marcados con `origin`. Consulta [Herramientas](/libgen-mcp/es/tools/#registros-que-el-catálogo-no-tiene).
+
+### Consulta por cita (`citation`)
+
+Una referencia pegada en `get_details` como texto libre, en cualquier estilo, en lugar de un identificador. Se resuelve a un DOI a través de Crossref solo cuando el mejor candidato gana con claridad, por puntuación y por cuánto de su título contiene la referencia. Si no, `citation_match` enumera los candidatos y no se elige ninguno por ti. Consulta [Herramientas](/libgen-mcp/es/tools/#entrada-de-get_details).
+
+## Citar
+
+### DOI confirmado
+
+Un DOI que nombra la obra a la que va unido: uno que Crossref confirmó frente al título del registro, o uno cuyo registro vino de Crossref o del registro del DOI desde el principio. Solo un DOI confirmado entra en BibTeX y RIS, se envía a doi.org para `cite_as` y se usa para `related`, porque un DOI del catálogo que no pasa la comprobación pertenece a otra obra. Consulta [Citas](/libgen-mcp/es/citations/#por-qué-puede-faltar-el-doi-en-la-cita).
+
+### Estilos de cita (`cite_as`)
+
+Los formatos extra que `get_details` puede añadir junto a BibTeX y RIS: `apa`, `mla`, `chicago`, `harvard`, `vancouver`, `ieee` y `csl-json`. Cada uno dice qué camino lo produjo: `doi.org` (lo formateó la agencia de registro del DOI), `local` (construido con los campos del propio registro) o `unavailable`. Consulta [Citas](/libgen-mcp/es/citations/#otros-estilos-de-cita).
+
+### CSL y CSL-JSON
+
+El Citation Style Language, el estándar abierto con el que los gestores de referencias y doi.org describen un estilo de cita. CSL-JSON es su formato de registro, el que devuelve `cite_as: ["csl-json"]` y leen herramientas como Zotero y pandoc. Consulta [Citas](/libgen-mcp/es/citations/#otros-estilos-de-cita).
+
+### Obras relacionadas (`related`)
+
+Las referencias que cita un registro, o las obras que lo citan, que `get_details` enumera desde OpenAlex con `related: "references"` o `"cited_by"`, las más citadas primero. Necesita un DOI confirmado. Consulta [Herramientas](/libgen-mcp/es/tools/#obras-relacionadas).
 
 ## De dónde salen los resultados
 
@@ -76,6 +98,22 @@ El ajuste que decide cuándo consulta una búsqueda a los proveedores: `auto` (e
 
 La etiqueta de cada resultado que nombra el buscador que lo produjo (`libgen`, `annas`, `crossref`, `openalex`, `europepmc`, `arxiv`, `openlibrary`, `gutenberg`, `dblp`, `pubmed`, `eric`). Dice qué identificador lleva el resultado y, por tanto, qué argumento recibe la siguiente llamada. Consulta [Cómo funciona la búsqueda](/libgen-mcp/es/how-search-works/#qué-vuelve-orígenes-y-descargas).
 
+### Rango de años (`year_from`, `year_to`)
+
+Los límites inclusivos a los que se ciñe una búsqueda, con cualquiera de los dos lados abierto. La mayoría de los proveedores aplican el rango en su propia consulta. El catálogo no puede, así que su página se filtra al llegar y `year_filtered` cuenta lo que esa página perdió, registros sin fecha incluidos. Consulta [Cómo funciona la búsqueda](/libgen-mcp/es/how-search-works/#acotar-por-año).
+
+### Créditos de OpenAlex
+
+La asignación en la que OpenAlex mide su API: 1000 al día por dirección sin clave, renovada a medianoche UTC, donde una búsqueda cuesta 10, una lista filtrada 1 y la consulta de un solo registro nada. Toda petición de este servidor a OpenAlex gasta de la misma asignación, y sin clave el proveedor de búsqueda se detiene antes de una reserva guardada para `related`. `LIBGEN_MCP_OPENALEX_KEY` la pasa a la asignación, mayor, de la clave. Consulta [Configuración](/libgen-mcp/es/configuration/#libgen_mcp_openalex_key).
+
+### Ritmo
+
+La frecuencia con la que se pregunta a cada proveedor, que se mantiene para todo el proceso y no por búsqueda: arXiv una vez cada 3 segundos, dblp una cada 10, la mayoría de los demás una por segundo. Un proveedor cuya siguiente petición queda a más de un segundo se salta la búsqueda en lugar de retrasarla. Consulta [Cómo funciona la búsqueda](/libgen-mcp/es/how-search-works/#cuándo-una-fuente-se-queda-fuera-de-una-búsqueda).
+
+### Ventana de rechazo
+
+Los quince minutos que se deja en paz a un proveedor después de que se niegue a responder: la comprobación anti-bots o el límite de ritmo de dblp, el desafío de navegador de un mirror de Anna's Archive. El servidor registra el rechazo una vez y el proveedor no devuelve nada hasta que termina la ventana. Consulta [Cómo funciona la búsqueda](/libgen-mcp/es/how-search-works/#cuándo-una-fuente-se-queda-fuera-de-una-búsqueda).
+
 ## Descargas
 
 ### Fuente
@@ -94,6 +132,10 @@ Pasar al siguiente mirror o a la siguiente fuente cuando uno falla, dentro de la
 
 Una pausa sobre algo que acaba de resultar inalcanzable: 45 segundos para un mirror, 5 minutos para una fuente. Una fuente que respondió «no tengo este elemento» nunca se aparta, porque eso no dice nada de su salud. Consulta [Arquitectura](/libgen-mcp/es/architecture/#enfriamiento-por-fuente).
 
+### PMC Article Datasets
+
+La copia que publica NCBI de los artículos de acceso abierto de PubMed Central, en AWS Open Data para su reutilización automatizada. La fuente `europepmc` comprueba con Europe PMC que un artículo es de acceso abierto y no está retractado, y luego toma el PDF de este conjunto de datos, porque los enlaces a PDF del propio Europe PMC responden a los clientes automatizados con una página de desafío. Consulta [Fuentes de descarga](/libgen-mcp/es/sources/#europepmc).
+
 ### Solo resolver (`resolve_only`)
 
 El modo de `download` que devuelve el enlace directo, con las cabeceras que necesite, en lugar de guardar el fichero. Un servidor remoto responde siempre así, porque el fichero debe viajar por tu conexión, no por la del servidor. Consulta [Herramientas](/libgen-mcp/es/tools/#dónde-acaba-el-archivo-local-vs-remoto).
@@ -110,7 +152,11 @@ El testigo opaco que devuelve una respuesta de `read` cuando queda más. Devolve
 
 ### Índice
 
-La tabla de contenidos de un documento, sacada de los marcadores del PDF o de la navegación del EPUB, que `read` devuelve con `outline: true`. `max_depth` la recorta a los niveles que necesitas. Consulta [Herramientas](/libgen-mcp/es/tools/#índice-de-contenidos).
+La tabla de contenidos de un documento, sacada de los marcadores del PDF o de la navegación del EPUB, que `read` devuelve con `outline: true`. Cada entrada lleva un número, `index`, y `max_depth` la recorta a los niveles que necesitas sin renumerarla. Consulta [Herramientas](/libgen-mcp/es/tools/#índice-de-contenidos).
+
+### Sección (`section`)
+
+Una entrada del índice leída por separado, nombrada por su `index` o por su título: desde donde empieza hasta donde empieza la siguiente entrada del mismo nivel o de uno superior. Una sección de un PDF termina en una página entera, así que puede incluir el comienzo de la siguiente. Consulta [Herramientas](/libgen-mcp/es/tools/#leer-una-sola-entrada).
 
 ### Texto no fiable
 
@@ -120,7 +166,7 @@ Todo lo que un resultado cita de un tercero: títulos, descripciones, texto extr
 
 ### Sin claves
 
-Funcionar sin cuenta, clave de API ni token. La búsqueda, los detalles y las descargas tienen todos un camino sin claves. Una credencial solo añade algo: la fuente `unpaywall` (un correo de contacto), la fuente `core` (una clave de API) y las descargas de miembro de Anna's Archive (una clave de miembro). Consulta [Configuración](/libgen-mcp/es/configuration/).
+Funcionar sin cuenta, clave de API ni token. La búsqueda, los detalles y las descargas tienen todos un camino sin claves. Una credencial solo añade algo: la fuente `unpaywall` (un correo de contacto), la fuente `core` (una clave de API), las descargas de miembro de Anna's Archive (una clave de miembro) y una asignación mayor de OpenAlex (una clave de API). Consulta [Configuración](/libgen-mcp/es/configuration/).
 
 ### Clave por llamada
 
@@ -170,7 +216,7 @@ Una llamada que el proceso mantiene abierta, casi siempre esperando al presupues
 
 ### Presupuesto saliente
 
-El único token bucket en el que espera cada petición a un mirror o a un proveedor, `LIBGEN_MCP_RATE_RPS` (una por segundo por defecto). Lo comparten todos los llamantes de un proceso, y por eso un límite de entrada por encima de él solo mueve la cola. Consulta [Escalado y capacidad](/libgen-mcp/es/deploy/scaling/).
+El único token bucket en el que espera cada petición al catálogo en un mirror y cada descarga, `LIBGEN_MCP_RATE_RPS` (una por segundo por defecto). Los proveedores llevan su ritmo en buckets propios (consulta [Ritmo](#ritmo)). Lo comparten todos los llamantes de un proceso, y por eso un límite de entrada por encima de él solo mueve la cola. Consulta [Escalado y capacidad](/libgen-mcp/es/deploy/scaling/).
 
 ### Drenado
 

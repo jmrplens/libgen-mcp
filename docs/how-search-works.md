@@ -105,12 +105,50 @@ flowchart TD
     G --> H[return combined results]
 ```
 
-When the extras are consulted, every source is queried and the answers are merged. Duplicates
-are removed by **file digest** (the md5): the same file surfaced by two sources appears only
-once. When that same file appears in both the catalog and Anna's, **the catalog record wins**,
-because it carries richer metadata — publishers, languages, ISBNs, and the other fields the
-catalog invests in collecting. The Anna's copy is dropped rather than shown twice in a
-thinner form.
+When the extras are consulted, every source is queried at once and the answers are merged.
+Duplicates are removed by **file digest** (the md5): the same file surfaced by two sources
+appears only once. When that same file appears in both the catalog and Anna's, **the catalog
+record wins**, because it carries richer metadata — publishers, languages, ISBNs, and the
+other fields the catalog invests in collecting. The Anna's copy is dropped rather than shown
+twice in a thinner form.
+
+The open-access hits carry no md5, so among them a result is also dropped when an earlier one
+already carried the same **DOI**, or the same **title and year**. "Earlier" is a fixed order,
+not whichever answered first: arXiv, OpenAlex, Europe PMC, Crossref, OpenLibrary, Gutenberg,
+then dblp, PubMed and ERIC. The order is chosen so that, for the same paper, the row that can
+lead to a file survives: arXiv's PDF is its own hosted file, OpenAlex's open-access verdict is
+more useful than Crossref's licence flag, and the bibliographic indexes come last because
+their rows describe a paper without offering it.
+
+### Narrowing by year
+
+`year_from` and `year_to` bound a search to a range of publication years, inclusive, and
+either side can be left open. The catalog has no year filter, so its page is filtered after it
+arrives and `year_filtered` counts the records on that page the range left out. Of the extra
+sources, arXiv, OpenAlex, Europe PMC, Crossref, OpenLibrary, dblp, PubMed and ERIC take the
+range in their own query. Gutenberg and Anna's cannot, so their hits are filtered after they
+answer, and a hit with no year of its own is dropped there: Gutendex records carry no
+publication year, so a range leaves no Gutenberg hits at all. Whatever the source, nothing
+outside the range survives. The argument details are on the [tools page](tools.md).
+
+### When a source sits a search out
+
+Every extra source is asked under a budget of its own (six seconds), and a slow or failing one
+contributes nothing rather than holding the answer back. Three more things can make a source
+return nothing for one search without anything being wrong with the search:
+
+- **Pacing.** Each source is paced for the whole process, not per search, at the rate its
+  operator asks for: arXiv one request every three seconds, dblp one every ten (the crawl
+  delay its query service publishes), PubMed three a second, OpenLibrary one a second (three
+  with a contact address), and OpenAlex, Europe PMC, Crossref, ERIC and Gutenberg one a
+  second. When a source's next request is due more than a second away, that search skips it
+  instead of waiting, so under concurrent searches only some of them get arXiv or dblp.
+- **Refusals.** When dblp answers with a bot check or a rate limit, or an Anna's Archive
+  mirror with a browser challenge, that source is not asked again for fifteen minutes, and
+  the server logs it once.
+- **OpenAlex's daily credits**, described above. A rate-limit refusal that asks for a minute
+  or less pauses keyless searches and `related` for that long, not for the rest of the day. A
+  search sent with a key does not consult the budget.
 
 ## What comes back: origins and downloads
 

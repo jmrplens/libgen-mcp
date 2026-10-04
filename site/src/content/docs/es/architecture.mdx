@@ -174,8 +174,8 @@ Las fuentes de descarga implementan una interfaz común — `Name`, `Supports(it
 | Fuente       | Identificado por               | Rol                             | En una línea                                                                                             |
 | ------------ | ------------------------------ | ------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `unpaywall`  | DOI                            | Artículos de acceso abierto     | El mejor enlace a PDF de acceso abierto que la API de Unpaywall conoce para un DOI.                      |
-| `openalex`   | DOI                            | Artículos de acceso abierto     | El mismo índice de acceso abierto que Unpaywall, alcanzado sin credencial alguna.                        |
-| `europepmc`  | DOI                            | Artículos de acceso abierto     | El texto completo de acceso abierto de PubMed Central, vía la API de Europe PMC.                         |
+| `openalex`   | DOI                            | Artículos de acceso abierto     | El mismo índice de acceso abierto que Unpaywall, sin clave por defecto y con una clave opcional.         |
+| `europepmc`  | DOI                            | Artículos de acceso abierto     | Un PDF de acceso abierto de PMC, filtrado por Europe PMC y tomado de los PMC Article Datasets de NCBI.   |
 | `biorxiv`    | DOI `10.1101`                  | Preprints de acceso abierto     | El `.full.pdf` de la última versión en bioRxiv o medRxiv.                                                |
 | `rfc`        | DOI `10.17487`                 | Estándares de internet          | El `.txt` canónico del RFC Editor, construido a partir del número de RFC.                                |
 | `nist`       | DOI `10.6028`                  | Normas del NIST                 | La redirección del resolutor de DOI, que acaba en el PDF de `nvlpubs.nist.gov`.                          |
@@ -219,7 +219,7 @@ Ambas decisiones son visibles en el log junto a las líneas de intento por fuent
 
 La cadena de descarga anterior es una de las dos federaciones del servidor. La otra es el camino de búsqueda, con una estructura distinta: la cadena de descarga está ordenada y se detiene en el primer éxito, mientras que los buscadores se ejecutan en paralelo y sus respuestas se fusionan.
 
-Una búsqueda siempre consulta el catálogo de Library Genesis a través del mismo cliente con failover. Que consulte además los **buscadores adicionales** — Anna's Archive más los proveedores de acceso abierto sin clave (arXiv, Crossref, OpenLibrary), los índices bibliográficos (dblp, PubMed) y ERIC — lo decide `ExtraSourcesMode`, resuelto en cada llamada a partir del argumento `extra_sources` y con `LIBGEN_MCP_EXTRA_SOURCES` como respaldo:
+Una búsqueda siempre consulta el catálogo de Library Genesis a través del mismo cliente con failover. Que consulte además los **buscadores adicionales** — Anna's Archive más los proveedores de acceso abierto (arXiv, OpenAlex, Europe PMC, Crossref, OpenLibrary, Project Gutenberg), los índices bibliográficos (dblp, PubMed) y ERIC — lo decide `ExtraSourcesMode`, resuelto en cada llamada a partir del argumento `extra_sources` y con `LIBGEN_MCP_EXTRA_SOURCES` como respaldo:
 
 | Modo     | Cuándo se ejecutan los adicionales               | Planificación                                                    |
 | -------- | ------------------------------------------------ | ---------------------------------------------------------------- |
@@ -227,11 +227,27 @@ Una búsqueda siempre consulta el catálogo de Library Genesis a través del mis
 | `always` | En cada búsqueda                                 | A la vez que el catálogo, porque la decisión no depende de él    |
 | `never`  | Nunca                                            | —                                                                |
 
-Cada buscador adicional implementa `discovery.Provider` (`Name`, `Search`), y `Federate` ejecuta el conjunto en paralelo con recuperación de pánico por proveedor, así que un proveedor que falle no puede tumbar la búsqueda. La fusión se hace por espacio de identificadores: los resultados de Anna's llevan md5 y se unen a `results` etiquetados con `origin: "annas"`, mientras que los de acceso abierto llevan DOI y se quedan en `open_access`. Los duplicados se eliminan por md5, y un archivo presente tanto en el catálogo como en Anna's conserva el registro del catálogo, que lleva metadatos más ricos.
+Cada buscador adicional implementa `discovery.Provider` (`Name`, `Search`), y `Federate` ejecuta el conjunto en paralelo con recuperación de pánico por proveedor, así que un proveedor que falle no puede tumbar la búsqueda. La fusión se hace por espacio de identificadores: los resultados de Anna's llevan md5 y se unen a `results` etiquetados con `origin: "annas"`, mientras que los de acceso abierto llevan DOI y se quedan en `open_access`. Los duplicados se eliminan por md5, y un archivo presente tanto en el catálogo como en Anna's conserva el registro del catálogo, que lleva metadatos más ricos. Entre los buscadores adicionales también se descarta un resultado cuyo DOI, o en su defecto su título y año, ya se había visto, y se conserva el primero en el orden de proveedores. Eso convierte el orden en una decisión: arXiv va primero porque su PDF es siempre un archivo propio, y OpenAlex y Europe PMC van antes que Crossref porque su indicador de acceso abierto dice lo que un lector puede descargar, mientras que el de Crossref es una licencia.
+
+Tres piezas de estado sobreviven a la búsqueda que las creó, porque en cada búsqueda se construye un juego nuevo de proveedores y lo que se guardara en un proveedor lo olvidaría la siguiente:
+
+- **Ritmo.** Las peticiones de búsqueda de cada proveedor esperan en un único cubo por servicio para todo el proceso (`internal/discovery/pace.go`), así que las búsquedas concurrentes comparten el ritmo de un servicio en vez de traer cada una un cubo lleno. Un token que llegaría a más de un segundo se devuelve sin gastar y ese proveedor se queda fuera de la búsqueda, porque `Federate` solo responde cuando han respondido todos. Anna's Archive es el único buscador sin ritmo: lo que lo mantiene cortés es su ventana de rechazo.
+- **Ventanas de rechazo.** Un proveedor que se topa con una comprobación anti-bot o un rechazo (dblp, Anna's Archive) se deja en paz quince minutos, con un único aviso en el log (`internal/discovery/refusals.go`).
+- **El presupuesto de créditos de OpenAlex.** `internal/openalex` guarda un único presupuesto para el proceso, compartido por el proveedor de búsqueda `openalex`, la fuente de descarga `openalex` y las obras relacionadas de `get_details`, porque OpenAlex mide a cada cliente por su dirección.
+
+Un rango `year_from`/`year_to` se lleva a la consulta de cada proveedor cuya API lo admite (`discovery.RangeSearcher`), y los resultados de todos los proveedores se filtran por el rango al llegar. El catálogo no tiene filtro de rango, así que su página se filtra después de obtenerla.
 
 ERIC es un buscador sin fuente de descarga asociada, y a propósito. Lo que aporta es literatura gris educativa — informes, tesis, documentos de agencias — que no lleva DOI, así que no encaja en ninguno de los dos espacios de identificadores que entiende la cadena de descarga. Tampoco lo necesita: ERIC sirve todo texto completo que aloja desde una URL derivada del número de registro, de modo que un resultado llega con su `pdf_url` ya rellenado y no queda nada que un `Resolve` deba resolver. Añadir un identificador de ERIC a `Item`, `download` y `read` habría ampliado tres esquemas para envolver una concatenación de cadenas.
 
-`get_details` sigue la misma división. Un md5 del que el catálogo no tiene registro — que es justo lo que devuelve una búsqueda escalada — recurre a la propia página de registro de Anna's, analizada por etiqueta y no por posición, porque el juego de campos varía según la colección de origen.
+`get_details` sigue la misma división. Un md5 del que el catálogo no tiene registro — que es justo lo que devuelve una búsqueda escalada — recurre a la propia página de registro de Anna's, analizada por etiqueta y no por posición, porque el juego de campos varía según la colección de origen. Un DOI que no conocen ni el catálogo ni Crossref recurre al registro CSL-JSON que sirve su propia agencia de registro (DataCite, mEDRA y las demás) mediante negociación de contenido en `doi.org`, etiquetado `file.origin: doi.org`.
+
+Tres partes opcionales de `get_details` van más allá del registro:
+
+- **`citation`** envía una referencia pegada a la búsqueda bibliográfica de Crossref y continúa como consulta por DOI solo cuando el mejor candidato supera a la vez un margen de puntuación sobre el segundo y una comprobación de cobertura del título. Si no, se devuelven los candidatos y no se elige ninguno.
+- **`cite_as`** pide a `doi.org` cada estilo solicitado, en paralelo y con un único tope de 8 segundos, cuando el DOI del registro es uno que nombra esta obra. Cualquier otro registro, o un estilo al que el registro no respondió, se construye localmente con los campos del propio registro, y cada estilo dice qué camino lo produjo.
+- **`related`** lista las referencias o las obras que lo citan desde OpenAlex: una consulta gratuita de una sola entidad por DOI y después una consulta filtrada que cuesta un crédito del presupuesto compartido.
+
+Las tres son metadatos salientes, así que `LIBGEN_MCP_ENRICH=false` las gobierna con el resto: una `citation` se rechaza, `related` no se consulta y todo estilo de `cite_as` se construye localmente.
 
 Para el recorrido conceptual con diagramas, ver [Cómo funciona la búsqueda](/libgen-mcp/es/how-search-works/).
 
