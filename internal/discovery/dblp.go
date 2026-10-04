@@ -372,11 +372,11 @@ func dblpVenue(folded string) string {
 // one.
 func dblpDOI(iri string) string {
 	iri = strings.TrimSpace(iri)
-	for _, prefix := range []string{"https://doi.org/", "http://doi.org/", "https://dx.doi.org/", "http://dx.doi.org/"} {
-		if rest, ok := strings.CutPrefix(iri, prefix); ok {
-			iri = rest
-			break
-		}
+	// The resolver host, with or without "dx." and whatever the scheme, is cut
+	// at its path: the knowledge graph spells it https://doi.org/ today, and its
+	// owl:sameAs links still use the older forms.
+	if _, rest, ok := strings.Cut(iri, "doi.org/"); ok {
+		iri = rest
 	}
 	if !strings.HasPrefix(iri, "10.") || !strings.Contains(iri, "/") {
 		return ""
