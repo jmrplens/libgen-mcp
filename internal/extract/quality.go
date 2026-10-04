@@ -69,16 +69,7 @@ func qualityNote(text string) string {
 // usable ToUnicode map extracts to: the replacement character, a private-use
 // code point, or a non-whitespace control character.
 func isUnmappedGlyph(r rune) bool {
-	switch {
-	case r == unicode.ReplacementChar:
-		return true
-	case unicode.In(r, unicode.Co): // private use
-		return true
-	case unicode.IsControl(r) && !unicode.IsSpace(r):
-		return true
-	default:
-		return false
-	}
+	return r == unicode.ReplacementChar || unicode.In(r, unicode.Co) || (unicode.IsControl(r) && !unicode.IsSpace(r))
 }
 
 // countLatinWords returns how many measurable Latin-script words the text holds
@@ -101,21 +92,21 @@ func countLatinWords(text string) (words, vowelless int) {
 
 // isMeasurableLatinWord reports whether w is a Latin-script word the vowel test
 // can judge: four letters or more, letters only, and not written entirely in
-// capitals (an acronym).
+// capitals (an acronym). Past the length check every rune is a letter, so a word
+// is all capitals exactly when its capitals are as many as its runes.
 func isMeasurableLatinWord(w string) bool {
-	if len([]rune(w)) < 4 {
+	runes := []rune(w)
+	if len(runes) < 4 {
 		return false
 	}
 	caps := 0
-	letters := 0
-	for _, r := range w {
+	for _, r := range runes {
 		if !unicode.IsLetter(r) || !unicode.In(r, unicode.Latin) {
 			return false
 		}
-		letters++
 		if unicode.IsUpper(r) {
 			caps++
 		}
 	}
-	return letters > 0 && caps != letters
+	return caps != len(runes)
 }

@@ -43,7 +43,15 @@ import (
 // spend tens of seconds having twenty pages probed for a text layer, and cutting
 // a legitimate document short is a worse failure than answering a damaged one
 // slowly. It is a variable so tests can shrink it; nothing else writes it.
-var readBudget = 90 * time.Second
+var readBudget = defaultReadBudget()
+
+// defaultReadBudget is readBudget's value: ninety seconds, the figure the tool
+// documentation gives. It is a function rather than an expression in the
+// declaration because a declaration is in no coverage block, so a test could
+// not hold the multiplication to its result there.
+func defaultReadBudget() time.Duration {
+	return 90 * time.Second
+}
 
 // maxStuckReads is how many abandoned reads may be outstanding before the
 // package refuses to start another.
@@ -56,15 +64,14 @@ var stuckReads atomic.Int64
 // unresponsiveReadReason is the diagnosis for a read that ran out of budget. It
 // says the file could not be read, in the same "cannot read" register as the
 // other unreadable-file diagnoses, and it is format-agnostic because a read that
-// never came back never established what it was reading.
-const unresponsiveReadReason = "cannot read the file: the reader did not finish within the time limit " +
-	"(the document is damaged or pathologically structured)"
+// never came back never established what it was reading. It is one literal, as
+// the next one is, for the reason noPDFOutlineReason gives.
+const unresponsiveReadReason = "cannot read the file: the reader did not finish within the time limit (the document is damaged or pathologically structured)"
 
 // saturatedReaderReason is the diagnosis for a read that was never started
 // because too many earlier ones are still stuck. It names the server's state
 // rather than the file's, because this file has not been looked at.
-const saturatedReaderReason = "cannot read the file: too many earlier reads are still stuck on damaged documents, " +
-	"so no new read was started"
+const saturatedReaderReason = "cannot read the file: too many earlier reads are still stuck on damaged documents, so no new read was started"
 
 // guardOutcome carries one guarded read's result back to its caller, including a
 // panic so that recovering stays the caller's business.

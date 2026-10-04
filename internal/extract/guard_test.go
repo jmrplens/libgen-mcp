@@ -406,3 +406,30 @@ func TestGuardedRead_AnExpiredBudgetWinsTheTie(t *testing.T) {
 		}
 	}
 }
+
+// TestGuardedRead_ACallerThatGaveUpIsNotBlamedOnTheFile covers the other side
+// of the tie: the budget has expired and the caller's context has ended too.
+// The caller asked to stop, so it is answered with an error, never with the
+// diagnosis that blames the document for not answering in time. The context
+// passes guardedRead's opening check and has ended by the tie check after it.
+func TestGuardedRead_ACallerThatGaveUpIsNotBlamedOnTheFile(t *testing.T) {
+	shrinkReadBudget(t, -time.Second)
+	awaitNoStuckReads(t)
+
+	_, reason, err := guardedRead(passErr(1), func(ctx context.Context) (int, error) {
+		<-ctx.Done()
+		return 0, ctx.Err()
+	})
+	if reason != "" || err == nil {
+		t.Errorf("reason = %q, err = %v; want no reason and the error of a read that was stopped", reason, err)
+	}
+	awaitNoStuckReads(t)
+}
+
+// TestDefaultReadBudget pins the budget the tool documentation states: ninety
+// seconds for one read of one file.
+func TestDefaultReadBudget(t *testing.T) {
+	if got := defaultReadBudget(); got != 90*time.Second {
+		t.Errorf("defaultReadBudget() = %v, want 1m30s", got)
+	}
+}

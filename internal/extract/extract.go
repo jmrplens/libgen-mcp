@@ -108,12 +108,12 @@ func sniffFormat(d document) string {
 	head := make([]byte, sniffLen)
 	n, _ := io.ReadFull(d.prefix(sniffLen), head)
 	head = head[:n]
-	switch {
-	case bytes.HasPrefix(head, []byte("%PDF-")):
+	if bytes.HasPrefix(head, []byte("%PDF-")) {
 		return "pdf"
+	}
 	// An EPUB is a zip whose first entry is an uncompressed "mimetype" file naming
 	// the format, which is what distinguishes it from any other zip container.
-	case bytes.HasPrefix(head, []byte("PK\x03\x04")) && bytes.Contains(head, []byte("application/epub+zip")):
+	if bytes.HasPrefix(head, []byte("PK\x03\x04")) && bytes.Contains(head, []byte("application/epub+zip")) {
 		return "epub"
 	}
 	// Plain text is deliberately not sniffed: almost anything decodes as text,

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode"
 )
 
 // englishSample is a healthy Latin-script text layer, long enough to clear the
@@ -137,6 +138,99 @@ func TestQualityNote_ShortSampleIsNotJudged(t *testing.T) {
 		t.Run(text, func(t *testing.T) {
 			if note := qualityNote(text); note != "" {
 				t.Errorf("qualityNote(%q) = %q, want no note for a sample this short", text, note)
+			}
+		})
+	}
+}
+
+// vowelWords returns n measurable Latin words of twelve letters, the first
+// vowelless of them with no vowel, separated by spaces: 13n runes of text whose
+// vowel measure is exactly vowelless/n.
+func vowelWords(n, vowelless int) string {
+	words := make([]string, n)
+	for i := range words {
+		words[i] = "qwrtpsdfghjk"
+		if i >= vowelless {
+			words[i] = "qwrtpsdfghja"
+		}
+	}
+	return strings.Join(words, " ") + " "
+}
+
+// TestQualityNote_Thresholds drives each measure to its edges: the shortest
+// sample judged, a share of unmapped glyphs or of vowelless words exactly at
+// its threshold (not flagged, the thresholds being strict) and one past it,
+// and the fewest words the vowel measure takes. Each note quotes the share it
+// measured as a percentage.
+func TestQualityNote_Thresholds(t *testing.T) {
+	// 392 runes of measurable words that all carry a vowel, so only the glyphs
+	// appended to them are measured.
+	healthy := strings.Repeat("abcd ", 78) + "ab"
+	for _, tc := range []struct {
+		name, text, want string
+	}{
+		{"the shortest sample judged", strings.Repeat("�", qualityMinRunes), "100% of the characters are unmapped glyphs"},
+		{"unmapped glyphs at the threshold", healthy + strings.Repeat("�", 8), ""},
+		{"one unmapped glyph", healthy + "�" + strings.Repeat("a", 7), ""},
+		{"unmapped glyphs past the threshold", healthy[:391] + strings.Repeat("�", 9), "2% of the characters are unmapped glyphs"},
+		{"the fewest words measured", vowelWords(qualityMinWords, qualityMinWords), "100% of the words contain no vowel"},
+		{"one word too few", vowelWords(qualityMinWords-1, qualityMinWords-1) + strings.Repeat("7", 13), ""},
+		{"vowelless words at the threshold", vowelWords(qualityMinWords, qualityMinWords/2), ""},
+		{"a few vowelless words", vowelWords(qualityMinWords, 5), ""},
+		{"vowelless words past the threshold", vowelWords(qualityMinWords, qualityMinWords/2+1), "52% of the words contain no vowel"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if n := len([]rune(tc.text)); n < qualityMinRunes {
+				t.Fatalf("the fixture is %d runes, under the %d the check judges", n, qualityMinRunes)
+			}
+			note := qualityNote(tc.text)
+			if tc.want == "" && note != "" {
+				t.Errorf("qualityNote = %q, want no note", note)
+			}
+			if tc.want != "" && !strings.Contains(note, tc.want) {
+				t.Errorf("qualityNote = %q, want it to contain %q", note, tc.want)
+			}
+		})
+	}
+}
+
+// TestIsUnmappedGlyph pins each kind of character a broken font extracts to,
+// and the two a healthy one does: a letter, and whitespace, which is a control
+// character that is ordinary layout.
+func TestIsUnmappedGlyph(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		r    rune
+		want bool
+	}{
+		{"replacement character", unicode.ReplacementChar, true},
+		{"private use", '', true},
+		{"control", '\x01', true},
+		{"tab", '\t', false},
+		{"letter", 'a', false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isUnmappedGlyph(tc.r); got != tc.want {
+				t.Errorf("isUnmappedGlyph(%q) = %t, want %t", tc.r, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestIsMeasurableLatinWord pins which words the vowel measure counts: four
+// Latin letters or more, not all of them capitals.
+func TestIsMeasurableLatinWord(t *testing.T) {
+	for w, want := range map[string]bool{
+		"word":  true,
+		"Html":  true,
+		"HTML":  false,
+		"abc":   false,
+		"ab1c":  false,
+		"Ωmega": false,
+	} {
+		t.Run(w, func(t *testing.T) {
+			if got := isMeasurableLatinWord(w); got != want {
+				t.Errorf("isMeasurableLatinWord(%q) = %t, want %t", w, got, want)
 			}
 		})
 	}

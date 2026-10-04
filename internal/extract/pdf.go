@@ -40,16 +40,15 @@ func invalidPDFReason(err error) string {
 // nothing else: not AES-256 (V=5), not RC4 under crypt filters (V=4 with V2),
 // and not a certificate-based handler. Such a file is valid, so calling it
 // invalid would send the caller looking for a better copy of a file that is
-// fine. Shared so every read mode words it the same way.
-const encryptedPDFReason = "cannot read PDF: it is encrypted in a way this reader cannot decrypt " +
-	"(AES-256, RC4 under crypt filters, or a certificate-based security handler), " +
-	"so neither its text nor its table of contents can be read"
+// fine. Shared so every read mode words it the same way. One literal rather
+// than a concatenation, like lockedPDFReason, for the reason
+// noPDFOutlineReason gives.
+const encryptedPDFReason = "cannot read PDF: it is encrypted in a way this reader cannot decrypt (AES-256, RC4 under crypt filters, or a certificate-based security handler), so neither its text nor its table of contents can be read"
 
-// passwordPDFReason is the diagnosis for a PDF that needs a password to open.
+// lockedPDFReason is the diagnosis for a PDF that needs a password to open.
 // The read tool takes none, so this is final for the file as it is. Shared so
 // every read mode words it the same way.
-const passwordPDFReason = "cannot read PDF: it needs a password to open, and this reader is given none, " +
-	"so neither its text nor its table of contents can be read"
+const lockedPDFReason = "cannot read PDF: it needs a password to open, and this reader is given none, so neither its text nor its table of contents can be read"
 
 // damagedPDFReason is the diagnosis for a file that opens as a PDF and whose
 // structure the reader cannot follow: a truncated download, a cross-reference
@@ -98,7 +97,7 @@ func openPDFReason(err error) string {
 	msg := err.Error()
 	switch {
 	case errors.Is(err, pdf.ErrInvalidPassword):
-		return passwordPDFReason
+		return lockedPDFReason
 	case strings.Contains(msg, "encryption"):
 		return encryptedPDFReason
 	case strings.HasPrefix(msg, "not a PDF file: invalid header"):

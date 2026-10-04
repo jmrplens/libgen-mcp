@@ -783,8 +783,8 @@ func TestOpenPDFReason(t *testing.T) {
 		err  error
 		want string
 	}{
-		{"password", pdf.ErrInvalidPassword, passwordPDFReason},
-		{"password, wrapped", fmt.Errorf("opening: %w", pdf.ErrInvalidPassword), passwordPDFReason},
+		{"password", pdf.ErrInvalidPassword, lockedPDFReason},
+		{"password, wrapped", fmt.Errorf("opening: %w", pdf.ErrInvalidPassword), lockedPDFReason},
 		{"AES-256", errors.New("malformed PDF: 256-bit encryption key"), encryptedPDFReason},
 		{"RC4 V=4", errors.New("unsupported PDF: encryption version V=4; <<...>>"), encryptedPDFReason},
 		{"not a PDF", errors.New("not a PDF file: invalid header"), "not a valid PDF: not a PDF file: invalid header"},

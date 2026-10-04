@@ -13,16 +13,18 @@ import (
 // noPDFOutlineReason is reported for a PDF that has a readable text layer and
 // carries no outline: the document really is readable, it simply has no table
 // of contents.
-const noPDFOutlineReason = "no embedded table of contents; " +
-	"the text layer is readable, so read the text sequentially or use find"
+//
+// This reason and the ones below are each one literal rather than a
+// concatenation: a + in a package-level declaration is a mutant no test can
+// reach, since a declaration is in no coverage block.
+const noPDFOutlineReason = "no embedded table of contents; the text layer is readable, so read the text sequentially or use find"
 
 // damagedPDFOutlineReason is reported for a PDF that has a readable text layer
 // and an outline the reader could not walk to the end: an outline object that
 // does not parse, or one that is not where the cross-reference table says. The
 // document does have a table of contents, so saying it has none would be false,
 // and the pages are still there to read.
-const damagedPDFOutlineReason = "the embedded table of contents is damaged and could not be read; " +
-	"the text layer is readable, so read the text sequentially or use find"
+const damagedPDFOutlineReason = "the embedded table of contents is damaged and could not be read; the text layer is readable, so read the text sequentially or use find"
 
 // Bounds on the outline walk. An outline is a linked structure the file
 // controls, so a /Next or /First that leads back to an item already read is a
@@ -116,16 +118,16 @@ func pdfNoOutlineResult(ctx context.Context, d document, damaged bool) (OutlineR
 	if err != nil {
 		return OutlineResult{}, err
 	}
-	switch {
-	case state == pdfTextAbsent:
+	switch state {
+	case pdfTextAbsent:
 		return OutlineResult{Format: "pdf", Reason: noTextLayerReason}, nil
-	case state == pdfTextUnreadable:
+	case pdfTextUnreadable:
 		return OutlineResult{Format: "pdf", Reason: reason}, nil
-	case damaged:
-		return OutlineResult{Format: "pdf", Extractable: true, Reason: damagedPDFOutlineReason}, nil
-	default:
-		return OutlineResult{Format: "pdf", Extractable: true, Reason: noPDFOutlineReason}, nil
 	}
+	if damaged {
+		return OutlineResult{Format: "pdf", Extractable: true, Reason: damagedPDFOutlineReason}, nil
+	}
+	return OutlineResult{Format: "pdf", Extractable: true, Reason: noPDFOutlineReason}, nil
 }
 
 // walkBudget bounds one walk over a structure the file controls: it allows a

@@ -131,9 +131,9 @@ func outlineByFormat(ctx context.Context, d document) (OutlineResult, error) {
 }
 
 // noEPUBOutlineReason is reported for an EPUB with readable text but neither an
-// EPUB3 nav document nor an EPUB2 NCX.
-const noEPUBOutlineReason = "no embedded table of contents (no EPUB3 nav and no EPUB2 NCX); " +
-	"the text is readable, so read it sequentially or use find"
+// EPUB3 nav document nor an EPUB2 NCX. One literal, for the reason
+// noPDFOutlineReason gives.
+const noEPUBOutlineReason = "no embedded table of contents (no EPUB3 nav and no EPUB2 NCX); the text is readable, so read it sequentially or use find"
 
 // noTXTOutlineReason is reported for a readable plain-text file: the format has
 // no table of contents to carry.
