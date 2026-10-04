@@ -97,6 +97,35 @@ func TestAttachRelated(t *testing.T) {
 	}
 }
 
+// TestAttachRelated_EnrichOffNamesTheSwitch builds the citations with no
+// verifier, as the handler does with LIBGEN_MCP_ENRICH=false, so the record's
+// DOI stays unconfirmed. The note must name the switch, never the DOI, and
+// OpenAlex must not be asked.
+func TestAttachRelated_EnrichOffNamesTheSwitch(t *testing.T) {
+	tests := []struct {
+		name    string
+		edition map[string]any
+	}{
+		{"a record carrying a doi", map[string]any{"title": "T", "doi": "10.1/ok"}},
+		{"a record without a doi", map[string]any{"title": "T"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var asked []string
+			out := DetailsOutput{Edition: tc.edition}
+			out.Citations = buildCitations(context.Background(), nil, "", nil, out.Edition)
+			attachRelated(context.Background(), false, stubLooker{asked: &asked}, &out, relatedAsk{kind: "cited_by", limit: 4})
+			if len(asked) != 0 {
+				t.Errorf("asked OpenAlex about %q with lookups off", asked)
+			}
+			if out.Related == nil || !strings.Contains(out.Related.Note, "LIBGEN_MCP_ENRICH=false") ||
+				strings.Contains(out.Related.Note, "not confirmed") {
+				t.Errorf("related = %+v, want the switch named and the DOI not blamed", out.Related)
+			}
+		})
+	}
+}
+
 // TestWriteRelated renders the list with every OpenAlex field escaped for its
 // cell, the total as a row, and the note as a quote.
 func TestWriteRelated(t *testing.T) {
