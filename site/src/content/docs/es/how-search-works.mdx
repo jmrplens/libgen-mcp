@@ -137,7 +137,7 @@ A cada fuente extra se le pregunta con un presupuesto propio (seis segundos), y 
 
 - **El ritmo.** Cada fuente lleva un ritmo para todo el proceso, no por búsqueda, al que pide quien la opera: arXiv una petición cada tres segundos, dblp una cada diez (el crawl delay que publica su servicio de consultas), PubMed tres por segundo, OpenLibrary una por segundo (tres con dirección de contacto), y OpenAlex, Europe PMC, Crossref, ERIC y Gutenberg una por segundo. Cuando a la siguiente petición de una fuente le falta más de un segundo, esa búsqueda se la salta en lugar de esperar, así que con búsquedas concurrentes solo algunas reciben arXiv o dblp.
 - **Los rechazos.** Cuando dblp responde con una comprobación anti-bots o un límite de ritmo, o un mirror de Anna's Archive con un desafío de navegador, a esa fuente no se le vuelve a preguntar durante quince minutos, y el servidor lo registra una sola vez.
-- **Los créditos diarios de OpenAlex**, descritos más arriba. Un rechazo por ritmo que pide un minuto o menos pausa OpenAlex ese tiempo, no el resto del día.
+- **Los créditos diarios de OpenAlex**, descritos más arriba. Un rechazo por ritmo que pide un minuto o menos pausa las búsquedas sin clave y `related` ese tiempo, no el resto del día. Una búsqueda enviada con clave no consulta el presupuesto.
 
 ## Qué vuelve: orígenes y descargas
 

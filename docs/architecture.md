@@ -352,7 +352,8 @@ next one:
   process (`internal/discovery/pace.go`), so concurrent searches share an upstream's rate
   rather than each bringing a full bucket. A token due more than a second away is handed back
   unspent and that provider sits the search out, because `Federate` answers only when every
-  provider has.
+  provider has. Anna's Archive is the one searcher left unpaced: its refusal window is what
+  keeps it polite.
 - **Refusal windows.** A provider that meets a bot check or a refusal (dblp, Anna's Archive)
   is left alone for fifteen minutes, logged once (`internal/discovery/refusals.go`).
 - **The OpenAlex credit budget.** `internal/openalex` holds one budget for the process,

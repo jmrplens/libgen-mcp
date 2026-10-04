@@ -246,8 +246,9 @@ value that reaches a Markdown construct with no escaper in between.
 **A registry's text is third-party text too.** A reference `get_details` formats through
 `doi.org` for `cite_as` is written by the DOI's registration agency, and the candidates a
 `citation` lookup returns are Crossref's records. The formatted reference is reduced to one plain
-line before it is shown (markup and entities removed, control characters and bidirectional
-controls dropped) and lands in a fenced block, and the candidates go through the table-cell
+line before it is shown (the named formatting tags `i`, `b`, `em`, `strong`, `sub`, `sup`, `sc`,
+`span` and `u` and the entities removed, control characters and bidirectional controls
+dropped) and lands in a fenced block, where any other angle bracket stays as text, and the candidates go through the table-cell
 helpers like any catalog record.
 
 **The guidance heading is reserved.** The `Next steps` section at the end of a result is the one

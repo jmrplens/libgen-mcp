@@ -147,7 +147,8 @@ return nothing for one search without anything being wrong with the search:
   mirror with a browser challenge, that source is not asked again for fifteen minutes, and
   the server logs it once.
 - **OpenAlex's daily credits**, described above. A rate-limit refusal that asks for a minute
-  or less pauses OpenAlex for that long, not for the rest of the day.
+  or less pauses keyless searches and `related` for that long, not for the rest of the day. A
+  search sent with a key does not consult the budget.
 
 ## What comes back: origins and downloads
 

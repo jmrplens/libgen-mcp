@@ -231,7 +231,7 @@ Cada buscador adicional implementa `discovery.Provider` (`Name`, `Search`), y `F
 
 Tres piezas de estado sobreviven a la búsqueda que las creó, porque en cada búsqueda se construye un juego nuevo de proveedores y lo que se guardara en un proveedor lo olvidaría la siguiente:
 
-- **Ritmo.** Las peticiones de búsqueda de cada proveedor esperan en un único cubo por servicio para todo el proceso (`internal/discovery/pace.go`), así que las búsquedas concurrentes comparten el ritmo de un servicio en vez de traer cada una un cubo lleno. Un token que llegaría a más de un segundo se devuelve sin gastar y ese proveedor se queda fuera de la búsqueda, porque `Federate` solo responde cuando han respondido todos.
+- **Ritmo.** Las peticiones de búsqueda de cada proveedor esperan en un único cubo por servicio para todo el proceso (`internal/discovery/pace.go`), así que las búsquedas concurrentes comparten el ritmo de un servicio en vez de traer cada una un cubo lleno. Un token que llegaría a más de un segundo se devuelve sin gastar y ese proveedor se queda fuera de la búsqueda, porque `Federate` solo responde cuando han respondido todos. Anna's Archive es el único buscador sin ritmo: lo que lo mantiene cortés es su ventana de rechazo.
 - **Ventanas de rechazo.** Un proveedor que se topa con una comprobación anti-bot o un rechazo (dblp, Anna's Archive) se deja en paz quince minutos, con un único aviso en el log (`internal/discovery/refusals.go`).
 - **El presupuesto de créditos de OpenAlex.** `internal/openalex` guarda un único presupuesto para el proceso, compartido por el proveedor de búsqueda `openalex`, la fuente de descarga `openalex` y las obras relacionadas de `get_details`, porque OpenAlex mide a cada cliente por su dirección.
 

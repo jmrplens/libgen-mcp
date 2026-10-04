@@ -231,7 +231,7 @@ Each extra searcher implements `discovery.Provider` (`Name`, `Search`), and `Fed
 
 Three pieces of state outlive the search that created them, because a fresh set of providers is built for every search and anything kept on a provider value would be forgotten by the next one:
 
-- **Pacing.** Each provider's search requests wait on one bucket per upstream for the whole process (`internal/discovery/pace.go`), so concurrent searches share an upstream's rate rather than each bringing a full bucket. A token due more than a second away is handed back unspent and that provider sits the search out, because `Federate` answers only when every provider has.
+- **Pacing.** Each provider's search requests wait on one bucket per upstream for the whole process (`internal/discovery/pace.go`), so concurrent searches share an upstream's rate rather than each bringing a full bucket. A token due more than a second away is handed back unspent and that provider sits the search out, because `Federate` answers only when every provider has. Anna's Archive is the one searcher left unpaced: its refusal window is what keeps it polite.
 - **Refusal windows.** A provider that meets a bot check or a refusal (dblp, Anna's Archive) is left alone for fifteen minutes, logged once (`internal/discovery/refusals.go`).
 - **The OpenAlex credit budget.** `internal/openalex` holds one budget for the process, shared by the `openalex` search provider, the `openalex` download source and `get_details`' related works, because OpenAlex meters every caller by address.
 

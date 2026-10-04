@@ -809,7 +809,8 @@ contributes nothing rather than failing the search. Most of the reasons are deli
   and a search costs 10. The server stops sending searches when one would leave fewer than 100,
   the reserve kept for the one-credit lists `get_details` `related` asks for, and starts again
   when the window resets at midnight UTC. A rate-limit refusal that asks for a minute or less
-  pauses OpenAlex for that long only. Neither is logged.
+  pauses keyless searches and `related` for that long only, since a search sent with a key
+  does not consult the budget. Neither is logged.
 - **A rejected OpenAlex key.** OpenAlex answering `401` or `403` to a request sent with
   `LIBGEN_MCP_OPENALEX_KEY` is the `WARN` above, written once per process.
 

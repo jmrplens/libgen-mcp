@@ -162,8 +162,8 @@ search and every `related` list in `get_details` spend the same allowance, share
 caller of the server. Without a key the search provider stops at a reserve of 100 credits, so once the day
 runs down that far a search comes back without OpenAlex hits until the reset, and the
 remainder is kept for `related`, which answers with a note naming the reset once it too is
-spent. A burst of refusals pauses OpenAlex only for the wait it asks for, a minute when it
-names none. `LIBGEN_MCP_OPENALEX_KEY` moves every request onto the key's allowance and lifts
+spent. A burst of refusals pauses keyless searches and `related` only for the wait it asks
+for, a minute when it names none. A search sent with a key does not consult the budget. `LIBGEN_MCP_OPENALEX_KEY` moves every request onto the key's allowance and lifts
 the reserve. See
 [Configuration → `LIBGEN_MCP_OPENALEX_KEY`](configuration.md#libgen_mcp_openalex_key).
 
