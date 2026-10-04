@@ -125,6 +125,9 @@ type Client struct {
 	// are test seams so Enrich can target httptest servers.
 	crossrefBaseOverride    string
 	openLibraryBaseOverride string
+	// doiOrgBaseOverride overrides the DOI resolver root the citation formats
+	// are negotiated against. Empty means doiOrgBase; it is a test seam.
+	doiOrgBaseOverride string
 	// annasMirrors is the Anna's Archive mirror lister shared by the sources that
 	// fetch from that family, including any ad-hoc source built for a per-call key.
 	annasMirrors MirrorLister
@@ -282,11 +285,25 @@ func WithUnpaywallBaseURL(base string) Option {
 // Enrich. It exists so tests (including callers in other packages) can point the
 // keyless enrichment lookups at httptest servers; production leaves them unset and
 // the package defaults apply.
+//
+// The DOI resolver is pointed at the Crossref stand-in too, because a DOI
+// Crossref does not know falls through to doi.org: a test that stood up a
+// fixture for Crossref alone would otherwise reach the live resolver on every
+// miss. A later WithDOIOrgBaseURL replaces it.
 func WithEnrichBaseURLs(crossref, openLibrary string) Option {
 	return func(c *Client) {
 		c.crossrefBaseOverride = crossref
 		c.openLibraryBaseOverride = openLibrary
+		c.doiOrgBaseOverride = crossref
 	}
+}
+
+// WithDOIOrgBaseURL overrides the DOI resolver root that citation formats and
+// registry records are negotiated against, so tests (including callers in
+// other packages) can point it at an httptest server. Production leaves it
+// unset and https://doi.org applies.
+func WithDOIOrgBaseURL(base string) Option {
+	return func(c *Client) { c.doiOrgBaseOverride = base }
 }
 
 // New builds a Client from the configuration: rate limiter (RateRPS/RateBurst),

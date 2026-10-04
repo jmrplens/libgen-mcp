@@ -305,12 +305,49 @@ func detailsHeading(rec map[string]any) string {
 // quotes catalog- and registry-supplied text. It is a no-op when no citation
 // could be built.
 func writeCitation(b *strings.Builder, c *Citations) {
-	if c == nil || c.BibTeX == "" {
+	if c == nil {
 		return
 	}
-	section := toolutil.NewCard(b, "").Section("Citation (BibTeX)")
-	section.Fence("bibtex", c.BibTeX)
-	section.Quote(c.Provenance)
+	if c.BibTeX != "" {
+		section := toolutil.NewCard(b, "").Section("Citation (BibTeX)")
+		section.Fence("bibtex", c.BibTeX)
+		section.Quote(c.Provenance)
+	} else if len(c.Formatted) > 0 {
+		toolutil.NewCard(b, "").Quote(c.Provenance)
+	}
+	writeFormattedCitations(b, c.Formatted)
+}
+
+// writeFormattedCitations appends one section per style cite_as asked for:
+// the text in a fence, since a registry's reference is untrusted text that
+// may carry anything, and a quote naming the path that produced it.
+func writeFormattedCitations(b *strings.Builder, formatted []FormattedCitation) {
+	for _, fc := range formatted {
+		section := toolutil.NewCard(b, "").Section("Citation (" + formattedHeading(fc) + ")")
+		if fc.Source == formatSourceUnavailable || fc.Text == "" {
+			// No text, so no block to hold it: the reason is what is shown.
+			section.Quote(fc.Note)
+			continue
+		}
+		lang := "text"
+		if fc.Style == libgen.CiteStyleCSLJSON {
+			lang = "json"
+		}
+		section.Fence(lang, fc.Text)
+		section.Quote(fc.Note)
+	}
+}
+
+// formattedHeading names a style and the path that produced it.
+func formattedHeading(fc FormattedCitation) string {
+	switch fc.Source {
+	case formatSourceRegistry:
+		return fc.Style + ", formatted by the registry via doi.org"
+	case formatSourceLocal:
+		return fc.Style + ", built from the record's fields"
+	default:
+		return fc.Style + ", unavailable"
+	}
 }
 
 // writeEnrichment appends a short "External metadata" section for the best-effort

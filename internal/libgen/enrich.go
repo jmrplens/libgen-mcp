@@ -104,10 +104,13 @@ type Enrichment struct {
 // OpenLibrary) and returns a restore func that reinstates the originals. It is a
 // test-only seam for callers in other packages, mirroring
 // discovery.SetBasesForTest; production code never calls it.
+//
+// The DOI resolver root follows the Crossref one, for the reason
+// WithEnrichBaseURLs gives.
 func SetEnrichBasesForTest(crossref, openLibrary string) (restore func()) {
-	oldCR, oldOL := crossrefBase, openLibraryBase
-	crossrefBase, openLibraryBase = crossref, openLibrary
-	return func() { crossrefBase, openLibraryBase = oldCR, oldOL }
+	oldCR, oldOL, oldDOI := crossrefBase, openLibraryBase, doiOrgBase
+	crossrefBase, openLibraryBase, doiOrgBase = crossref, openLibrary, crossref
+	return func() { crossrefBase, openLibraryBase, doiOrgBase = oldCR, oldOL, oldDOI }
 }
 
 // Enrich fetches best-effort metadata for a DOI (Crossref) and/or ISBN
@@ -145,12 +148,21 @@ func (c *Client) Enrich(ctx context.Context, doi, isbn string) *Enrichment {
 // 200 and nil otherwise (including any transport or limiter error), so callers
 // degrade silently. The caller owns closing the returned body.
 func (c *Client) enrichGet(ctx context.Context, rawURL string, limiter *rate.Limiter) *http.Response {
+	return c.enrichGetAccept(ctx, rawURL, "", limiter)
+}
+
+// enrichGetAccept is enrichGet with an Accept header, for an API that chooses
+// its answer by content negotiation (doi.org). An empty accept sends none.
+func (c *Client) enrichGetAccept(ctx context.Context, rawURL, accept string, limiter *rate.Limiter) *http.Response {
 	if err := limiter.Wait(ctx); err != nil {
 		return nil
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, http.NoBody)
 	if err != nil {
 		return nil
+	}
+	if accept != "" {
+		req.Header.Set("Accept", accept)
 	}
 	ua := userAgent()
 	if c.enrichEmail != "" {
