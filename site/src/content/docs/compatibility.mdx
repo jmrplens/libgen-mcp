@@ -75,7 +75,7 @@ Notes that matter when a platform is on the edge:
 - **The PyPI macOS wheels need macOS 13.** They are tagged `macosx_13_0`, the minimum the Go toolchain writes into the binary. Up to 2.1.0 they were tagged `macosx_11_0`, so pip on macOS 11 or 12 installed a wheel whose command then failed to start.
 - **Windows on Arm and Claude Desktop.** The `.mcpb` bundle for Windows carries the amd64 executable, which Windows on Arm runs under emulation. Every other channel that serves Windows has a native `arm64` build.
 - **Docker on macOS and Windows** runs the Linux image in the virtual machine Docker Desktop (or an equivalent) provides, on the architecture of that VM.
-- **Linux `.mcpb`.** A bundle manifest can choose a file per operating system but not per architecture, so the Linux bundle starts a small `/bin/sh` launcher that picks the binary by `uname -m`. The per-OS bundles appear with the release after 2.1.0. Until then the universal `libgen-mcp.mcpb` is the one to download.
+- **Linux `.mcpb`.** A bundle manifest can choose a file per operating system but not per architecture, so the Linux bundle starts a small `/bin/sh` launcher that picks the binary by `uname -m`. The per-OS bundles first ship with 2.2.0. For 2.1.0 and earlier the universal `libgen-mcp.mcpb` is the one to download.
 - **`go install`** compiles from source with your toolchain. `go.mod` declares Go 1.27.1, and any Go from 1.21 on downloads that toolchain by itself unless `GOTOOLCHAIN=local` forbids it. The binary it produces is named `server`, after the package `cmd/server`.
 - **winget** is pending review in [microsoft/winget-pkgs#437507](https://github.com/microsoft/winget-pkgs/pull/437507).
 

@@ -129,15 +129,16 @@ characters of the md5.
 Each identifier reaches a different record, and the record decides how much the citation can
 say.
 
-| You pass                                | Record looked up                                                                 | Entry type              | What the citation carries                                        |
-| --------------------------------------- | -------------------------------------------------------------------------------- | ----------------------- | ---------------------------------------------------------------- |
-| `md5`                                   | The catalog's file record and its first related edition                          | The catalog rule below  | The fullest entry, with the md5 in `note` and `L1`               |
-| `md5` the catalog lacks                 | Anna's Archive's record, labeled `file.origin: "annas"`                          | Always `@book` / `BOOK` | Title, author, year and the md5. No DOI, so no `doi_status`      |
-| `id` (`object: "edition"`, the default) | The catalog's edition record                                                     | The catalog rule below  | No file comes back, so there is no md5 line                      |
-| `id` with `object: "file"`              | The catalog's file record alone                                                  | None                    | No `citations` field: the catalog keeps the title on the edition |
-| `doi`                                   | The catalog's edition for that DOI, matched exactly, and the first file it lists | The catalog rule below  | The md5 of that file. The DOI is still checked against Crossref  |
-| `doi` the catalog lacks                 | Crossref's metadata, labeled `file.origin: "crossref"`                           | None                    | No `citations` field. The metadata is in `enrichment`            |
-| `citation`                              | The DOI Crossref matches the text to, then as for `doi`                          | As for `doi`            | As for `doi`, with `citation_match` naming the DOI it matched    |
+| You pass                                     | Record looked up                                                                            | Entry type                                                                            | What the citation carries                                        |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `md5`                                        | The catalog's file record and its first related edition                                     | The catalog rule below                                                                | The fullest entry, with the md5 in `note` and `L1`               |
+| `md5` the catalog lacks                      | Anna's Archive's record, labeled `file.origin: "annas"`                                     | Always `@book` / `BOOK`                                                               | Title, author, year and the md5. No DOI, so no `doi_status`      |
+| `id` (`object: "edition"`, the default)      | The catalog's edition record                                                                | The catalog rule below                                                                | No file comes back, so there is no md5 line                      |
+| `id` with `object: "file"`                   | The catalog's file record alone                                                             | None                                                                                  | No `citations` field: the catalog keeps the title on the edition |
+| `doi`                                        | The catalog's edition for that DOI, matched exactly, and the first file it lists            | The catalog rule below                                                                | The md5 of that file. The DOI is still checked against Crossref  |
+| `doi` the catalog lacks                      | Crossref's metadata, labeled `file.origin: "crossref"`                                      | None                                                                                  | No `citations` field. The metadata is in `enrichment`            |
+| `doi` neither the catalog nor Crossref knows | The record its registration agency serves through doi.org, labeled `file.origin: "doi.org"` | `@article` / `JOUR` when the registry types it an article, `@book` / `BOOK` otherwise | The DOI, `confirmed`, since the fields are the registry's own    |
+| `citation`                                   | The DOI Crossref matches the text to, then as for `doi`                                     | As for `doi`                                                                          | As for `doi`, with `citation_match` naming the DOI it matched    |
 
 The catalog rule: an entry is `@article` and `JOUR` when the catalog classifies the record
 as an article or when Crossref confirmed its DOI, and `@book` and `BOOK` otherwise. The bare
@@ -147,17 +148,21 @@ choosing the entry type from that field would turn the book into an article on t
 of the same bad value the citation leaves out. A record the catalog classifies as an article
 stays one when its DOI could not be confirmed, only without the DOI.
 
-Both fallbacks are described under
+The fallbacks are described under
 [Records the catalog does not carry](tools.md#records-the-catalog-does-not-carry). The
-Crossref one runs only when enrichment is allowed (`LIBGEN_MCP_ENRICH`, on by default);
-otherwise a DOI the catalog lacks returns the catalog's "no record" error.
+doi.org one is what makes a DataCite or mEDRA DOI, such as a dataset's, answer at all. A dataset
+is not turned into an article because it has a DOI: whatever the registry does not type as
+an article is written as `@book`/`BOOK`. The Crossref and doi.org fallbacks run only when enrichment is allowed
+(`LIBGEN_MCP_ENRICH`, on by default); otherwise a DOI the catalog lacks returns the catalog's
+"no record" error.
 
 A `citation` is a reference pasted as text, in any style. The server sends it to Crossref's
 bibliographic search and takes the best candidate only when its score leads the next one by
 at least 20 percent and at least 90 percent of its title's content words appear in the text.
 Content words are compared without case, punctuation, markup or words such as "the" and "of",
 and a word of five letters or more also counts when it is one typo away. Anything less comes
-back as up to five candidates (title, authors, year, venue and DOI) with no record, to call
+back as up to five candidates (title, authors, year, venue, DOI and Crossref's score) with no
+record, to call
 again with the right `doi`. A book, a preprint or a report with no Crossref DOI ends there.
 A citation over 1000 characters is refused. The lookup is a Crossref call, so
 `LIBGEN_MCP_ENRICH=false` refuses it.
@@ -227,9 +232,14 @@ A catalog DOI that failed the check is never sent to doi.org, because the regist
 format the work that DOI really belongs to. The registry's text is plain: markup, entities
 and a numeric style's leading `[1]` are removed. The styles doi.org is asked for are the CSL
 styles `apa`, `modern-language-association`, `chicago-author-date`, `elsevier-harvard`,
-`elsevier-vancouver` and `ieee`. Those were measured on Crossref, DataCite and mEDRA DOIs.
-doi.org has no style named `vancouver`, and the Harvard and Vancouver variants with an editor
-slot write `Edited by ,` for an editor Crossref records with no name. A style built locally
+`elsevier-vancouver` and `ieee`, and `csl-json` asks for the registry's CSL-JSON record,
+trimmed to the CSL variables. Those were measured on Crossref, DataCite and mEDRA DOIs.
+doi.org has no style named `vancouver`, and the more common Harvard and Vancouver variants
+write `Edited by ,` for an editor Crossref records with no name, which is why the Elsevier
+ones were chosen. MLA writes the same phrase, and it is removed from MLA's text. The styles
+are asked for together and given eight seconds in all, and a style doi.org does not answer
+in that time is built locally. A server with `LIBGEN_MCP_ENRICH=false` asks doi.org nothing,
+so every style it returns is local. A style built locally
 uses only the fields the record holds and leaves the title unmarked where the style would
 set it in italics. APA's `n.d.` is the one stand-in it writes for a missing value. Names are
 split only where the record says which part is the family name (`Knuth, Donald E.`,
@@ -326,13 +336,16 @@ it stays `unverified`.
 
 ### Can I get a citation for a paper found through arXiv or Crossref?
 
-Only when the hit carries a DOI that the Library Genesis catalog holds. `get_details` looks
-a record up by md5, id or DOI, and an open-access hit has neither an md5 nor an id. A
-Crossref hit carries its DOI, and an arXiv hit carries one only when arXiv records one. Pass
-it as `doi`.
+Yes, when the hit carries a DOI. `get_details` looks a record up by md5, id or DOI, and an
+open-access hit has neither an md5 nor an id. A Crossref hit carries its DOI, and an arXiv
+hit carries one only when arXiv records one. Pass it as `doi`.
 
-When the catalog does not hold the DOI, `get_details` answers from Crossref instead: the
-record has `file.origin` set to `crossref`, Crossref's metadata is in `enrichment`, and
-there is no `citations` field, because the record it builds holds only the DOI and its
-origin. A deployment with `LIBGEN_MCP_ENRICH=false` returns the catalog's "no record" error
-instead.
+When the catalog holds the DOI, the citation is built from its record as above. When it does
+not, `get_details` answers from Crossref instead: the record has `file.origin` set to
+`crossref`, Crossref's metadata is in `enrichment`, and there is no BibTeX or RIS, because
+the record it builds holds only the DOI and its origin. A style asked for in `cite_as` still
+comes back, formatted by the DOI's registry through doi.org. A DOI Crossref does not know
+either, such as a DataCite one, is answered from its own registry through doi.org, with
+BibTeX and RIS. A hit with no DOI can be pasted into `citation` instead, which finds its DOI
+when Crossref holds one. A deployment with `LIBGEN_MCP_ENRICH=false` returns the catalog's
+"no record" error for a DOI the catalog lacks.

@@ -53,7 +53,7 @@ head:
             "@type": "ListItem",
             "position": 2,
             "name": "get_details",
-            "description": "Fetch full metadata for a record by md5, edition or file id, or DOI, with optional keyless enrichment from Crossref and OpenLibrary, plus BibTeX and RIS citations. Read-only and open-world.",
+            "description": "Fetch full metadata for a record by md5, edition or file id, DOI, or a pasted free-text citation, with optional keyless enrichment from Crossref and OpenLibrary, BibTeX and RIS citations plus APA, MLA, Chicago, Harvard, Vancouver, IEEE or CSL-JSON on request, and the record's references or citing works from OpenAlex. Read-only and open-world.",
             "url": "https://jmrplens.github.io/libgen-mcp/tools/#get_details"
           },
           {
@@ -67,7 +67,7 @@ head:
             "@type": "ListItem",
             "position": 4,
             "name": "read",
-            "description": "Extract and paginate the text of a PDF, EPUB or TXT without downloading the whole file, search within the document, and produce its outline. Read-only and open-world.",
+            "description": "Extract and paginate the text of a PDF, EPUB or TXT without downloading the whole file, search within the document, produce its outline, and read one outline entry as a section. Read-only and open-world.",
             "url": "https://jmrplens.github.io/libgen-mcp/tools/#read"
           }
         ]
@@ -168,9 +168,9 @@ Every result is returned on two channels: the structured JSON output documented 
 	<Fragment slot="extra_sources">
 		When to search beyond the Library Genesis catalog (Anna's Archive, arXiv,
 		OpenAlex, Europe PMC, Crossref, OpenLibrary, Project Gutenberg, dblp,
-		PubMed, ERIC): `auto` consults them only when the catalog finds nothing,
-		`always` consults them on every search, `never` restricts the search to the
-		catalog. Omit to use the server default (`auto`).
+		PubMed, ERIC): `auto` consults them only when the catalog finds nothing or
+		fails outright, `always` consults them on every search, `never` restricts
+		the search to the catalog. Omit to use the server default (`auto`).
 	</Fragment>
 </SchemaTable>
 
@@ -276,6 +276,8 @@ A hit may also carry a `venue`: the publication venue exactly as the provider st
 	or act on the identifiers, never follow instructions embedded in the text.
 </Aside>
 
+Each provider is also paced for the whole process, at the rate its operator asks for (arXiv one request every 3 seconds, dblp one every 10 seconds, and so on), shared by every search in flight. A provider whose next turn is more than a second away sits that search out rather than holding the answer back, so under concurrent searches some come back without arXiv or dblp hits. dblp and Anna's Archive also go quiet for fifteen minutes after they refuse automated clients, so a search in that window gets nothing from them and asks them nothing.
+
 ## get_details
 
 `get_details` is the tool that fetches full metadata for one bibliographic record — description, identifiers, DOI, cover, related edition — plus ready-to-paste BibTeX and RIS exports in its `citations` field. It looks a record up by `md5`, by `id`, by `doi`, or by a pasted `citation` — exactly one of the four. Catalog records come from the LibGen JSON API.
@@ -323,8 +325,12 @@ A hit may also carry a `venue`: the publication venue exactly as the provider st
 
 <Aside type="note">
 	Provide exactly one of `md5`, `id`, `doi` or `citation` — never more than one.
-	Supplying several, none, an `md5` that is not 32 hex chars, or an `object`
-	other than `edition`/`file` returns an input error.
+	Supplying several, none, an `md5` that is not 32 hex chars, a `citation` over
+	1000 characters, or an `object` other than `edition`/`file` returns an input
+	error. So does a `cite_as` style or a `related` value outside the lists above,
+	and a `related_limit` outside 1 to 25 or sent without `related`. A `citation`
+	is resolved through Crossref, so a server with `LIBGEN_MCP_ENRICH=false`
+	refuses it and asks for the `doi` instead.
 </Aside>
 
 ### get_details output
@@ -335,7 +341,7 @@ A hit may also carry a `venue`: the publication venue exactly as the provider st
 	<Fragment slot="citation_match">Present for a `citation` lookup: `status` `resolved` with the `doi` and `title` it matched, or `unresolved` with the `reason` and up to five `candidates` (title, authors, year, venue, DOI, Crossref score) and no `file` or `edition`.</Fragment>
 	<Fragment slot="file">The file record (present for an `md5` lookup, or an `id` lookup with `object: file`).</Fragment>
 	<Fragment slot="edition">The edition record (present for an `md5` lookup's related edition, or an `id` lookup with `object: edition`).</Fragment>
-	<Fragment slot="citations">`{"bibtex": ..., "ris": ..., "doi_status": ..., "provenance": ...}` — a ready-to-paste BibTeX and RIS export built from the record's metadata, with `doi_status` (`confirmed`, `unverified` or `mismatch` against Crossref, and only a confirmed DOI is written into the entries) and `provenance` (where each field came from, to relay with the citation). Omitted when the record has no title (the minimum needed for a usable citation). Empty metadata fields are dropped rather than emitted blank, and the export carries no ISBN field at all. With `cite_as`, `formatted` adds the requested styles (see [Citations](/libgen-mcp/citations/#other-citation-styles)).</Fragment>
+	<Fragment slot="citations">`{"bibtex": ..., "ris": ..., "doi_status": ..., "provenance": ...}` — a ready-to-paste BibTeX and RIS export built from the record's metadata, with `doi_status` (`confirmed`, `unverified` or `mismatch` against Crossref, and only a confirmed DOI is written into the entries) and `provenance` (where each field came from, to relay with the citation). Omitted when the record has no title (the minimum needed for a usable citation). Empty metadata fields are dropped rather than emitted blank, and the export carries no ISBN field at all. With `cite_as`, `formatted` adds the requested styles, each with its `style`, its `text`, the `source` that produced it (`doi.org`, `local` or `unavailable`) and a `note` saying why the registry was not used (see [Citations](/libgen-mcp/citations/#other-citation-styles)).</Fragment>
 	<Fragment slot="enrichment">Best-effort external metadata (Crossref/OpenLibrary), present when `enrich` was requested and something was found — and on the Crossref fallback below, which returns it whether or not you asked. See [Metadata enrichment](#metadata-enrichment).</Fragment>
 </SchemaTable>
 
@@ -458,7 +464,7 @@ The download runs through a fixed source chain, filtered by what each item suppo
 
 - **Book** (`md5` only) → `libgen` (ads.php key + CDN), then `randombook` (fresh-mirror discovery), then `annas` (keyless IPFS, or member fast-download when `LIBGEN_MCP_ANNAS_KEY` is set).
 - **Book** (`isbn` only) → `oapen` (openly licensed scholarly monographs), then `archive` (public-domain Internet Archive scans, located through OpenLibrary). A scan is served only when OpenLibrary reports the book as `ebook_access: public` **and** archive.org reports the individual item as neither access-restricted nor part of a lending collection, so a controlled-digital-lending copy is skipped rather than downloaded as an unusable file.
-- **Article** (`doi` only) → the legal open-access providers first — `unpaywall` (only when `LIBGEN_MCP_UNPAYWALL_EMAIL` is set, otherwise skipped), then `openalex` (the same open-access index, keyless by default, optional `LIBGEN_MCP_OPENALEX_KEY`), `europepmc`, `biorxiv` (`10.1101` preprints), `rfc` (`10.17487` RFCs), `nist` (`10.6028` NIST publications), `dagstuhl` (`10.4230` Dagstuhl proceedings), `acl` (`10.18653`/`10.3115` ACL Anthology papers), `zenodo` (`10.5281/zenodo` deposits), `scielo` (`10.1590` SciELO Brazil articles), `fao` (`10.4060` FAO Knowledge Repository documents), `fatcat`, `core` (only when `LIBGEN_MCP_CORE_KEY` is set) — then `crossref`, which is not an open-access index but the publisher's own deposited full-text link, probed before use, and `oapen` (monographs carry DOIs too) — then the shadow-library fallbacks `scihub` and `scidb` (Anna's Archive SciDB viewer).
+- **Article** (`doi` only) → the legal open-access providers first — `unpaywall` (only when `LIBGEN_MCP_UNPAYWALL_EMAIL` is set, otherwise skipped), then `openalex` (the same open-access index, keyless by default, optional `LIBGEN_MCP_OPENALEX_KEY`), `europepmc` (an open-access PMC article, its PDF taken from NCBI's PMC Article Datasets, and a retracted article declined), `biorxiv` (`10.1101` preprints), `rfc` (`10.17487` RFCs), `nist` (`10.6028` NIST publications), `dagstuhl` (`10.4230` Dagstuhl proceedings), `acl` (`10.18653`/`10.3115` ACL Anthology papers), `zenodo` (`10.5281/zenodo` deposits), `scielo` (`10.1590` SciELO Brazil articles), `fao` (`10.4060` FAO Knowledge Repository documents), `fatcat`, `core` (only when `LIBGEN_MCP_CORE_KEY` is set) — then `crossref`, which is not an open-access index but the publisher's own deposited full-text link, probed before use, and `oapen` (monographs carry DOIs too) — then the shadow-library fallbacks `scihub` and `scidb` (Anna's Archive SciDB viewer).
 - **Both `md5` and `doi`** → article sources first, then book sources (`libgen`, `randombook`, `annas`).
 
 The first source that resolves and streams a valid file wins. Which one that was is **not** reported back at all ([What the result withholds](#what-the-result-withholds)). Pinning `source` is what settles it: the pinned source becomes the entire chain for that call, so a file you get back came from it and a failure means it could not serve the item. The server log still records the serving source either way, for the operator. See [Architecture](/libgen-mcp/architecture/) for the full chain.

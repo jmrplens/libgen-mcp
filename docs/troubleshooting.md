@@ -3,8 +3,8 @@
 **How-to guide** — for someone looking at a symptom right now.
 
 The entries below are grouped by where the symptom shows up: in the client, at startup, on the
-wire, behind a proxy, in a search, in a download, in `read`, in a collector, or during an
-install. Each one quotes what you see, says what it means here, says what to do, and links the
+wire, behind a proxy, in a search, in a record lookup, in a download, in `read`, in a
+collector, or during an install. Each one quotes what you see, says what it means here, says what to do, and links the
 page that explains the mechanism. Every message in backticks is the server's own text, so
 searching the log for it works.
 
@@ -41,14 +41,23 @@ Three checks answer most questions before any entry does:
 | Searches take seconds each, or queue behind one another                        | [Slow searches](#searches-are-slow-or-queue-behind-each-other)                                          |
 | `truncated: true` and a `hint`                                                 | [Truncated search results](#truncated-search-results)                                                   |
 | A result with `origin: "annas"` will not download                              | [Anna's Archive results](#a-search-result-that-will-not-download-origin-annas)                          |
+| A provider never appears in `open_access`                                      | [A provider contributes nothing](#an-open-access-provider-contributes-nothing)                          |
+| `OpenAlex rejected the configured API key …`                                   | [A provider contributes nothing](#an-open-access-provider-contributes-nothing)                          |
+| `dblp search: the SPARQL service answered with a bot check …`                  | [A provider contributes nothing](#an-open-access-provider-contributes-nothing)                          |
+| `year_filtered` and few or no catalog results                                  | [A year range empties the page](#a-year-range-empties-the-page)                                         |
+| `citation_match` with `status: "unresolved"`                                   | [A citation that does not resolve](#a-pasted-citation-does-not-resolve)                                 |
+| A `cite_as` style with `source: "local"` or `"unavailable"`                    | [Citation styles](#cite_as-comes-back-local-or-unavailable)                                             |
+| `related` with no works and a note                                             | [Related works](#related-lists-nothing)                                                                 |
 | `integrity check failed: MD5 mismatch`, or another download error              | [Download failed](#download-failed--md5-mismatch)                                                       |
 | A DOI that will not download                                                   | [Article not found](#article-not-found-open-access-vs-sci-hub)                                          |
+| `… is a retracted publication, so it is not served`                            | [Article not found](#article-not-found-open-access-vs-sci-hub)                                          |
 | An ISBN that will not download                                                 | [Book not found by ISBN](#book-not-found-by-isbn-open-access-only)                                      |
 | A source missing from a second attempt's errors                                | [A source in cooldown](#a-source-is-missing-from-the-errors-of-a-repeated-download)                     |
 | `not enough free disk space in …`                                              | [Disk space](#disk-space)                                                                               |
 | `download` returns a link instead of a file                                    | [Links instead of files](#download-returns-a-link-instead-of-saving-a-file)                             |
 | `… is outside the allowed directories …`                                       | [A path outside the allowed directories](#a-path-is-outside-the-allowed-directories)                    |
 | `read` answers `extractable: false`                                            | [A file `read` cannot extract](#a-file-read-cannot-extract)                                             |
+| `section "…" matches … entries`, or another `section` refusal                  | [`section` refused](#section-is-refused)                                                                |
 | Nothing reaches the OpenTelemetry collector                                    | [Telemetry not arriving](#nothing-reaches-the-collector)                                                |
 | An install through npm, PyPI, NuGet, Homebrew, Docker, `.mcpb` or `go install` | [Install problems by channel](#install-problems-by-channel)                                             |
 
@@ -773,6 +782,173 @@ the public IPFS gateways vary in how quickly they locate an item.
 **How it works.** [How search works](how-search-works.md) and
 [Sources](sources.md#annas).
 
+### An open-access provider contributes nothing
+
+**Symptom.** A search reaches beyond the catalog, but one provider never shows up in
+`open_access`: no `openalex`, `dblp` or `annas` rows, or `arxiv` rows on only some of several
+searches run together. The log may hold one of these lines:
+
+- `OpenAlex rejected the configured API key, so OpenAlex search and the openalex download
+  source fail until it is fixed or unset`, at `WARN`, with `variable=LIBGEN_MCP_OPENALEX_KEY`
+  and the status.
+- `dblp search: the SPARQL service answered with a bot check or a rate limit instead of JSON,
+  asking nothing for 15m0s`, at `INFO`.
+- `annas search: mirror is serving a browser challenge, asking nothing for 15m0s`, at `WARN`.
+
+**Meaning.** Every provider beyond the catalog is best-effort: one that cannot answer
+contributes nothing rather than failing the search. Most of the reasons are deliberate:
+
+- **Pacing.** Each provider is paced for the whole process at the rate its operator asks for,
+  arXiv at one request every three seconds and dblp at one every ten. A search whose next token
+  for a provider is more than a second away skips that provider instead of waiting, so under
+  concurrent searches only some of them get arXiv or dblp. A skip is not logged.
+- **A refusal.** When dblp answers with a bot check or a rate limit, or an Anna's Archive
+  mirror with a browser challenge, that provider is asked nothing for fifteen minutes and the
+  log says so once.
+- **OpenAlex's daily credits.** Without a key, OpenAlex allows 1000 credits a day per address,
+  and a search costs 10. The server stops sending searches when one would leave fewer than 100,
+  the reserve kept for the one-credit lists `get_details` `related` asks for, and starts again
+  when the window resets at midnight UTC. A rate-limit refusal that asks for a minute or less
+  pauses OpenAlex for that long only. Neither is logged.
+- **A rejected OpenAlex key.** OpenAlex answering `401` or `403` to a request sent with
+  `LIBGEN_MCP_OPENALEX_KEY` is the `WARN` above, written once per process.
+
+**Fixes.**
+
+- Usually nothing: the other providers still answered, and a later search gets the skipped one
+  back.
+- For OpenAlex, set `LIBGEN_MCP_OPENALEX_KEY`. A search sent with a key is not held back by the
+  keyless reserve. After the `WARN`, fix the key or unset it.
+- A dblp or Anna's Archive refusal is the upstream's own decision, and no setting changes it.
+  Wait out the fifteen minutes. A configured Anna's Archive member key still serves `download`
+  through the member API.
+
+**How it works.** [How search works](how-search-works.md#when-a-source-sits-a-search-out) and
+[Configuration](configuration.md#libgen_mcp_openalex_key).
+
+### A year range empties the page
+
+**Symptom.** A search with `year_from` or `year_to` returns few or no catalog results, and the
+response carries `year_filtered` with a line such as `The year range left out 17 catalog
+records on this page (outside it or undated).` Or the call is refused with
+`year_from must be a year between 1000 and 2100, got 990`, or
+`year_from (2020) is after year_to (2010): swap them, or drop one to leave that side open`.
+
+**Meaning.** Library Genesis has no year filter, so the server filters the page after it
+arrives, and a record without a year is left out too, since nothing shows it is in range.
+`year_filtered` counts this page only. `total_files`, `reachable` and `has_more` still describe
+the unfiltered search, so a page with nothing in range is not proof the range is empty.
+
+**Fixes.**
+
+- Request the next page when `has_more` is true. The next steps say so before they say nothing
+  was found.
+- Add the year to the query text as well, or widen the range.
+- Let the search reach beyond the catalog (`extra_sources: "always"`). Most providers there
+  apply the range in their own query rather than after the fact.
+
+**How it works.** [Tools](tools.md#narrowing-by-year) and
+[How search works](how-search-works.md#narrowing-by-year).
+
+## Records and citations
+
+### A pasted citation does not resolve
+
+**Symptom.** `get_details` with `citation` returns no record, and `citation_match` has
+`status: "unresolved"`, a `reason` and up to five candidates. The reason is one of:
+
+- `Crossref offered no candidate for this citation.`
+- `No candidate stands out: the best scores 41.2 against 40.9 for the next, and a match needs a
+  lead of 20%.`
+- `The best candidate leads, but only 67% of its title appears in the citation, so it may be a
+  different work that shares some of its words.`
+
+Or the call is refused with `a citation is resolved through Crossref, which this server has
+turned off (LIBGEN_MCP_ENRICH=false). Pass the work's doi instead, or search for its title`, or
+`citation is 1450 characters long, and the most accepted is 1000. Paste one reference, trimmed
+to its authors, title, venue and year`.
+
+**Meaning.** A citation resolves only when Crossref's best candidate scores at least 20% above
+the next one **and** at least 90% of its title's words appear in the citation. Anything less
+hands the candidates back unchosen, because a confident wrong DOI puts the wrong work in a
+bibliography. A work with no Crossref DOI (an arXiv-only preprint, many books) cannot resolve
+this way at all.
+
+**Fixes.**
+
+- Pick the right candidate and call again with its `doi`.
+- Paste the title in full, with the year and the venue.
+- For a work without a DOI, `search` for its title instead.
+
+**How it works.** [Citations](citations.md#get-a-citation) and
+[Tools](tools.md#get_details-input).
+
+### `cite_as` comes back `local` or `unavailable`
+
+**Symptom.** A style asked for in `cite_as` has `source: "local"` and a note, or
+`source: "unavailable"` and no text. The note is one of:
+
+- `doi.org gave no usable answer for this style, so it was built from the record's fields.`
+- `The record's DOI was not confirmed to name this work, so it was not sent to doi.org and the
+  style was built from the record's fields.`
+- `The record has no DOI, so the style was built from its fields.`
+- `This server does not ask doi.org (LIBGEN_MCP_ENRICH=false), so the style was built from the
+  record's fields.`
+- `Neither doi.org nor the record's own fields could produce it: the record has no title.`,
+  for `unavailable`.
+
+**Meaning.** A style is formatted by the DOI's registration agency through doi.org only when the
+record carries a DOI that names this work, and doi.org gives a usable answer within eight
+seconds. Otherwise it is built here, by the same rules as the BibTeX entry. A local style is a
+fallback, not an error, but it is only as good as the catalog's fields: a name written
+"Given Family" is read given name first.
+
+**Fixes.**
+
+- Check a local style against the work before you publish it.
+- Call again with a `doi` that `citations.doi_status` reports as confirmed to get the registry's
+  text.
+- For a doi.org that did not answer in time, retry later.
+
+**How it works.** [Citations](citations.md#other-citation-styles).
+
+### `related` lists nothing
+
+**Symptom.** `get_details` with `related` returns a `related` object with no works and a note,
+such as:
+
+- `Not available: the record has no DOI, and OpenAlex is asked by DOI.`
+- `Not available: the record's DOI was not confirmed to name this work, and OpenAlex is asked
+  by DOI.`
+- `Not available: this server does not reach OpenAlex for metadata (LIBGEN_MCP_ENRICH=false).`
+- `OpenAlex asked this server to slow down, so the list was not fetched. Try again shortly.`
+- `The OpenAlex daily allowance shared by this server is spent, so the list was not fetched. It
+  resets at midnight UTC.`, followed by `LIBGEN_MCP_OPENALEX_KEY raises it.` on a server with
+  no key.
+- `OpenAlex refused the API key this server is configured with, so the list was not fetched.
+  The operator's log names the variable to fix.`
+- `OpenAlex has no work with this DOI.`, or `OpenAlex did not answer, so the list is not
+  available now.`
+
+**Meaning.** The list comes from OpenAlex, asked by the record's DOI, and only by a DOI that
+names this work: a catalog DOI that failed corroboration belongs to another work, whose
+references would be listed under this one. The lookup of the work is free, and the list costs
+one credit of the daily allowance every OpenAlex request from this server shares, the search
+provider's included. An empty answer that OpenAlex gave (`OpenAlex lists no references for this
+work.`, `OpenAlex knows no work that cites this one.`) is a fact about the record, not a
+failure.
+
+**Fixes.**
+
+- For a missing or unconfirmed DOI, find the work's DOI (a `citation` lookup, or a `search`)
+  and call again with it.
+- For a slow-down note, retry in a minute. For a spent allowance, wait for midnight UTC or set
+  `LIBGEN_MCP_OPENALEX_KEY`.
+- For a refused key, the server's log has the `WARN` naming the variable. Fix the key or unset
+  it.
+
+**How it works.** [Tools](tools.md#related-works).
+
 ## Downloads
 
 ### Download failed / MD5 mismatch
@@ -831,6 +1007,10 @@ declining just moves on), and `core` needs `LIBGEN_MCP_CORE_KEY`.
 - A `crossref` error naming the browser as the remaining route means every link the publisher
   deposited refused an anonymous client; the large commercial publishers answer `403`
   whatever the link says.
+- A `europepmc` error reading `… is a retracted publication, so it is not served` or `the PMC
+  dataset marks … retracted, so it is not served` means the article was retracted. That source
+  declines it and the chain moves on, so check the retraction notice before relying on any
+  copy another source serves.
 - Note that DOI downloads are **not** MD5-verified (`verified` is `false`) — there is no
   LibGen digest for them.
 
@@ -983,6 +1163,33 @@ read at all; a damaged document is given a time limit rather than a thread forev
   and `find` still searches the text.
 
 **How it works.** [Tools](tools.md#not-extractable).
+
+### `section` is refused
+
+**Symptom.** `read` with `section` is refused with one of:
+
+- `section "Summary" matches 4 entries, pass the number of the one you mean: …`
+- `no outline entry matches "…": read the outline and pass an entry number`
+- `section 40 does not exist: the outline has 12 entries, numbered from 1`
+- `this document has no table of contents, so section cannot address part of it: read by page
+  with start_page (PDF) or by character with offset (EPUB/TXT), or search it with find`
+- `section cannot be combined with outline: …`, the same with `find`, or `section fixes where
+  reading starts, so omit start_page and offset: continue a long section with the cursor`
+- `entry 7 "…" points to no page, so it cannot be read as a section: …`
+
+**Meaning.** `section` names one table-of-contents entry, by the number outline mode shows or
+by its title. A value of digits only is always a number. A title matches ignoring case and
+spacing, an exact match first and then one that contains it, and a title several entries share
+is refused with their numbers rather than read as the first one.
+
+**Fixes.**
+
+- Call `read` with `outline: true` and pass the entry's number, the `[n]` in front of it.
+- For a document with no outline, read by page or offset, or search it with `find`.
+- Drop the argument the refusal names. A long section continues with its `cursor`.
+- For an entry that points to no page, pick a neighboring entry or read by page.
+
+**How it works.** [Tools](tools.md#read-one-section).
 
 ## Telemetry not arriving
 

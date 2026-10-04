@@ -44,7 +44,7 @@ Two consequences are worth stating plainly.
 
 ### Keyless by default
 
-Search, details, downloads and reading all work with no account, no key and no configuration. The credentials below are opt-in, and each one adds a source or a faster path rather than unlocking a capability the server otherwise lacks.
+Search, details, downloads and reading all work with no account, no key and no configuration. The credentials below are opt-in, and each one adds a source, a faster path or a larger allowance rather than unlocking a capability the server otherwise lacks.
 
 ### Keys the operator configures
 
@@ -52,6 +52,7 @@ Search, details, downloads and reading all work with no account, no key and no c
 | ---------------------------- | ---------------------------------------------- |
 | `LIBGEN_MCP_ANNAS_KEY`       | Anna's Archive member (fast) downloads         |
 | `LIBGEN_MCP_CORE_KEY`        | The CORE open-access source                    |
+| `LIBGEN_MCP_OPENALEX_KEY`    | A daily OpenAlex allowance ten times larger    |
 | `LIBGEN_MCP_UNPAYWALL_EMAIL` | The Unpaywall source, which requires a contact |
 
 They are set in the environment or a dotenv file and **have no command-line flags**, on purpose: a secret on a command line is visible to every local account through `ps` and lands in shell history. On an HTTP deployment a configured key is the deployment's, so every caller spends it. A `download` result does not report an Anna's Archive account or how much of its allowance is left unless the call asked for the member tier itself. A key that enables a source is visible in a different way: the source appears in `download`'s `source` enum. See [the result-disclosure ADR](https://github.com/jmrplens/libgen-mcp/blob/main/docs/decisions/2026-08-08-result-reveals-only-what-the-call-revealed.md).
@@ -67,10 +68,11 @@ A key rides in a request header wherever the service accepts one. Two services a
 | Credential                | Sent as                        | Why                                    |
 | ------------------------- | ------------------------------ | -------------------------------------- |
 | CORE key                  | `Authorization: Bearer` header | The API takes it there                 |
+| OpenAlex key              | `Authorization: Bearer` header | The API takes it there                 |
 | Anna's Archive key        | `key` query parameter          | The only place the member API reads it |
 | Unpaywall contact address | `email` query parameter        | The only place the API reads it        |
 
-A configured contact address is also offered to the open-access APIs that keep a polite pool for identified callers, Crossref among them, in a `mailto` parameter or the `User-Agent`. A per-call address goes to Unpaywall alone.
+A configured contact address is also offered to the open-access APIs that keep a polite pool for identified callers, Crossref among them, in a `mailto` parameter or the `User-Agent`. A per-call address goes to Unpaywall alone. OpenAlex is not sent the contact address, because it retired its polite pool. A configured OpenAlex key that OpenAlex rejects is logged once at `WARN`, naming the variable and never the key.
 
 A URL with a secret in it leaks in two predictable ways, and both are closed:
 
@@ -127,6 +129,8 @@ A record's title, a book's description and the text extracted from a PDF are wri
 **It is labeled.** Each tool's description tells the model that what it returns is `UNTRUSTED` third-party text, to be read as data and never followed as instructions. The result says it again where the text begins — before a list of search hits, an extracted passage, the matches of a search inside a document, a table of contents — and the prompts carry the same caveat. See [Tools → read output](/libgen-mcp/tools/#read-output).
 
 **It is escaped for where it lands.** A value going into a table cell, a list item, a heading, a code block or a link passes through the helper for that construct, which takes away what would change the document's shape there: a pipe ending a cell, a newline starting a heading, a fence closed from inside. Control bytes are stripped before any check, and a link is written only for an absolute `http` or `https` address, because a `javascript:` destination is a whole link some clients render live. `make check-md-escaping` walks the renderer packages and reports a runtime value that reaches a Markdown construct with no escaper in between.
+
+**A registry's text is third-party text too.** A reference `get_details` formats through `doi.org` for `cite_as` is written by the DOI's registration agency, and the candidates a `citation` lookup returns are Crossref's records. The formatted reference is reduced to one plain line before it is shown (markup and entities removed, control characters and bidirectional controls dropped) and lands in a fenced block, and the candidates go through the table-cell helpers like any catalog record.
 
 **The guidance heading is reserved.** The `Next steps` section at the end of a result is the one part written in the server's own voice. A record carrying that exact heading, `💡 **Next steps:**`, has it rewritten to an HTML entity that renders identically but is no longer the marker. The rewrite matches the exact string only, so a lookalike heading passes through as text; the `UNTRUSTED` label around it is what still applies.
 
@@ -201,7 +205,7 @@ Go through it in order; the later items assume the earlier ones.
 8. **Leave `LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES` unset.** If you need a private mirror, name it in `LIBGEN_MIRROR` instead, knowing that this lifts the private-address tier for every download URL and redirect the catalog client follows. Without a private mirror, name only public hosts and keep the strict tier.
 9. **Leave `LIBGEN_MCP_SERVER_FETCH` at its remote default** unless the egress address is yours alone.
 10. **Keep the limits on**, and size `--max-inflight-per-client` and `LIBGEN_MCP_ACTION_TIMEOUT` for the callers you expect.
-11. **Keep keys out of command lines.** `LIBGEN_MCP_ANNAS_KEY`, `LIBGEN_MCP_CORE_KEY` and `LIBGEN_MCP_UNPAYWALL_EMAIL` belong in the environment or a dotenv file only the service account can read.
+11. **Keep keys out of command lines.** `LIBGEN_MCP_ANNAS_KEY`, `LIBGEN_MCP_CORE_KEY`, `LIBGEN_MCP_OPENALEX_KEY` and `LIBGEN_MCP_UNPAYWALL_EMAIL` belong in the environment or a dotenv file only the service account can read.
 12. **Leave `--pprof-addr` unset** in production.
 13. **Keep `LIBGEN_MCP_TELEMETRY_IDENTITY=none`** if telemetry is on, unless you have a reason and a lawful basis to record callers.
 14. **Run the image as shipped**, as its non-root user, with the health check it declares.

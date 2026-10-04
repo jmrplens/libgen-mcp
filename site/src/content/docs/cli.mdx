@@ -122,7 +122,7 @@ These configure the server itself rather than a listener, so they apply on both 
 | `--env-file`                | string | _(empty)_            | `LIBGEN_MCP_ENV_FILE`                | both       | Load settings from this dotenv file as well as `~/.libgen-mcp.env`, ranked above it. Give an absolute path: a relative one follows the working directory the client chose. A file that cannot be read is logged at `WARN` and the server starts without it.                                                            |
 | `--pprof-addr`              | string | _(empty: nothing)_   | `LIBGEN_MCP_PPROF_ADDR`              | both       | Serve Go's profiling handlers (`net/http/pprof`) on a listener of their own at this address, e.g. `127.0.0.1:6060`. Refused unless the host is `localhost` or a loopback IP, because a heap profile is a copy of the process's memory, per-call secrets included. `:6060` is refused because it binds every interface. |
 
-The credentials (`LIBGEN_MCP_ANNAS_KEY`, `LIBGEN_MCP_CORE_KEY`, `LIBGEN_MCP_UNPAYWALL_EMAIL`) have no flags, deliberately: a secret on a command line is visible to every user on the machine through `ps` and lands in shell history.
+The credentials (`LIBGEN_MCP_ANNAS_KEY`, `LIBGEN_MCP_CORE_KEY`, `LIBGEN_MCP_OPENALEX_KEY`, `LIBGEN_MCP_UNPAYWALL_EMAIL`) have no flags, deliberately: a secret on a command line is visible to every user on the machine through `ps` and lands in shell history.
 
 ## Operations
 

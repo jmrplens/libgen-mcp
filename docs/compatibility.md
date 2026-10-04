@@ -86,7 +86,7 @@ Notes that matter when a platform is on the edge:
   an equivalent) provides, on the architecture of that VM.
 - **Linux `.mcpb`.** A bundle manifest can choose a file per operating system but not per
   architecture, so the Linux bundle starts a small `/bin/sh` launcher that picks the binary by
-  `uname -m`. The per-OS bundles appear with the release after 2.1.0. Until then the universal
+  `uname -m`. The per-OS bundles first ship with 2.2.0. For 2.1.0 and earlier the universal
   `libgen-mcp.mcpb` is the one to download.
 - **`go install`** compiles from source with your toolchain. `go.mod` declares Go 1.27.1, and any
   Go from 1.21 on downloads that toolchain by itself unless `GOTOOLCHAIN=local` forbids it. The

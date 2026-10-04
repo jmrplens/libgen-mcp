@@ -202,6 +202,12 @@ value: a trace has no series budget and a metric does.
 a discovery rotated to is a third party's choice, and a discovered host list is
 not a bounded label space.
 
+The hosts `http.client.request.duration` may name are the ones this deployment
+chose for itself: the built-in mirror families' catalog, preferred and fallback
+hosts, `LIBGEN_MIRROR` and the `LIBGEN_MCP_SCIHUB_HOSTS` list. Every other host, the metadata services and open-access
+providers included (Crossref, OpenAlex, Europe PMC, dblp, `doi.org` and the rest),
+is recorded as `_OTHER`. The outbound span still carries the real host.
+
 ### Logs
 
 Every log record goes to stderr first, unchanged, and — above an INFO floor that
@@ -237,6 +243,8 @@ Under any policy, with any variable set to any value:
   outcome;
 - **the title of a record** that was returned, which is the same disclosure
   arriving by the other direction;
+- **a reference pasted into `get_details` as `citation`**, which names a work as
+  plainly as a query does;
 - **tool arguments and tool results**, whole;
 - **a credential supplied for a single call** — an Anna's Archive key or an
   Unpaywall contact address — which is used once and never stored, let alone

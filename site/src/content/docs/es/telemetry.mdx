@@ -143,6 +143,8 @@ Cada petición saliente que hace este servidor es un span hijo con el método, e
 
 `libgen_mcp.mirror_host` deliberadamente **no** es dimensión de métrica. A qué mirror rotó el descubrimiento es decisión de un tercero, y una lista de hosts descubiertos no es un espacio de etiquetas acotado.
 
+Los hosts que puede nombrar `http.client.request.duration` son los que este despliegue eligió por sí mismo: los hosts de catálogo, preferido y de respaldo de las familias de mirrors integradas, `LIBGEN_MIRROR` y la lista `LIBGEN_MCP_SCIHUB_HOSTS`. Todos los demás, incluidos los servicios de metadatos y los proveedores de acceso abierto (Crossref, OpenAlex, Europe PMC, dblp, `doi.org` y el resto), se registran como `_OTHER`. El span saliente sigue llevando el host real.
+
 ### Registros
 
 Cada registro va primero a stderr, sin cambios, y —por encima de un umbral INFO que es **independiente de `LIBGEN_MCP_LOG_LEVEL`**— también al colector. Depurar en tu propio terminal no empieza por tanto a enviar un registro por petición a un mirror; ejecutar en `warn` sigue exportando aquello de lo que se compone un incidente.
@@ -159,6 +161,7 @@ Bajo cualquier política, con cualquier variable fijada a cualquier valor:
 
 - **la consulta de búsqueda.** No hay ajuste que la exporte, porque no hay ningún operador para quien un colector con «lo que esta persona buscó» sea el resultado correcto;
 - **el título de un registro** devuelto, que es la misma revelación por la otra dirección;
+- **una referencia pegada en `get_details` como `citation`**, que nombra una obra con la misma claridad que una consulta;
 - **los argumentos y los resultados de las herramientas**, enteros;
 - **una credencial suministrada para una sola llamada** —una clave de Anna's Archive o una dirección de contacto de Unpaywall—, que se usa una vez y no se almacena, mucho menos se exporta;
 - **el contenido de nada de lo descargado o leído.**

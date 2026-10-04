@@ -83,7 +83,7 @@ Para qué sirve cada parte:
 
 - **`command:` sustituye a la orden por defecto de la imagen**, así que nombrar aquí un listener es también elegir HTTP. `--transport auto` desaparece con ella, y stdin deja de importar.
 - **`read_only: true` funciona con dos sitios con escritura.** El volumen con nombre en `/home/appuser` contiene el directorio personal del servidor: el directorio de descargas que comprueba al arrancar y la caché de mirrors en `.cache/libgen-mcp`. Docker llena un volumen con nombre nuevo a partir del directorio de la imagen, propietario incluido, y el `/home/appuser` de la imagen pertenece a `10001`, así que el volumen tiene escritura sin ningún `chown`. El `tmpfs` en `/tmp` recoge los ficheros que trae `read` cuando `LIBGEN_MCP_SERVER_FETCH` está activo. No se escribe nada más: el lector de índices de PDF ejecuta pdfcpu con una configuración propia y nunca crea su directorio de configuración.
-- **`ulimits: nofile` dimensiona el proceso.** Con 65536 el servidor retiene hasta 5728 llamadas a la vez; la fórmula está en [Ejecutarlo como servicio](/libgen-mcp/es/deploy/service/#el-límite-de-descriptores-dimensiona-el-proceso). Muchos runtimes ya traen un límite alto por defecto, y la línea de arranque `process ceilings` dice qué recibió el contenedor.
+- **`ulimits: nofile` dimensiona el proceso.** Con 65536 el servidor retiene hasta 4773 llamadas a la vez; la fórmula está en [Ejecutarlo como servicio](/libgen-mcp/es/deploy/service/#el-límite-de-descriptores-dimensiona-el-proceso). Muchos runtimes ya traen un límite alto por defecto, y la línea de arranque `process ceilings` dice qué recibió el contenedor.
 - **`stop_grace_period: 30s`** cubre el drenaje de 10 segundos y los 8 segundos que lo siguen. Medido, `docker compose stop` tardó 11 segundos y el contenedor salió con 0.
 - **El `HEALTHCHECK` propio de la imagen sigue vigente**: `libgen-mcp --healthcheck` cada 30 segundos, que lee el listener de la línea de órdenes en marcha, así que sigue a un puerto, un socket o `--http-path` sin que se lo digan.
 - **Las claves van en `libgen-mcp.env`**, una `LIBGEN_MCP_*` por línea, legible solo por ti. Una clave en `environment:` acaba en la salida de `docker inspect` y en el historial del fichero de Compose.
@@ -261,6 +261,7 @@ stringData:
   LIBGEN_MCP_UNPAYWALL_EMAIL: "you@example.org"
   LIBGEN_MCP_CORE_KEY: ""
   LIBGEN_MCP_ANNAS_KEY: ""
+  LIBGEN_MCP_OPENALEX_KEY: ""
 ---
 apiVersion: apps/v1
 kind: Deployment

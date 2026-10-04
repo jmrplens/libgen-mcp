@@ -34,8 +34,13 @@ making the same calls. Compare their `tools/call` rows in
 the first, seconds in the second, and what the second measures is the queue, not the server.
 
 Two things do not wait on that bucket. The searchers beyond the catalog (`extra_sources`) run
-concurrently, each paced by its own limiter, and a download's transfer occupies a slot of
-`LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS` (default `2`) for as long as the bytes take.
+concurrently, each paced by a bucket of its own upstream that the whole process shares, and a
+download's transfer occupies a slot of `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS` (default `2`) for as
+long as the bytes take. A searcher's pace never holds a search back: a search whose token for an
+upstream is more than a second away answers without that upstream, so under concurrent load
+arXiv (one request every 3 seconds) and dblp (one every 10) contribute to some searches and are
+skipped by the rest. The rates are in
+[What one caller may ask for](../http-server-mode.md#what-one-caller-may-ask-for).
 
 So before adding a replica, ask which resource is short. If calls are slow because they queue
 for the outbound token, a second replica doubles the rate the mirrors see rather than the
@@ -116,6 +121,7 @@ per process, and nothing is shared between processes. Run `N` replicas and each 
 | Limit                                                    | Scope                            | With `N` replicas behind one balancer                         |
 | -------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------- |
 | `LIBGEN_MCP_RATE_RPS` / `LIBGEN_MCP_RATE_BURST`          | Per process, outbound            | `N` times the request rate reaches the mirrors                |
+| The pace of each searcher beyond the catalog             | Per process, per upstream        | `N` times the request rate reaches arXiv, PubMed and the rest |
 | `LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS`                    | Per process                      | `N` times the concurrent transfers                            |
 | `--rate-limit-rps` / `--rate-limit-burst`                | Per charged address, per process | Up to `N` times per caller, unless the balancer pins a caller |
 | `--max-inflight-per-client`                              | Per charged address, per process | Up to `N` times per caller, unless the balancer pins a caller |
@@ -136,6 +142,15 @@ replicas that should together send what one process sends at the default run wit
 `LIBGEN_MCP_RATE_RPS=0.25`. Each replica's queue then drains four times slower, which is the
 point: replicas buy you held connections and memory, and the mirrors' tolerance is the same
 however many processes ask.
+
+**OpenAlex counts the other way.** Its keyless allowance (1000 credits a day, reset at midnight
+UTC) is counted per address by OpenAlex itself, and every process reads what is left from the
+headers of OpenAlex's answers. Replicas behind one egress address therefore spend one allowance
+between them rather than one each. A search costs 10 credits, and without a key a replica stops
+searching OpenAlex once a search would leave fewer than 100, which it keeps for `get_details`'
+`related` lists. With
+[`LIBGEN_MCP_OPENALEX_KEY`](../configuration.md#libgen_mcp_openalex_key) the allowance is the
+key's, and the reserve does not apply.
 
 ### What a caller sees
 
