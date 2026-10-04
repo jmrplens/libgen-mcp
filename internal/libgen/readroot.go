@@ -21,10 +21,6 @@ import (
 // of that version may still be running beside this one and using it.
 const readRootPrefix = "libgen-mcp-read-"
 
-// readRootLockName is the file inside a read root whose lock says its process
-// is alive.
-const readRootLockName = ".lock"
-
 // fetchDirPattern names the directory each fetch downloads into, inside the
 // read root.
 const fetchDirPattern = "fetch-*"
@@ -44,15 +40,21 @@ var errLockHeld = errors.New("the lock is held by another open file")
 // one another file holds (see holdReadRootLock).
 var errLocksUnusable = errors.New("file locks do not work here")
 
-// readRootLockGrace is how old a read root found without its lock file must be
-// before the sweep takes it for abandoned. A live process creates the root and
-// then the lock file inside it, so for an instant a live root has none; a
-// process that died in that instant leaves a root that stays without one.
+// readRootLockGrace is how old a read root must be before the sweep judges it
+// at all. A younger one is left alone whatever its lock says.
+//
+// A live process makes its root and then locks it, so for an instant a live
+// root's lock is free. A sweep landing in that instant would take the free
+// lock for a dead owner and remove the root its owner is about to use, which
+// was measured happening 11 times in 9,600 processes started together. A
+// minute is far past that instant and far short of a restart. Past it, a root
+// whose lock is free is dead however its process ended, including one that
+// died between the two steps.
 func readRootLockGrace() time.Duration { return time.Minute }
 
-// readRootNow is time.Now, as a seam: the age a root without a lock file is
-// judged by is compared against readRootLockGrace, and only a clock the test
-// sets can land exactly on the boundary.
+// readRootNow is time.Now, as a seam: a root's age is compared against
+// readRootLockGrace, and only a clock the test sets can land exactly on the
+// boundary.
 var readRootNow = time.Now
 
 // takeLock is tryLockFile, as a seam: the lock of a root this process has
@@ -143,7 +145,7 @@ func (r *readRoot) pathLocked() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	lock, err := holdReadRootLock(filepath.Join(dir, readRootLockName))
+	lock, err := holdReadRootLock(dir)
 	if err == nil {
 		r.dir, r.lock = dir, lock
 		return dir, nil
@@ -179,16 +181,17 @@ func (r *readRoot) dropLocked() {
 	r.dir, r.lock = "", nil
 }
 
-// holdReadRootLock creates the lock file at path and takes its lock, keeping
-// the file open so the lock lasts until close or until the process ends.
+// holdReadRootLock takes the lock of the read root at dir and keeps the file
+// that holds it open, so the lock lasts until close or until the process ends.
+// What that file is depends on the platform (see openReadRootLock).
 //
 // Only errLockHeld means another file holds the lock. Any other failure to
 // take it (ENOLCK on NFSv3 without lockd, ENOSYS on a cluster filesystem
 // mounted without flock, ENOTSUP, a platform with no lock at all) is wrapped
 // in errLocksUnusable, because there it says nothing about who holds what:
 // the lock cannot be relied on, here or in any other process's sweep.
-func holdReadRootLock(path string) (*os.File, error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+func holdReadRootLock(dir string) (*os.File, error) {
+	f, err := openReadRootLock(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -204,8 +207,9 @@ func holdReadRootLock(path string) (*os.File, error) {
 }
 
 // sweepReadRoots removes every read root under tmp whose process is gone, and
-// returns how many it removed. Nothing else is touched: a directory without
-// the read root's prefix is not ours to judge.
+// returns how many it removed. Nothing else is touched: an entry without the
+// read root's prefix is not ours to judge, and abandonedReadRoot says which of
+// the rest are.
 func sweepReadRoots(tmp string) int {
 	entries, err := os.ReadDir(tmp)
 	if err != nil {
@@ -213,7 +217,7 @@ func sweepReadRoots(tmp string) int {
 	}
 	removed := 0
 	for _, e := range entries {
-		if !e.IsDir() || !strings.HasPrefix(e.Name(), readRootPrefix) {
+		if !strings.HasPrefix(e.Name(), readRootPrefix) {
 			continue
 		}
 		dir := filepath.Join(tmp, e.Name())
@@ -224,25 +228,40 @@ func sweepReadRoots(tmp string) int {
 	return removed
 }
 
-// abandonedReadRoot reports whether no live process holds the read root at
-// dir.
+// abandonedReadRoot reports whether the read root at dir is one no live
+// process holds.
 //
-// Its lock answers that: a process that is alive holds it, and the operating
-// system releases it when the process ends, however it ended. Taking it here
-// is therefore proof the owner is gone, and it is released again at once,
-// before the root is removed. A lock that cannot be tried at all is no proof
-// of anything, so a root whose lock fails for any reason is left where it is,
-// held or not. A root with no lock file at all is judged by its age instead
-// (see readRootLockGrace), and anything that cannot be read is left where it
-// is too.
+// Three things must all be true, and anything that cannot be read leaves the
+// root where it is:
+//
+//   - It is a real directory this user owns, judged without following a link
+//     (see ownedDirectory). The temp directory is shared on Unix, and an entry
+//     another user planted under the prefix is not ours to open, let alone to
+//     remove.
+//   - It is at least readRootLockGrace old, whatever its lock says.
+//   - Its lock can be taken. A process that is alive holds it, and the
+//     operating system releases it when the process ends, however it ended,
+//     so taking it here is proof the owner is gone. It is released again at
+//     once, before the root is removed. A lock that cannot be tried at all is
+//     no proof of anything, so a lock that fails for any reason, held or not,
+//     keeps the root.
 func abandonedReadRoot(dir string) bool {
-	f, err := os.OpenFile(filepath.Join(dir, readRootLockName), os.O_RDWR, 0)
+	info, err := os.Lstat(dir)
+	if err != nil || !ownedDirectory(info) {
+		return false
+	}
+	if readRootNow().Sub(info.ModTime()) < readRootLockGrace() {
+		return false
+	}
+	return readRootLockFree(dir)
+}
+
+// readRootLockFree takes the lock of the read root at dir and gives it back,
+// and reports whether it could.
+func readRootLockFree(dir string) bool {
+	f, err := openReadRootLock(dir)
 	if err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
-			return false
-		}
-		info, statErr := os.Stat(dir)
-		return statErr == nil && readRootNow().Sub(info.ModTime()) >= readRootLockGrace()
+		return false
 	}
 	defer func() { _ = f.Close() }()
 	if takeLock(f) != nil {

@@ -27,29 +27,38 @@ func newRootDir(t *testing.T, tmp string) string {
 	return dir
 }
 
+// backdate sets path's modification time two minutes back, past
+// readRootLockGrace, so the sweep judges it by its lock rather than leaving it
+// for being young.
+func backdate(t *testing.T, path string) {
+	t.Helper()
+	old := time.Now().Add(-2 * time.Minute)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // holdRoot makes a read root under tmp the way a live process leaves one: the
-// directory, its lock file, and the lock held on a descriptor this test owns
-// until it ends. It returns the root's path.
+// directory, with its lock held on a descriptor this test owns until it ends.
+// It is backdated, so only the lock keeps it. It returns the root's path.
 func holdRoot(t *testing.T, tmp string) string {
 	t.Helper()
 	dir := newRootDir(t, tmp)
-	lock, err := holdReadRootLock(filepath.Join(dir, readRootLockName))
+	lock, err := holdReadRootLock(dir)
 	if err != nil {
 		t.Fatalf("holdReadRootLock: %v", err)
 	}
 	t.Cleanup(func() { _ = lock.Close() })
+	backdate(t, dir)
 	return dir
 }
 
-// deadRoot makes a read root under tmp the way a process that ended leaves
-// one: the lock file is there and nobody holds it. A cached file sits in a
-// per-fetch directory inside, as the cache leaves them.
-func deadRoot(t *testing.T, tmp string) string {
+// youngDeadRoot makes a read root under tmp the way a process that ended
+// leaves one, its lock free, with a cached file in a per-fetch directory
+// inside, as the cache leaves them. It has the age it was made with.
+func youngDeadRoot(t *testing.T, tmp string) string {
 	t.Helper()
 	dir := newRootDir(t, tmp)
-	if err := os.WriteFile(filepath.Join(dir, readRootLockName), nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
 	fetch := filepath.Join(dir, "fetch-1")
 	if err := os.Mkdir(fetch, 0o700); err != nil {
 		t.Fatal(err)
@@ -57,6 +66,14 @@ func deadRoot(t *testing.T, tmp string) string {
 	if err := os.WriteFile(filepath.Join(fetch, "book.pdf"), []byte("%PDF"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	return dir
+}
+
+// deadRoot is youngDeadRoot backdated past the grace: what the sweep removes.
+func deadRoot(t *testing.T, tmp string) string {
+	t.Helper()
+	dir := youngDeadRoot(t, tmp)
+	backdate(t, dir)
 	return dir
 }
 
@@ -117,18 +134,18 @@ func TestReadRoot_IsCreatedOnceLockedAndRemovedOnClose(t *testing.T) {
 	if again := rootOf(t, &r); again != first {
 		t.Fatalf("second fetch went under %q; want the same root %q", again, first)
 	}
-	// A second descriptor on the lock file is what another process's sweep
-	// opens. It must find the lock taken.
-	other, err := os.OpenFile(filepath.Join(first, readRootLockName), os.O_RDWR, 0)
+	// A second descriptor on the lock is what another process's sweep opens.
+	// It must find the lock taken.
+	other, err := openReadRootLock(first)
 	if err != nil {
 		t.Fatal(err)
 	}
-	locked := tryLockFile(other) == nil
+	lockErr := tryLockFile(other)
 	// Closed before close, not deferred: Windows refuses to remove a directory
 	// while a file inside it is still open.
 	_ = other.Close()
-	if locked {
-		t.Fatal("the live root's lock could be taken from a second descriptor")
+	if !errors.Is(lockErr, errLockHeld) {
+		t.Fatalf("a second descriptor on the live root's lock got %v, want errLockHeld", lockErr)
 	}
 
 	r.close()
@@ -345,33 +362,33 @@ func TestReadRoot_FirstUseSweepsAndSaysSo(t *testing.T) {
 }
 
 // TestHoldReadRootLock covers the three ways taking the lock can fail, each
-// with the error that tells the caller which it was: no file can be made at
-// the path, another descriptor already holds the lock, and the lock cannot be
+// with the error that tells the caller which it was: the root is not there to
+// lock, another descriptor already holds the lock, and the lock cannot be
 // tried at all. Only the last is errLocksUnusable, the one that makes a
 // process give up on read roots.
 func TestHoldReadRootLock(t *testing.T) {
 	tmp := t.TempDir()
 	cases := []struct {
 		name string
-		path func(t *testing.T) string
+		dir  func(t *testing.T) string
 		want error
 	}{
 		{"the directory does not exist", func(*testing.T) string {
-			return filepath.Join(tmp, "no", "such", readRootLockName)
+			return filepath.Join(tmp, "no", "such")
 		}, fs.ErrNotExist},
 		{"another descriptor holds the lock", func(t *testing.T) string {
 			t.Helper()
-			return filepath.Join(holdRoot(t, tmp), readRootLockName)
+			return holdRoot(t, tmp)
 		}, errLockHeld},
 		{"the lock cannot be tried", func(t *testing.T) string {
 			t.Helper()
 			lockAnswers(t, errors.New("no locks on this mount"))
-			return filepath.Join(newRootDir(t, tmp), readRootLockName)
+			return newRootDir(t, tmp)
 		}, errLocksUnusable},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			f, err := holdReadRootLock(tc.path(t))
+			f, err := holdReadRootLock(tc.dir(t))
 			if err == nil {
 				_ = f.Close()
 				t.Fatal("holdReadRootLock succeeded")
@@ -390,21 +407,29 @@ func TestHoldReadRootLock(t *testing.T) {
 }
 
 // TestSweepReadRoots removes exactly the roots no process holds, and nothing
-// that is not a read root: live roots, the per-fetch directories versions up
-// to 2.2.0 left loose in the temp directory, and files that merely share the
-// prefix all stay.
+// that is not a read root: live roots, a dead one still inside the grace, the
+// per-fetch directories versions up to 2.2.0 left loose in the temp directory,
+// a directory that is nobody's root, and a file that merely shares the prefix
+// all stay. Every survivor but the young root is backdated past the grace, so
+// what keeps it is the rule under test and not its age.
 func TestSweepReadRoots(t *testing.T) {
 	tmp := t.TempDir()
 	deadA, deadB := deadRoot(t, tmp), deadRoot(t, tmp)
 	live := holdRoot(t, tmp)
-	legacy := filepath.Join(tmp, "libgen-read-123")
-	if err := os.Mkdir(legacy, 0o700); err != nil {
-		t.Fatal(err)
+	young := youngDeadRoot(t, tmp)
+	legacy := filepath.Join(tmp, legacyFetchPrefix+"123")
+	unrelated := filepath.Join(tmp, "someone-elses-dir")
+	for _, dir := range []string{legacy, unrelated} {
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		backdate(t, dir)
 	}
 	plainFile := filepath.Join(tmp, readRootPrefix+"file")
 	if err := os.WriteFile(plainFile, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	backdate(t, plainFile)
 
 	if got := sweepReadRoots(tmp); got != 2 {
 		t.Errorf("sweepReadRoots = %d, want 2", got)
@@ -416,7 +441,7 @@ func TestSweepReadRoots(t *testing.T) {
 			}
 		})
 	}
-	for _, kept := range []string{live, legacy, plainFile} {
+	for _, kept := range []string{live, young, legacy, unrelated, plainFile} {
 		t.Run("kept "+filepath.Base(kept), func(t *testing.T) {
 			if !exists(kept) {
 				t.Errorf("%q was removed", kept)
@@ -433,19 +458,16 @@ func TestSweepReadRoots_UnreadableTempDirRemovesNothing(t *testing.T) {
 	}
 }
 
-// TestAbandonedReadRoot judges one root at a time, including the roots with no
-// lock file to ask, which are judged by their age against the grace.
+// TestAbandonedReadRoot judges one root at a time. Age comes first: a root
+// inside the grace is kept whatever its lock says, which is what covers the
+// instant between a live process making its root and locking it.
 func TestAbandonedReadRoot(t *testing.T) {
 	tmp := t.TempDir()
-	lockless := func(t *testing.T) string {
-		t.Helper()
-		return newRootDir(t, tmp)
-	}
 	// The clock is set relative to the root's own modification time, so the
 	// boundary case lands exactly on the grace rather than near it.
 	atAge := func(t *testing.T, dir string, age time.Duration) {
 		t.Helper()
-		info, err := os.Stat(dir)
+		info, err := os.Lstat(dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -460,25 +482,26 @@ func TestAbandonedReadRoot(t *testing.T) {
 	}{
 		{"its lock is free", func(t *testing.T) string { t.Helper(); return deadRoot(t, tmp) }, true},
 		{"its lock is held", func(t *testing.T) string { t.Helper(); return holdRoot(t, tmp) }, false},
-		{"no lock file, younger than the grace", func(t *testing.T) string {
+		{"its lock is free, younger than the grace", func(t *testing.T) string {
 			t.Helper()
-			dir := lockless(t)
+			dir := youngDeadRoot(t, tmp)
 			atAge(t, dir, readRootLockGrace()-time.Nanosecond)
 			return dir
 		}, false},
-		{"no lock file, exactly the grace old", func(t *testing.T) string {
+		{"its lock is free, exactly the grace old", func(t *testing.T) string {
 			t.Helper()
-			dir := lockless(t)
+			dir := youngDeadRoot(t, tmp)
 			atAge(t, dir, readRootLockGrace())
 			return dir
 		}, true},
-		{"the lock is not a file", func(t *testing.T) string {
+		{"it is a file, not a directory", func(t *testing.T) string {
 			t.Helper()
-			dir := lockless(t)
-			if err := os.Mkdir(filepath.Join(dir, readRootLockName), 0o700); err != nil {
+			path := filepath.Join(tmp, readRootPrefix+"file")
+			if err := os.WriteFile(path, nil, 0o600); err != nil {
 				t.Fatal(err)
 			}
-			return dir
+			backdate(t, path)
+			return path
 		}, false},
 		{"the root itself is gone", func(*testing.T) string { return filepath.Join(tmp, readRootPrefix+"gone") }, false},
 		{"its lock cannot be tried", func(t *testing.T) string {

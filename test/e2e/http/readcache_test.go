@@ -131,8 +131,8 @@ func readRoots(t *testing.T, tmp string) []string {
 	return roots
 }
 
-// filesUnder lists every regular file beneath dir, the read root's lock file
-// aside: it is not something read fetched.
+// filesUnder lists every regular file beneath dir. On Unix the read root's
+// lock is on the directory itself, so every file there is one read fetched.
 func filesUnder(t *testing.T, dir string) []string {
 	t.Helper()
 	var files []string
@@ -140,7 +140,7 @@ func filesUnder(t *testing.T, dir string) []string {
 		if err != nil {
 			return err
 		}
-		if d.Type().IsRegular() && d.Name() != ".lock" {
+		if d.Type().IsRegular() {
 			files = append(files, path)
 		}
 		return nil
@@ -177,9 +177,9 @@ func TestReadLeavesNothingBehindAfterACleanExit(t *testing.T) {
 }
 
 // TestReadRemovesWhatAKilledServerLeft covers the exit no cleanup survives: a
-// server killed outright leaves its read root, and the next server to read
-// from the same temp directory removes it, because the dead process's lock
-// went with it.
+// server killed outright leaves its read root, and the next server to fetch a
+// file from the same temp directory removes it, because the dead process's
+// lock went with it.
 func TestReadRemovesWhatAKilledServerLeft(t *testing.T) {
 	tmp := t.TempDir()
 	m := startReadMirror(t)
@@ -190,6 +190,13 @@ func TestReadRemovesWhatAKilledServerLeft(t *testing.T) {
 	left := readRoots(t, tmp)
 	if len(left) != 1 {
 		t.Fatalf("a killed server left %d read roots, want 1 (the case needs the leftover): %v", len(left), left)
+	}
+	// The sweep leaves any root younger than a minute alone, whatever its
+	// lock says, so a root its live owner has made and not yet locked is never
+	// taken for dead. The leftover is aged past that rather than waited out.
+	old := time.Now().Add(-2 * time.Minute)
+	if err := os.Chtimes(left[0], old, old); err != nil {
+		t.Fatal(err)
 	}
 
 	next := startReadServer(t, m, tmp)

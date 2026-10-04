@@ -4,6 +4,7 @@ package libgen
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 )
 
@@ -16,6 +17,13 @@ import (
 // process's directory from a live one's, and leaving a directory behind is the
 // failure that costs nothing (see readRoot.unlocked).
 var errLockUnsupported = errors.New("file locks are not supported on this platform")
+
+// openReadRootLock opens the read root itself, which is all there is to open
+// here: the lock taken on it always fails.
+func openReadRootLock(dir string) (*os.File, error) { return os.Open(dir) }
+
+// ownedDirectory reports whether info, from an Lstat, is a real directory.
+func ownedDirectory(info fs.FileInfo) bool { return info.IsDir() }
 
 // tryLockFile always fails here; see errLockUnsupported.
 func tryLockFile(*os.File) error { return errLockUnsupported }
