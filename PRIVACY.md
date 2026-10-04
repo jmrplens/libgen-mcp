@@ -74,7 +74,11 @@ AI assistant) make. There are no background connections. The destinations are:
 - **Library Genesis mirrors.** `search` and `get_details` query the Library
   Genesis mirrors (for example `libgen.li`, `libgen.gl`, `libgen.la`,
   `libgen.bz`, `libgen.vg`), which are discovered automatically and cached, or
-  pinned via `LIBGEN_MIRROR`. Book `download` requests (by `md5`) fetch the file
+  pinned via `LIBGEN_MIRROR`. Discovery reads the public mirror lists for
+  Library Genesis and for Anna's Archive at `shadowlibraries.github.io`, a
+  GitHub Pages site, when the cached list is missing, older than a day, or was
+  the built-in fallback list rather than a fetched one. That
+  request carries nothing from your call. Book `download` requests (by `md5`) fetch the file
   from the serving mirror and its download CDNs. If the primary mirror path
   fails, the `randombook` source (`randombook.org`) is tried as a fallback.
 - **Unpaywall API (only when you request an article by DOI, and only if you
@@ -173,13 +177,18 @@ AI assistant) make. There are no background connections. The destinations are:
   (`openlibrary.org`) by ISBN. A DOI neither the catalog nor Crossref knows, and
   each `cite_as` style for a record whose DOI was confirmed, is asked of the DOI
   resolver (`doi.org`),
-  which forwards the request to the agency that registered that DOI:
-  `api.crossref.org` for Crossref, `data.crosscite.org` for DataCite,
-  `data.medra.org` for mEDRA. `related` asks [OpenAlex](https://openalex.org)
+  which forwards the request to the agency that registered that DOI, for
+  example `api.crossref.org` for Crossref, `data.crosscite.org` for DataCite,
+  `data.medra.org` for mEDRA, `japanlinkcenter.org` for JaLC, or
+  `data-doi.airiti.com` for Airiti, which doi.org sends over plain `http`.
+  `related` asks [OpenAlex](https://openalex.org)
   (`api.openalex.org`) by DOI, with your `LIBGEN_MCP_OPENALEX_KEY` as a bearer
   token if you set one. The requests to Crossref, OpenLibrary and `doi.org` carry your
-  `LIBGEN_MCP_UNPAYWALL_EMAIL` as a contact address when you configured one, and
-  none otherwise. `LIBGEN_MCP_ENRICH=false` turns every one of these lookups off.
+  `LIBGEN_MCP_UNPAYWALL_EMAIL` as a contact address in their User-Agent when you
+  configured one, and none otherwise. That header follows doi.org's redirect, so
+  the address also reaches the registering agency's host, in cleartext when that
+  host is reached over `http`. `LIBGEN_MCP_ENRICH=false` turns every one of these
+  lookups off.
 - **Anna's Archive and IPFS gateways (only when you download through them).**
   The `scidb` source resolves an article `download` by `doi` through Anna's
   Archive, and the `annas` source resolves a book `download` by `md5` there,

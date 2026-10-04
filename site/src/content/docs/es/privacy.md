@@ -10,7 +10,7 @@ datePublished: "2026-10-04"
 # Traducción de PRIVACY.md. El digest de abajo fija la versión del original de la
 # que procede: scripts/sync-privacy.mjs --check falla cuando el original cambia y
 # esta traducción se queda atrás.
-privacySource: "ecec6b16650c57f9"
+privacySource: "de04985b6e4f155b"
 head:
   - tag: script
     attrs:
@@ -133,7 +133,11 @@ destinos son:
 - **Mirrors de Library Genesis.** `search` y `get_details` consultan los mirrors
   de Library Genesis (por ejemplo `libgen.li`, `libgen.gl`, `libgen.la`,
   `libgen.bz`, `libgen.vg`), que se descubren automáticamente y se cachean, o se
-  fijan con `LIBGEN_MIRROR`. Las peticiones de `download` de libros (por `md5`)
+  fijan con `LIBGEN_MIRROR`. El descubrimiento lee las listas públicas de mirrors
+  de Library Genesis y de Anna's Archive en `shadowlibraries.github.io`, un sitio
+  de GitHub Pages, cuando la lista en caché falta, tiene más de un día, o era la
+  lista de reserva incorporada en lugar de una descargada. Esa petición no lleva
+  nada de tu llamada. Las peticiones de `download` de libros (por `md5`)
   obtienen el fichero del mirror que lo sirve y de sus CDN de descarga. Si la vía
   del mirror principal falla, se prueba la fuente `randombook`
   (`randombook.org`) como alternativa.
@@ -237,13 +241,18 @@ destinos son:
   [OpenLibrary](https://openlibrary.org) (`openlibrary.org`) por ISBN. Un DOI que
   ni el catálogo ni Crossref conocen, y cada estilo de `cite_as` para un registro
   cuyo DOI quedó confirmado, se piden al resolvedor de DOI (`doi.org`), que
-  reenvía la petición a la agencia que registró ese DOI: `api.crossref.org` para
-  Crossref, `data.crosscite.org` para DataCite, `data.medra.org` para mEDRA.
+  reenvía la petición a la agencia que registró ese DOI, por ejemplo
+  `api.crossref.org` para Crossref, `data.crosscite.org` para DataCite,
+  `data.medra.org` para mEDRA, `japanlinkcenter.org` para JaLC, o
+  `data-doi.airiti.com` para Airiti, al que doi.org envía por `http` sin cifrar.
   `related` pregunta a [OpenAlex](https://openalex.org) (`api.openalex.org`) por
   DOI, con tu `LIBGEN_MCP_OPENALEX_KEY` como bearer token si fijas una. Las
   peticiones a Crossref, a OpenLibrary y a `doi.org` llevan tu `LIBGEN_MCP_UNPAYWALL_EMAIL` como
-  dirección de contacto cuando configuraste una, y ninguna en otro caso.
-  `LIBGEN_MCP_ENRICH=false` apaga todas estas consultas.
+  dirección de contacto en su User-Agent cuando configuraste una, y ninguna en
+  otro caso. Esa cabecera sigue la redirección de doi.org, así que la dirección
+  llega también al host de la agencia que registró el DOI, sin cifrar cuando ese
+  host se alcanza por `http`. `LIBGEN_MCP_ENRICH=false` apaga todas estas
+  consultas.
 - **Anna's Archive y pasarelas IPFS (solo cuando descargas a través de ellas).**
   La fuente `scidb` resuelve un `download` de artículo por `doi` a través de
   Anna's Archive, y la fuente `annas` resuelve un `download` de libro por `md5`

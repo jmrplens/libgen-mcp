@@ -82,7 +82,7 @@ across the whole answer. A catalog record with no year is left out and counted i
 
 The catalog's matches, and Anna's Archive's, come back as rows, and the other providers' as a
 separate `open_access` list, each labelled with its `origin`. The origin says what to do
-next: a `crossref`, `europepmc`, `dblp` or `pubmed` hit carries a DOI for `download`, an `arxiv`
+next: a `crossref`, `europepmc`, `dblp` or `pubmed` hit usually carries a DOI for `download`, an `arxiv`
 hit, and an `openalex` hit whose free copy OpenAlex knows, carries a `pdf_url` the assistant
 fetches directly, and only a hit marked `open_access: true` claims to be free to read. A second
 search without `topics` finds the books. [How search works](how-search-works.md) explains the

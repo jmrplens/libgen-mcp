@@ -92,10 +92,11 @@ anyone else to redistribute, so libgen-mcp keeps only records Gutenberg marks as
 domain and drops the rest. In every case the outcome is reported as a miss. A refusal is
 never dressed up as a file.
 
-A fourth refusal is about the record rather than the licence. Europe PMC may hold the full
-text of an article that has since been retracted, and the `europepmc` source declines any
-article Europe PMC types as a retracted publication, so the chain does not hand over a
-withdrawn paper as if it stood.
+A fourth refusal is about the record rather than the licence, and it is narrower. The
+`europepmc` source declines any article Europe PMC types as a retracted publication. It is
+the only source that checks: the chain then moves on, and another source further down may
+still serve a copy of the same paper, so check the article's retraction notice before
+relying on a file.
 
 Two of the licence refusals are also checked by the
 [evaluation suite](https://jmrplens.github.io/libgen-mcp/eval-results/) against the live

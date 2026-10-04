@@ -85,7 +85,7 @@ For papers, the assistant asks beyond the catalog on purpose, because preprints 
 
 `year_from` is what makes it recent. The providers whose APIs can filter by year are asked to, and every other result, the catalog's included, is checked once it arrives, so the range holds across the whole answer. A catalog record with no year is left out and counted in `year_filtered`.
 
-The catalog's matches, and Anna's Archive's, come back as rows, and the other providers' as a separate `open_access` list, each labelled with its `origin`. The origin says what to do next: a `crossref`, `europepmc`, `dblp` or `pubmed` hit carries a DOI for `download`, an `arxiv` hit, and an `openalex` hit whose free copy OpenAlex knows, carries a `pdf_url` the assistant fetches directly, and only a hit marked `open_access: true` claims to be free to read. A second search without `topics` finds the books. [How search works](/libgen-mcp/how-search-works/) explains the labels.
+The catalog's matches, and Anna's Archive's, come back as rows, and the other providers' as a separate `open_access` list, each labelled with its `origin`. The origin says what to do next: a `crossref`, `europepmc`, `dblp` or `pubmed` hit usually carries a DOI for `download`, an `arxiv` hit, and an `openalex` hit whose free copy OpenAlex knows, carries a `pdf_url` the assistant fetches directly, and only a hit marked `open_access: true` claims to be free to read. A second search without `topics` finds the books. [How search works](/libgen-mcp/how-search-works/) explains the labels.
 
 The `research_topic` prompt runs this survey for you, with `topic`, `kind` (`articles`, `books` or both) and `limit`, and asks for an annotated bibliography at the end.
 
