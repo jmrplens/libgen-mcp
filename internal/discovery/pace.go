@@ -4,8 +4,10 @@ package discovery
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"sync"
+	"time"
 
 	"golang.org/x/time/rate"
 )
@@ -44,9 +46,48 @@ type pace struct {
 	burst int
 }
 
-// wait blocks until provider may send one request to base, under this pace.
+// errPaced is what wait returns when the next token is further away than a
+// search may wait for it. A provider reads it as "skip this search", the same
+// as any other non-context failure.
+var errPaced = errors.New("discovery: the next request to this upstream is not due yet")
+
+// maxPaceWait is the longest a search waits for a provider's token. Federate
+// answers only when every provider has, so a provider that slept for its token
+// would hold the whole search for that long. One second is one full interval of
+// every provider paced at one request per second or faster, so those still
+// queue as before, while the slow ones (arXiv every three seconds, dblp every
+// ten) skip a search their token cannot reach in time instead of delaying it.
+func maxPaceWait() time.Duration { return time.Second }
+
+// wait blocks until provider may send one request to base, under this pace. A
+// token due later than maxPaceWait is not waited for: the reservation is handed
+// back, so the skipped search spends nothing, and errPaced is returned. A context
+// that ends while waiting hands the reservation back too and returns its error.
 func (p pace) wait(ctx context.Context, provider, base string) error {
-	return outbound.limiter(provider, base, p.limit, p.burst).Wait(ctx)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	r := outbound.limiter(provider, base, p.limit, p.burst).Reserve()
+	if !r.OK() {
+		return errPaced
+	}
+	delay := r.Delay()
+	if delay > maxPaceWait() {
+		r.Cancel()
+		return errPaced
+	}
+	if delay == 0 {
+		return nil
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		r.Cancel()
+		return ctx.Err()
+	}
 }
 
 // limiter returns the process-wide limiter for provider at base, creating it

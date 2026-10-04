@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 // arxivFeedFixture is a realistic two-entry arXiv Atom feed: the first entry
@@ -186,12 +188,20 @@ func TestArxiv_LimitClamped(t *testing.T) {
 		t.Errorf("limit=0 query = %q, want default max_results=10", gotQuery)
 	}
 
-	if _, err := NewArxiv().Search(context.Background(), "q", 9999); err != nil {
+	// The same base again, inside the three-second pace: an unpaced provider.
+	if _, err := newUnpacedArxiv().Search(context.Background(), "q", 9999); err != nil {
 		t.Fatalf("Search(limit=9999) error = %v", err)
 	}
 	if !strings.Contains(gotQuery, "max_results=50") {
 		t.Errorf("limit=9999 query = %q, want clamped max_results=50", gotQuery)
 	}
+}
+
+// newUnpacedArxiv builds an ArxivProvider that never waits for the outbound
+// bucket, for a test that asks one server twice and is about something other than
+// pacing: arXiv's pace is longer than a search waits for a token.
+func newUnpacedArxiv() *ArxivProvider {
+	return &ArxivProvider{client: newDiscoveryClient(), pace: pace{limit: rate.Inf, burst: 1}}
 }
 
 // TestArxivProvider_Name verifies the arXiv provider stamps the "arxiv" origin.

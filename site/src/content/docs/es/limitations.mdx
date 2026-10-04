@@ -106,7 +106,8 @@ Superar el desafío queda fuera de alcance por decisión: exigiría ejecutar el 
 
 **dblp se consulta a través de su servicio SPARQL, que solo busca cada palabra en el título y en el primer autor.** Según la medición del 2026-10-03, dblp.org y sus dos mirrors responden a la API de búsqueda con una página de Anubis «Making sure you're not a bot!», también desde una dirección de un ISP doméstico, y el robots.txt de dblp.org ahora lo prohíbe todo. Por eso el proveedor de dblp pregunta en su lugar al servicio de consultas SPARQL de dblp en `sparql.dblp.org`, cuyo robots.txt abre su endpoint de consultas a los scripts. Esa consulta no es la búsqueda por palabras clave con ranking de la API de búsqueda:
 
-- cada palabra de la consulta debe aparecer en la etiqueta del registro, que contiene su título y su primer autor (o los dos primeros), así que una consulta que nombra a un autor posterior, el medio o una palabra que el título no tiene no encuentra nada allí;
+- cada palabra de la consulta debe aparecer en la etiqueta del registro, que contiene su título, su primer autor (o los dos primeros) y su año, así que una consulta que nombra a un autor posterior, el medio o una palabra que el título no tiene no encuentra nada allí;
+- un registro sin autor, como un volumen de actas, que dblp recoge por sus editores, no se devuelve;
 - los acentos deben coincidir tal como se escriben, así que `rene vidal` no encuentra a René Vidal;
 - los resultados se ordenan por longitud del título, el más corto primero, y después por año, lo que pone primero un título exacto pero no es un ranking por relevancia;
 - al servicio se le pregunta como mucho una vez cada diez segundos, el intervalo entre peticiones que pide, así que una segunda búsqueda dentro de ese margen se queda sin dblp.

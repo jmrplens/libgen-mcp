@@ -241,6 +241,10 @@ func TestDblp_RequestShape(t *testing.T) {
 		`ql:contains-word "neural networks"`,
 		"OPTIONAL { ?publ dblp:yearOfPublication ?year }",
 		"ORDER BY STRLEN(?title) DESC(?year) LIMIT 5",
+		// Editors are not authors: an editor-only record is not chosen, and only
+		// author signatures are read.
+		"FILTER EXISTS { ?publ dblp:authoredBy ?anyAuthor }\n    } ORDER BY",
+		"?signature a dblp:AuthorSignature .",
 	} {
 		t.Run(want, func(t *testing.T) {
 			if !strings.Contains(q, want) {
@@ -248,8 +252,8 @@ func TestDblp_RequestShape(t *testing.T) {
 			}
 		})
 	}
-	if strings.Contains(q, "FILTER") {
-		t.Errorf("an unbounded query carries a FILTER:\n%s", q)
+	if strings.Contains(q, "FILTER(") {
+		t.Errorf("an unbounded query carries a year FILTER:\n%s", q)
 	}
 }
 
@@ -402,6 +406,12 @@ func TestDblpDOI(t *testing.T) {
 		{name: "not a doi", iri: "https://doi.org/handle", want: ""},
 		{name: "a prefix without a suffix", iri: "https://doi.org/10.1109", want: ""},
 		{name: "another host", iri: "https://example.org/10.1/x", want: ""},
+		{
+			name: "a percent-encoded SICI doi is decoded",
+			iri:  "https://doi.org/10.1002/(SICI)1097-4571(199806)49:8%3C693::AID-ASI4%3E3.0.CO;2-0",
+			want: "10.1002/(SICI)1097-4571(199806)49:8<693::AID-ASI4>3.0.CO;2-0",
+		},
+		{name: "a broken encoding is kept as written", iri: "https://doi.org/10.1/a%zz", want: "10.1/a%zz"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

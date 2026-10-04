@@ -140,9 +140,11 @@ address, and dblp.org's robots.txt now disallows everything. So the dblp provide
 SPARQL query service at `sparql.dblp.org` instead, whose robots.txt opens its query endpoint
 to scripts. That query is not the search API's ranked keyword search:
 
-- every word of the query must occur in the record's label, which holds its title and its
-  first author (or first two), so a query that names a later author, the venue or a word the
-  title lacks finds nothing there;
+- every word of the query must occur in the record's label, which holds its title, its first
+  author (or first two) and its year, so a query that names a later author, the venue or a
+  word the title lacks finds nothing there;
+- a record with no author, such as a proceedings volume, which dblp lists by its editors, is
+  not returned;
 - accents must match as written, so `rene vidal` does not find René Vidal;
 - results are ordered by title length, shortest first, and then by year, which puts an exact
   title first but is not a relevance ranking;

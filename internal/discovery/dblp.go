@@ -209,9 +209,16 @@ const dblpListSep = "\t"
 //
 // The records are chosen and ordered in a subquery before anything else is read,
 // so the joins for venue, DOI and authors touch only the records returned. The
-// authors come from the signatures, each with its ordinal, because rdfs:label
-// names only the first and dblp:authoredBy carries no order. A record with no
-// signature at all is not returned.
+// authors come from the author signatures, each with its ordinal, because
+// rdfs:label names only the first and dblp:authoredBy carries no order.
+//
+// Only authored records are chosen, and only author signatures are read. A
+// proceedings volume's signatures are its editors', and DiscoveryResult has no
+// field that says a name is an editor's, so listing them would present the
+// editors of NeurIPS 2017 as the authors of its proceedings. The record is not
+// what a search for a paper is after, so it is left out rather than mislabeled.
+// The EXISTS test sits inside the subquery so a dropped volume does not leave the
+// page short. It costs about 0.7 s on the service, measured on 2026-10-04.
 func dblpSPARQL(words []string, limit int, years YearRange) string {
 	yearPattern := "OPTIONAL { ?publ dblp:yearOfPublication ?year }"
 	if !years.IsZero() {
@@ -231,11 +238,13 @@ SELECT ?title ?year (GROUP_CONCAT(DISTINCT ?venue; separator="\t") AS ?venues) (
       ?publ rdfs:label ?label .
       ?publ dblp:title ?title .
       ` + yearPattern + `
+      FILTER EXISTS { ?publ dblp:authoredBy ?anyAuthor }
     } ORDER BY STRLEN(?title) DESC(?year) LIMIT ` + strconv.Itoa(limit) + `
   }
   OPTIONAL { ?publ dblp:publishedIn ?venue }
   OPTIONAL { ?publ dblp:doi ?doiIRI }
   ?publ dblp:hasSignature ?signature .
+  ?signature a dblp:AuthorSignature .
   ?signature dblp:signatureOrdinal ?ordinal .
   ?signature dblp:signatureDblpName ?name .
 } GROUP BY ?publ ?title ?year ORDER BY STRLEN(?title) DESC(?year)`
@@ -377,6 +386,12 @@ func dblpDOI(iri string) string {
 	// owl:sameAs links still use the older forms.
 	if _, rest, ok := strings.Cut(iri, "doi.org/"); ok {
 		iri = rest
+	}
+	// An IRI percent-encodes what a DOI may hold and a path may not, such as the
+	// angle brackets and semicolons of a SICI-style DOI. The DOI is the decoded
+	// form; an encoding that does not decode is kept as written.
+	if decoded, err := url.PathUnescape(iri); err == nil {
+		iri = decoded
 	}
 	if !strings.HasPrefix(iri, "10.") || !strings.Contains(iri, "/") {
 		return ""
