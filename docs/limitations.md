@@ -62,8 +62,9 @@ fetches something new. The
 [known-limitations ADR](decisions/2026-07-22-known-limitations.md) accepts this and records
 a periodic sweep as follow-up work. The files do not outlive the process, though: what the
 cache still holds when the server exits is removed with it, and a server that was killed
-leaves its files only until the next server's first `read` from the same temporary
-directory removes them. See
+leaves its files only until the next server to fetch a file for `read` from the same
+temporary directory removes them, once they are a minute old. A `read` of a local `path`
+fetches nothing and removes nothing. See
 [Configuration](configuration.md#libgen_mcp_read_cache_bytes-and-libgen_mcp_read_cache_ttl).
 
 ## Downloads and verification

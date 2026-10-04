@@ -248,7 +248,10 @@ optional, and unset by default.
   one document reuse a single fetch; those files are evicted on a size cap and a
   TTL (`LIBGEN_MCP_READ_CACHE_BYTES` / `LIBGEN_MCP_READ_CACHE_TTL`) and removed
   when the server exits. A server that is killed instead leaves them until the
-  next server's first `read` from the same temporary directory removes them. An
+  next server to fetch a file for `read` (a book or paper named by `md5` or
+  `doi`) from the same temporary directory removes them, once they are a minute
+  old. Where that directory cannot hold a file lock, the server says so in its
+  log and a killed server's files stay until someone deletes them. An
   interrupted `download` likewise leaves a `.part` file in the destination
   directory so a later call can resume it.
 
@@ -288,8 +291,9 @@ there first.
 The only things the server leaves behind after it exits are the files described
 under [Local storage and downloads](#local-storage-and-downloads): what you asked
 it to download, the 24-hour mirror cache, and, only if the server was killed
-rather than stopped, the temporary `read` files it still held. None of them records a query or an identifier of yours except the names
-of the files you chose to fetch. It shares data with no third parties beyond the
+rather than stopped, the temporary `read` files it still held. None of them
+records a query or an identifier of yours except the names of the files you
+chose to fetch. It shares data with no third parties beyond the
 destinations listed under [Data flows](#data-flows) — the Library Genesis
 mirrors, the extra searchers a `search` may reach, the metadata services
 `get_details` asks, and the article and book download sources you invoke. With

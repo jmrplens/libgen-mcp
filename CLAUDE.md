@@ -1708,16 +1708,39 @@ in the same change. Two things about it are easy to get wrong:
 
 - **The files read fetches live under one root per process.** `FetchToTemp`
   writes each file into a `fetch-*` directory inside `libgen-mcp-read-*` in the
-  OS temp directory, and that root holds a lock (`flock` on Unix, `LockFileEx`
-  on Windows) for the whole life of the process. `Client.Close` removes the
-  root, `run` defers the cleanup `newRegisteredServer` returns, and the first
-  `read` of the next process removes every root whose lock is free. Two things
-  fail silently if undone: a fetch directory made anywhere but under the root
-  outlives the process again, which is how every restart left one behind up to
-  2.2.0, and a caller of `newRegisteredServer` that drops the cleanup does the
-  same on a clean exit. The old loose prefix, `libgen-read-*`, is deliberately
-  not swept: nothing marks which process made one, and a server of those
-  versions may still be running beside a newer one.
+  OS temp directory, and that root holds a lock for the whole life of the
+  process: `flock` on the root directory itself on Unix, `LockFileEx` on a
+  `.lock` file inside it on Windows. `Client.Close` removes the root, `run`
+  defers the cleanup `newRegisteredServer` returns, and the next process's
+  first fetch (a `read` by `md5` or `doi`, never one of a local `path`) removes
+  every root that is a real directory this user owns, at least a minute old,
+  and whose lock can be taken. A root removed from under a running process is
+  noticed when the next fetch directory cannot be made in it, and replaced.
+  Each of these fails silently if undone:
+  - a fetch directory made anywhere but under the root outlives the process
+    again, which is how every restart left one behind up to 2.2.0, and a caller
+    of `newRegisteredServer` that drops the cleanup does the same on a clean
+    exit;
+  - a lock file inside the root on Unix is deleted by age-based temp cleaners
+    (systemd-tmpfiles before 254, tmpreaper, tmpwatch), after which another
+    process's sweep removes the live root;
+  - without the one-minute age rule a sweep can land between a root's creation
+    and its lock and remove it from its owner (measured: 11 in 9,600
+    processes);
+  - only `EWOULDBLOCK` (Unix) and `ERROR_LOCK_VIOLATION` (Windows) mean held.
+    Any other lock error sends the process to loose `libgen-read-*` fetch
+    directories for its whole life, with one warning, and must never leave an
+    unlocked `libgen-mcp-read-*` root another process could sweep;
+  - the sweep `Lstat`s each candidate and opens the Unix lock
+    `O_DIRECTORY|O_NOFOLLOW|O_NOCTTY|O_NONBLOCK`, because `/tmp` is shared and
+    anything under the prefix may have been planted there.
+
+  The sweep relies on `flock` being coherent across every process that shares
+  `TMPDIR`, so one `TMPDIR` must not be shared across hosts on a filesystem
+  whose locks stay host-local (NFS mounted `nolock` or `local_lock`, some FUSE
+  filesystems). The loose prefix, `libgen-read-*`, is deliberately never swept:
+  nothing marks which process made one, and a server of those versions, or one
+  whose temp directory cannot lock, may still be using it.
 - **Root binaries.** `go build ./cmd/<x>` drops the binary in the repo root
   (e.g. `./gen_eval_pages`). These are gitignored, but **never** `git add -A` —
   stage files explicitly so a stray binary or `.env` is never committed. Prefer

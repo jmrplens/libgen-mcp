@@ -456,12 +456,25 @@ evicted). Neither variable affects `download`, which always writes directly to
 The temp files live in one directory per server process, `libgen-mcp-read-*` in the operating
 system's temporary directory (`TMPDIR` on Unix, `TMP` or `TEMP` on Windows). A server that
 exits cleanly removes it with everything in it. A server that is killed cannot, so the
-directory holds a lock the process keeps for its whole life, and the next server's first `read`
-from the same temporary directory removes every such directory whose lock no process holds,
-which is how it tells a dead server's files from a live one's. Up to 2.2.0 each file's
-directory sat loose in the temporary directory as `libgen-read-*` and outlived every process
-that fetched it; those are left alone, because nothing says which process made one, and can be
-deleted by hand once no server of those versions is running.
+directory holds a lock the process keeps for its whole life: an `flock` on the directory itself
+on Unix, a lock on a `.lock` file inside it on Windows. The next server to fetch a file for
+`read` from the same temporary directory (a `read` by `md5` or `doi`, since one of a local
+`path` fetches nothing) first removes every such directory whose lock no process holds, which
+is how it tells a dead server's files from a live one's. It leaves alone a directory younger
+than a minute, which may belong to a server that has made it and not yet locked it, and on Unix
+a directory another user owns. A directory removed from under a running server, by hand or by
+a temp cleaner, is noticed on its next fetch and made again.
+
+That sweep relies on the lock being seen by every process that shares the temporary directory,
+so do not share one `TMPDIR` between hosts on a filesystem whose locks stay local to each host
+(NFS mounted with `nolock` or `local_lock`, some FUSE filesystems). Where the temporary
+directory cannot take the lock at all (NFS with server-side locks, where an exclusive lock
+needs a file open for writing and a directory cannot be, is one), the server logs a warning
+once and makes each fetch's directory loose in the temporary directory as `libgen-read-*`
+instead, which a clean exit still removes and a killed server leaves behind. Up to 2.2.0 every
+fetch's directory sat loose there under that name and outlived every process that fetched it.
+The sweep never touches that prefix, because nothing says which process made one, so those
+directories can be deleted by hand once no server that might be using one is running.
 
 ### `LIBGEN_MCP_CONFIRM_DOWNLOADS`
 

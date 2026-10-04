@@ -10,7 +10,7 @@ datePublished: "2026-10-04"
 # Traducción de PRIVACY.md. El digest de abajo fija la versión del original de la
 # que procede: scripts/sync-privacy.mjs --check falla cuando el original cambia y
 # esta traducción se queda atrás.
-privacySource: "9ac3c2c912b750b0"
+privacySource: "b80e05cbbafd60fb"
 head:
   - tag: script
     attrs:
@@ -320,10 +320,14 @@ es igualmente opcional y está sin definir por defecto.
   sucesivas de un mismo documento reutilizan una única descarga; esos ficheros se
   desalojan por un límite de tamaño y un TTL (`LIBGEN_MCP_READ_CACHE_BYTES` /
   `LIBGEN_MCP_READ_CACHE_TTL`) y se borran cuando el servidor termina. Un
-  servidor que muere de golpe los deja hasta que el primer `read` del siguiente
-  servidor en el mismo directorio temporal los borra. Una descarga interrumpida
-  deja igualmente un fichero `.part` en el directorio de destino para que una
-  llamada posterior pueda reanudarla.
+  servidor que muere de golpe los deja hasta que el siguiente servidor que
+  descargue un fichero para `read` (un libro o artículo identificado por `md5` o
+  `doi`) en el mismo directorio temporal los borra, cuando ya tienen un minuto.
+  Si ese directorio no admite candados de fichero, el servidor lo indica en su
+  registro y los ficheros de un servidor que muere de golpe se quedan hasta que
+  alguien los borre. Una descarga interrumpida deja igualmente un fichero
+  `.part` en el directorio de destino para que una llamada posterior pueda
+  reanudarla.
 
 ## Endpoint alojado
 
@@ -363,8 +367,8 @@ Lo único que el servidor deja tras salir son los ficheros descritos en
 [Almacenamiento local y descargas](#almacenamiento-local-y-descargas): lo que le
 pediste descargar, la caché de mirrors de 24 horas y, solo si el servidor murió
 de golpe en vez de pararse, los ficheros temporales de `read` que aún tenía.
-Ninguno de ellos registra una consulta ni un
-identificador tuyo, más allá de los nombres de los ficheros que elegiste obtener.
+Ninguno de ellos registra una consulta ni un identificador tuyo, más allá de los
+nombres de los ficheros que elegiste obtener.
 No comparte datos con terceros más allá de los destinos listados en [Flujos de
 datos](#flujos-de-datos) — los mirrors de Library Genesis, los buscadores
 adicionales a los que puede llegar un `search`, los servicios de metadatos a los
