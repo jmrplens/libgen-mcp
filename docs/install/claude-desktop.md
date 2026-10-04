@@ -15,11 +15,10 @@ A bundle is a zip holding a manifest, the icon, the server for one or more syste
 | Linux (x86_64 and arm64, Claude Desktop beta)  | [`libgen-mcp-linux.mcpb`](https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp-linux.mcpb)     | ~18 MiB | Both Linux binaries and a launcher that picks one |
 | All three                                      | [`libgen-mcp.mcpb`](https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp.mcpb)                 | ~45 MiB | Every server above                                |
 
-> **The per-system bundles start with the release after 2.1.0.** Releases up to
-> and including 2.1.0 publish only the universal `libgen-mcp.mcpb`, so until the
-> next release the three links above it answer 404 and the universal bundle is
-> the one to download. From then on every release publishes all four, and the
-> universal one stays for the links that point at it.
+> **The per-system bundles start with 2.2.0.** Every release from 2.2.0 on
+> publishes all four, and the universal one stays for the links that point at
+> it. Releases up to and including 2.1.0 published only the universal
+> `libgen-mcp.mcpb`, so for one of those versions it is the bundle to download.
 
 Each per-system bundle lists only its own system, so Claude Desktop refuses one opened on another system with a message rather than installing a server that cannot start. All four install as **the same extension**, so installing one replaces another in place.
 
@@ -46,20 +45,21 @@ Then ask Claude for a book or a paper. The extension's four tools (`search`, `ge
 
 Every setting is optional. Each maps to one environment variable the server reads, and an empty field leaves the setting to the dotenv files below, then to the server's default.
 
-| Setting                       | Default             | Variable                        | What it does                                                                                      |
-| ----------------------------- | ------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Mirror                        | empty (auto-select) | `LIBGEN_MIRROR`                 | Tries this Library Genesis mirror first, e.g. `https://libgen.li`; discovery remains the fallback |
-| Download directory            | `~/Downloads`       | `LIBGEN_MCP_DOWNLOAD_DIR`       | Where `download` saves files. Must be writable, or the server refuses to start                    |
-| Request timeout               | `10s`               | `LIBGEN_MCP_TIMEOUT`            | Per HTTP request, as a Go duration (`10s`, `1m`), at most `10m`                                   |
-| Maximum download size (bytes) | `0`                 | `LIBGEN_MCP_MAX_DOWNLOAD_BYTES` | Refuses a download larger than this. `0` means no limit                                           |
-| Log level                     | `info`              | `LIBGEN_MCP_LOG_LEVEL`          | `debug`, `info`, `warn` or `error`                                                                |
-| Settings file                 | empty               | `LIBGEN_MCP_ENV_FILE`           | Absolute path to a dotenv file read in addition to `~/.libgen-mcp.env`                            |
-| Unpaywall email               | empty               | `LIBGEN_MCP_UNPAYWALL_EMAIL`    | Your contact address for Unpaywall, which turns that article source on                            |
-| CORE API key                  | empty               | `LIBGEN_MCP_CORE_KEY`           | A free key from core.ac.uk, which turns the CORE article source on. Marked sensitive              |
+| Setting                       | Default             | Variable                        | What it does                                                                                                      |
+| ----------------------------- | ------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Mirror                        | empty (auto-select) | `LIBGEN_MIRROR`                 | Tries this Library Genesis mirror first, e.g. `https://libgen.li`; discovery remains the fallback                 |
+| Download directory            | `~/Downloads`       | `LIBGEN_MCP_DOWNLOAD_DIR`       | Where `download` saves files. Must be writable, or the server refuses to start                                    |
+| Request timeout               | `10s`               | `LIBGEN_MCP_TIMEOUT`            | Per HTTP request, as a Go duration (`10s`, `1m`), at most `10m`                                                   |
+| Maximum download size (bytes) | `0`                 | `LIBGEN_MCP_MAX_DOWNLOAD_BYTES` | Refuses a download larger than this. `0` means no limit                                                           |
+| Log level                     | `info`              | `LIBGEN_MCP_LOG_LEVEL`          | `debug`, `info`, `warn` or `error`                                                                                |
+| Settings file                 | empty               | `LIBGEN_MCP_ENV_FILE`           | Absolute path to a dotenv file read in addition to `~/.libgen-mcp.env`                                            |
+| Unpaywall email               | empty               | `LIBGEN_MCP_UNPAYWALL_EMAIL`    | Your contact address for Unpaywall, which turns that article source on                                            |
+| CORE API key                  | empty               | `LIBGEN_MCP_CORE_KEY`           | A free key from core.ac.uk, which turns the CORE article source on. Marked sensitive                              |
+| OpenAlex API key              | empty               | `LIBGEN_MCP_OPENALEX_KEY`       | A free key from openalex.org, which moves OpenAlex requests onto its own larger daily allowance. Marked sensitive |
 
-**The form and the settings file share the work by which fields have a value.** The extension passes every field as its variable, and a field with a value wins over both dotenv files (the one named under Settings file, then `~/.libgen-mcp.env`). A field left blank arrives empty, and the server reads an empty variable from the files instead, so Mirror, Unpaywall email and CORE API key can live in a file as long as their fields stay empty. Download directory, Request timeout, Maximum download size and Log level start out holding their defaults, so they arrive with those values and win over a file: change them in the form. Use the file for everything the form has no field for, such as `LIBGEN_MCP_EXTRA_SOURCES` or `LIBGEN_MCP_SOURCES`. A `.env` in Claude Desktop's working directory is never read. Every variable is described in [Configuration](../configuration.md).
+**The form and the settings file share the work by which fields have a value.** The extension passes every field as its variable, and a field with a value wins over both dotenv files (the one named under Settings file, then `~/.libgen-mcp.env`). A field left blank arrives empty, and the server reads an empty variable from the files instead, so Mirror, Unpaywall email, CORE API key and OpenAlex API key can live in a file as long as their fields stay empty. Download directory, Request timeout, Maximum download size and Log level start out holding their defaults, so they arrive with those values and win over a file: change them in the form. Use the file for everything the form has no field for, such as `LIBGEN_MCP_EXTRA_SOURCES` or `LIBGEN_MCP_SOURCES`. A `.env` in Claude Desktop's working directory is never read. Every variable is described in [Configuration](../configuration.md).
 
-The CORE key is marked sensitive, so Claude Desktop stores it encrypted with a key the operating system protects (where one is available) and masks it in the form.
+The CORE and OpenAlex keys are marked sensitive, so Claude Desktop stores them encrypted with a key the operating system protects (where one is available) and masks them in the form.
 
 ## Verify what you installed
 

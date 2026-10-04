@@ -159,7 +159,7 @@ func resolveCommit(ldflagsCommit string, readBuildInfo func() (*debug.BuildInfo,
 // same identity instead of the bare {name, version} it sent before.
 const (
 	implementationTitle       = "Books & Papers MCP Server"
-	implementationDescription = "Federated search of books and papers, BibTeX/RIS citations, open-access retrieval and reading."
+	implementationDescription = "Federated search of books and papers, formatted citations, open-access retrieval and reading."
 	// implementationWebsiteURL is the documentation site rather than the
 	// repository or the hosted endpoint: a client rendering serverInfo shows
 	// this to an end user, for whom the guides are more useful than a source
@@ -195,7 +195,7 @@ const (
 	// rewritten to remove, one layer up.
 	stepDownload         = "download — save the file by md5 (book), doi (article) or isbn (openly licensed book sources); resolve_only=true returns a link without saving."
 	stepDownloadLinkOnly = "download — resolve a copy by md5 (book), doi (article) or isbn (openly licensed book sources); this deployment always returns a link to fetch yourself, never a saved file."
-	stepRead             = "read — extract, paginate, search within (find) or outline a file's text by the same md5/doi (or a local path); it fetches the file itself, so it does not require calling download first."
+	stepRead             = "read — extract, paginate, search within (find), outline, or read one table-of-contents entry (section) of a file's text by the same md5/doi (or a local path); it fetches the file itself, so it does not require calling download first."
 
 	// Stated once, where a model that expected to read text will look: this
 	// deployment has no read tool, and the way to a file's contents is the link.
