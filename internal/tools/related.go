@@ -55,15 +55,17 @@ func attachRelated(ctx context.Context, allowed bool, looker relatedLooker, out 
 	if ask.kind == "" {
 		return
 	}
+	// The switch is read before the DOI, for the reason attachFormatted gives:
+	// with lookups off no DOI is corroborated, so it would read as unconfirmed.
 	doi := negotiableDOI(*out)
 	switch {
-	case doi == "":
-		out.Related = &libgen.RelatedWorks{Kind: ask.kind, Note: "Not available: " + relatedNoDOIReason(out.Citations)}
 	case !allowed:
 		out.Related = &libgen.RelatedWorks{
 			Kind: ask.kind,
 			Note: "Not available: this server does not reach OpenAlex for metadata (" + config.EnvName("ENRICH") + "=false).",
 		}
+	case doi == "":
+		out.Related = &libgen.RelatedWorks{Kind: ask.kind, Note: "Not available: " + relatedNoDOIReason(out.Citations)}
 	default:
 		related := looker.Related(ctx, doi, ask.kind, ask.limit)
 		out.Related = &related

@@ -662,6 +662,35 @@ func TestAttachFormatted(t *testing.T) {
 	}
 }
 
+// TestAttachFormatted_EnrichOffNamesTheSwitch builds the citations the way the
+// handler does with LIBGEN_MCP_ENRICH=false, with no verifier, so a catalog DOI
+// stays unconfirmed. The note must name the switch the operator set rather than
+// call the record's DOI unconfirmed, whether or not the record carries one.
+func TestAttachFormatted_EnrichOffNamesTheSwitch(t *testing.T) {
+	tests := []struct {
+		name    string
+		edition map[string]any
+	}{
+		{"a record carrying a doi", map[string]any{"title": "Hallmarks of Cancer", "year": "2011", "doi": "10.1016/j.cell.2011.02.013"}},
+		{"a record without a doi", map[string]any{"title": "TAOCP", "year": "1997"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			out := DetailsOutput{Edition: tc.edition}
+			out.Citations = buildCitations(context.Background(), nil, "", nil, out.Edition)
+			attachFormatted(context.Background(), nil, &out, []string{"apa"})
+
+			got := out.Citations.Formatted
+			if len(got) != 1 || got[0].Source != formatSourceLocal {
+				t.Fatalf("formatted = %+v, want one local style", got)
+			}
+			if !strings.Contains(got[0].Note, "LIBGEN_MCP_ENRICH=false") || strings.Contains(got[0].Note, "not confirmed") {
+				t.Errorf("note = %q, want the switch named and the DOI not blamed", got[0].Note)
+			}
+		})
+	}
+}
+
 // TestAttachFormatted_NothingRequested leaves the default output exactly as it
 // was: no formatted field and no registry call.
 func TestAttachFormatted_NothingRequested(t *testing.T) {

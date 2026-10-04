@@ -166,11 +166,14 @@ func attachFormatted(ctx context.Context, fmtr styleFormatter, out *DetailsOutpu
 	doi := negotiableDOI(*out)
 	var registry map[string]string
 	var note string
+	// The switch is read first: with it off nothing corroborates a catalog DOI,
+	// so the record's DOI reads as unconfirmed, and blaming the DOI would tell
+	// an operator who turned lookups off that the record is suspect.
 	switch {
-	case doi == "":
-		note = unsentDOINote(out.Citations)
 	case fmtr == nil:
 		note = "This server does not ask doi.org (" + config.EnvName("ENRICH") + "=false), so the style was built from the record's fields."
+	case doi == "":
+		note = unsentDOINote(out.Citations)
 	default:
 		registry = fmtr.FormatDOI(ctx, doi, styles)
 		note = "doi.org gave no usable answer for this style, so it was built from the record's fields."
