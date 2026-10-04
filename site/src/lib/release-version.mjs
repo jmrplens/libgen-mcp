@@ -120,13 +120,21 @@ export function readReleaseDate(
 	file = new URL("../../../CITATION.cff", import.meta.url),
 ) {
 	const match = DATE_RELEASED.exec(readOrStop(file));
-	const month = match ? MONTHS[Number(match[2]) - 1] : undefined;
-	if (!match || !month) {
+	// A date that rolls over (2026-02-30 is 2026-03-02 to Date.UTC) is not
+	// the date that was written, so the round trip must give back all three.
+	const [year, month, day] = match ? match.slice(1).map(Number) : [];
+	const parsed = match ? new Date(Date.UTC(year, month - 1, day)) : undefined;
+	if (
+		!parsed ||
+		parsed.getUTCFullYear() !== year ||
+		parsed.getUTCMonth() !== month - 1 ||
+		parsed.getUTCDate() !== day
+	) {
 		throw new Error(
-			`[release-version] ${String(file)} has no date-released of the form YYYY-MM-DD.`,
+			`[release-version] ${String(file)} has no date-released that is a real YYYY-MM-DD date.`,
 		);
 	}
-	return { year: match[1], month };
+	return { year: match[1], month: MONTHS[month - 1] };
 }
 
 /**
