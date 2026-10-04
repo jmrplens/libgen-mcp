@@ -175,10 +175,10 @@ Name the version tag, or the digest for bytes that can never change under you:
 
 ```bash
 docker run -i --rm ghcr.io/jmrplens/libgen-mcp:2.1.0
-docker run -i --rm ghcr.io/jmrplens/libgen-mcp@sha256:98854e3e78ce5f0e08a57ba69e3d8a8982a96190ac62539bc71ba1235e6519ec
+docker run -i --rm ghcr.io/jmrplens/libgen-mcp@sha256:<digest>
 ```
 
-That digest is 2.1.0's image index, the same on both registries. For any tag, `docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/jmrplens/libgen-mcp:<tag>` prints it after a pull.
+The digest is the image index's, the same on both registries. For any tag, `docker buildx imagetools inspect ghcr.io/jmrplens/libgen-mcp:<tag>` prints it without a pull, and `docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/jmrplens/libgen-mcp:<tag>` after one. The latest release's is also in the repository's [`server.json`](../../server.json), beside the version tag it was published under.
 
 ## Uninstall
 

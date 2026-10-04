@@ -16,6 +16,8 @@
 // Markdown copy says "Qué no cubre" on a Spanish page for the same reason the
 // page does.
 
+import { hasReleaseToken, substituteRelease } from "./release-version.mjs";
+
 /**
  * Element names this renderer knows how to unwrap. Named in the build failure so
  * whoever hits it can see what the vocabulary currently is, rather than being
@@ -114,10 +116,19 @@ const unescape = (text) =>
  * @param {Record<string,string>} labels - The locale's `lgm.*` strings.
  * @param {object} [schema] - The generated tool-schema.json, for <SchemaTable>.
  * @param {{id: string, keyedBy: string}[]} [chain] - The download chain, in order.
+ * @param {Record<string, string>} [release] - Token to value, from
+ *   readReleaseValues. Required when the page holds a release token.
  * @returns {string} Markdown.
  */
-export function toMarkdown(source, labels, schema, chain) {
-	let text = source;
+export function toMarkdown(source, labels, schema, chain, release) {
+	// The release values go in first, so every rendering below (a Fact body, a
+	// tab, an alert) carries the value and none of them can carry a token.
+	if (hasReleaseToken(source) && !release) {
+		throw new Error(
+			"[page-markdown] the page writes a release token but no release values were given",
+		);
+	}
+	let text = release ? substituteRelease(source, release) : source;
 
 	// Frontmatter and the import block are machinery, not content.
 	text = text.replace(/^---\n[\s\S]*?\n---\n/, "");

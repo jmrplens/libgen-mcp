@@ -7,6 +7,11 @@ import starlightLinksValidator from "starlight-links-validator";
 import rehypeMermaid from "rehype-mermaid";
 
 import { devMarkdown } from "./src/lib/dev-markdown.mjs";
+import {
+	readReleaseValues,
+	readReleaseVersion,
+	remarkReleaseVersion,
+} from "./src/lib/release-version.mjs";
 import { rehypeWideTables } from "./src/lib/wide-tables.mjs";
 
 const siteDescription =
@@ -26,14 +31,13 @@ const sourceCodeId = `${repositoryUrl}#source-code`;
 const socialImageAlt =
 	"libgen-mcp — search, read and download books and papers from Library Genesis, plus open-access discovery, over MCP";
 
-// Product version — single-sourced from the repo-root VERSION file when present.
-const softwareVersion = (() => {
-	try {
-		return readFileSync(new URL("../VERSION", import.meta.url), "utf8").trim();
-	} catch {
-		return undefined;
-	}
-})();
+// Product version — single-sourced from the repo-root VERSION file. Read
+// strictly: the pages write it wherever they show how to pin the current
+// release (remarkReleaseVersion), so a build without it has nothing honest to
+// print there and stops.
+const softwareVersion = readReleaseVersion(
+	new URL("../VERSION", import.meta.url),
+);
 
 // The title the registry and every package channel publish this server under.
 const registryTitle = (() => {
@@ -403,6 +407,15 @@ export default defineConfig({
 	// DSL inside <pre class="mermaid"> instead of a picture or any text. Rendering
 	// here costs a headless Chromium at build time and nothing at all at runtime.
 	markdown: {
+		// A remark plugin, so the release number is in place before Expressive
+		// Code (a rehype plugin) highlights a fenced block and before a link URL
+		// is percent-encoded. See src/lib/release-version.mjs.
+		remarkPlugins: [
+			[
+				remarkReleaseVersion,
+				{ values: readReleaseValues(new URL("../", import.meta.url)) },
+			],
+		],
 		rehypePlugins: [
 			// BEFORE rehypeMermaid, deliberately: at this point a diagram is still
 			// a fenced code block, so its markup cannot be mistaken for a content

@@ -906,7 +906,9 @@ jobs:
   #
   # It holds the deploy key alone and runs no third-party code — no build
   # action, no CLI resolved at run time — which is the point of it being a job
-  # rather than the tail of one that does.
+  # rather than the tail of one that does. The Go it installs is the pinned
+  # toolchain, uncached, and it runs this repository's own stdlib-only
+  # generators before the key is written to disk.
   commit-manifests:
     name: Commit manifests to main
     needs: [preflight, release, docker, sign-attest, npm, pypi, nuget, homebrew, mcp-registry, verify-published]
@@ -927,6 +929,14 @@ jobs:
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           cosign-release: ${{ env.COSIGN_VERSION }}
+      # For cmd/gen_doc_versions below: the stamp moves CITATION.cff's
+      # date-released, which docs/citations.md repeats.
+      # No cache: this job holds the deploy key, and a restored module or build
+      # cache is state another workflow wrote.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
       - name: Take the rehearsal's own build
         if: env.REHEARSAL == 'true'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -938,6 +948,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REHEARSAL_ARCHIVE: ${{ env.REHEARSAL == 'true' && format('{0}/rehearsal/rehearsal-assets.tar', runner.temp) || '' }}
         run: bash scripts/fetch-release-assets.sh "${RELEASE_TAG#v}" dist libgen-mcp-darwin.mcpb libgen-mcp-windows.mcpb libgen-mcp-linux.mcpb
+
+      # The real run below rewrites docs/ from VERSION and CITATION.cff after
+      # the stamp. A rehearsal commits nothing, so it exercises the same two
+      # make targets on main as checked out and holds the result to the gates
+      # main is held to: on a tree that is current they change nothing.
+      - name: Rehearse the docs/ release-value pass
+        if: env.REHEARSAL == 'true'
+        run: |
+          set -euo pipefail
+          make gen-doc-versions
+          make check-doc-versions
+          make check-md-tables
+          git diff --exit-code -- docs
 
       - name: Commit pinned server.json back to main
         if: ${{ env.REHEARSAL != 'true' && github.event.repository.private == false }}
@@ -954,21 +977,21 @@ jobs:
             echo "::warning::RELEASE_DEPLOY_KEY_B64 not set — skipping the server.json pin-back to main."
             exit 0
           fi
-          KEY_FILE="${RUNNER_TEMP}/release_deploy_key"
-          KNOWN_HOSTS_FILE="${RUNNER_TEMP}/known_hosts"
-          echo "${RELEASE_DEPLOY_KEY_B64}" | base64 --decode > "${KEY_FILE}"
-          chmod 600 "${KEY_FILE}"
-          ssh-keyscan -H github.com > "${KNOWN_HOSTS_FILE}" 2>/dev/null
 
-          git remote set-url origin "git@github.com:${GITHUB_REPOSITORY}.git"
-          git config core.sshCommand "ssh -i ${KEY_FILE} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${KNOWN_HOSTS_FILE}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          # The checkout is already main; refresh it in case another job of
-          # this release landed something while this one waited.
+          # Everything that runs code from the tree (the stamper, the Go
+          # generators) runs before the deploy key is on disk. The checkout is
+          # already main; refresh it in case another job of this release landed
+          # something while this one waited. The repository is public (the
+          # job's condition), so the fetch needs no credential.
           git fetch origin main
           git reset --hard origin/main
+          # The generator below reads VERSION from the tree, and main may have
+          # moved on since the tag: stamping docs/ with another release's
+          # number would be a wrong commit, so stop instead.
+          if [ "$(tr -d '[:space:]' < VERSION)" != "${VERSION}" ]; then
+            echo "::error::main's VERSION is $(tr -d '[:space:]' < VERSION), not ${VERSION}; not stamping." >&2
+            exit 1
+          fi
           # The script is idempotent and reads checksums.txt, the version and
           # the three bundles — checked against this release's cosign-signed
           # manifest and their own attestations by the fetch step above — so
@@ -979,16 +1002,37 @@ jobs:
           bash scripts/update-server-json-sha.sh dist/checksums.txt "${VERSION}" \
             dist/libgen-mcp-darwin.mcpb,dist/libgen-mcp-windows.mcpb,dist/libgen-mcp-linux.mcpb \
             "${OCI_DIGEST}"
+          # The stamp just wrote the tag's date into CITATION.cff, and
+          # docs/citations.md repeats its year and month (the site reads them
+          # at build). Bring docs/ along in the same commit, or main's
+          # `check-doc-versions` fails from the stamp onwards. The make target
+          # also renormalizes the tables, which a longer number widens.
+          make gen-doc-versions
           # Every manifest the script stamps, not just the two it stamped first;
           # `if` rather than `[ -f … ] &&`, whose non-zero status would abort the
           # step under `set -e` the day a manifest is renamed away.
           for manifest in server.json lhm.plugin.json mcpb/manifest.json .plugin/plugin.json plugin.json npm/libgen-mcp/package.json CITATION.cff; do
             if [ -f "${manifest}" ]; then git add "${manifest}"; fi
           done
+          git add docs
           if git diff --cached --quiet; then
             echo "::notice::No manifest changes to commit"
             exit 0
           fi
+
+          # Only now does the key reach the disk, and the variable holding it
+          # is dropped as soon as the file exists.
+          KEY_FILE="${RUNNER_TEMP}/release_deploy_key"
+          KNOWN_HOSTS_FILE="${RUNNER_TEMP}/known_hosts"
+          echo "${RELEASE_DEPLOY_KEY_B64}" | base64 --decode > "${KEY_FILE}"
+          unset RELEASE_DEPLOY_KEY_B64
+          chmod 600 "${KEY_FILE}"
+          ssh-keyscan -H github.com > "${KNOWN_HOSTS_FILE}" 2>/dev/null
+
+          git remote set-url origin "git@github.com:${GITHUB_REPOSITORY}.git"
+          git config core.sshCommand "ssh -i ${KEY_FILE} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${KNOWN_HOSTS_FILE}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "chore: stamp v${VERSION} into the version-bearing manifests"
           git push origin main
 

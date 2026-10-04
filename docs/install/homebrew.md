@@ -34,7 +34,7 @@ The fully qualified name taps `jmrplens/tap` on the way. The equivalent in two s
 
 ```bash
 libgen-mcp --version
-# libgen-mcp 2.1.0 (commit 5493887)
+# libgen-mcp 2.1.0 (commit <commit>)
 ```
 
 The install ends with a caveat naming the command to give your client, `$(brew --prefix)/bin/libgen-mcp`.

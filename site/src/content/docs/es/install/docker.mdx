@@ -27,10 +27,10 @@ import { Tabs, TabItem, Aside } from "@astrojs/starlight/components";
 
 Los dos reciben el mismo índice de imagen en cada release, con el mismo digest, bajo dos etiquetas:
 
-| Etiqueta    | Se mueve                |
-| ----------- | ----------------------- |
-| `<version>` | Nunca. `2.1.0`, sin `v` |
-| `latest`    | A cada release nueva    |
+| Etiqueta    | Se mueve                      |
+| ----------- | ----------------------------- |
+| `<version>` | Nunca. `%%VERSION%%`, sin `v` |
+| `latest`    | A cada release nueva          |
 
 No hay etiqueta `2` ni `2.1`: fija la versión completa, o un digest.
 
@@ -139,19 +139,19 @@ Con otro UID el proceso no tiene directorio home en la imagen (`HOME` es `/`), a
 **La firma.** El índice de imagen y los dos manifiestos de plataforma están firmados sin clave con cosign. Verifícalo con un cliente **cosign 3.x**: un cliente 2.x dice «no signatures found» sobre una imagen que un cliente 3.x verifica.
 
 ```bash
-cosign verify ghcr.io/jmrplens/libgen-mcp:2.1.0 \
+cosign verify ghcr.io/jmrplens/libgen-mcp:%%VERSION%% \
   --certificate-identity-regexp '^https://github.com/jmrplens/libgen-mcp/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-La misma orden verifica `docker.io/jmrplens/libgen-mcp:2.1.0`.
+La misma orden verifica `docker.io/jmrplens/libgen-mcp:%%VERSION%%`.
 
 **La procedencia**, que responde a qué commit y qué ejecución del workflow la produjeron:
 
 ```bash
-gh attestation verify oci://ghcr.io/jmrplens/libgen-mcp:2.1.0 -R jmrplens/libgen-mcp \
+gh attestation verify oci://ghcr.io/jmrplens/libgen-mcp:%%VERSION%% -R jmrplens/libgen-mcp \
   --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml \
-  --source-ref refs/tags/v2.1.0
+  --source-ref refs/tags/v%%VERSION%%
 ```
 
 La imagen lleva además un SBOM y la procedencia de BuildKit adjuntos al compilarla. Lo que añaden `--signer-workflow` y `--source-ref` se explica en la [instalación](/libgen-mcp/es/install/overview/#verificar-lo-que-instalas).
@@ -208,11 +208,11 @@ docker pull ghcr.io/jmrplens/libgen-mcp:latest
 Nombra la etiqueta de versión, o el digest para unos bytes que nunca pueden cambiar a tus espaldas:
 
 ```bash
-docker run -i --rm ghcr.io/jmrplens/libgen-mcp:2.1.0
-docker run -i --rm ghcr.io/jmrplens/libgen-mcp@sha256:98854e3e78ce5f0e08a57ba69e3d8a8982a96190ac62539bc71ba1235e6519ec
+docker run -i --rm ghcr.io/jmrplens/libgen-mcp:%%VERSION%%
+docker run -i --rm ghcr.io/jmrplens/libgen-mcp@sha256:<digest>
 ```
 
-Ese digest es el índice de imagen de la 2.1.0, el mismo en los dos registros. Para cualquier etiqueta, `docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/jmrplens/libgen-mcp:<tag>` lo imprime tras un pull.
+El digest es el del índice de imagen, el mismo en los dos registros. Para cualquier etiqueta, `docker buildx imagetools inspect ghcr.io/jmrplens/libgen-mcp:<tag>` lo imprime sin hacer pull, y `docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/jmrplens/libgen-mcp:<tag>` tras uno. El de la última release está también en el [`server.json`](https://github.com/jmrplens/libgen-mcp/blob/main/server.json) del repositorio, junto a la etiqueta de versión con la que se publicó.
 
 ## Desinstalar
 

@@ -29,7 +29,7 @@ import { loadInputs } from "../src/lib/page-markdown-inputs.mjs";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const docsDir = join(root, "src/content/docs");
 
-const { labels, schema, chain } = loadInputs(root);
+const { labels, schema, chain, release } = loadInputs(root);
 const distDir = join(root, "dist");
 
 function walk(dir) {
@@ -58,7 +58,13 @@ for (const source of walk(docsDir)) {
 	if (/(^|\/)404$/.test(slug)) continue;
 
 	const markdown = absolutizeLinks(
-		toMarkdown(readFileSync(source, "utf8"), labels[locale], schema, chain),
+		toMarkdown(
+			readFileSync(source, "utf8"),
+			labels[locale],
+			schema,
+			chain,
+			release,
+		),
 		pageUrlFor(slug),
 	);
 	const residual = residualComponents(markdown);

@@ -89,7 +89,7 @@ Then:
 
 ```bash
 libgen-mcp --version
-# libgen-mcp 2.1.0 (commit 5493887)
+# libgen-mcp %%VERSION%% (commit <commit>)
 ```
 
 ## Verify what you installed
@@ -177,13 +177,13 @@ A client that already has the server running keeps the old process until it rest
 ## Pin a version
 
 ```bash
-uvx libgen-mcp@2.1.0
-uv tool install libgen-mcp==2.1.0
-pipx install libgen-mcp==2.1.0
-pip install libgen-mcp==2.1.0
+uvx libgen-mcp@%%VERSION%%
+uv tool install libgen-mcp==%%VERSION%%
+pipx install libgen-mcp==%%VERSION%%
+pip install libgen-mcp==%%VERSION%%
 ```
 
-In a client's configuration that is `"args": ["libgen-mcp@2.1.0"]` under `uvx`.
+In a client's configuration that is `"args": ["libgen-mcp@%%VERSION%%"]` under `uvx`.
 
 ## Uninstall
 

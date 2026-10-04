@@ -36,7 +36,7 @@ The image is `ghcr.io/jmrplens/libgen-mcp` (and `docker.io/jmrplens/libgen-mcp`)
 The standard-input rule is the one that fails quietly. A container started with a pipe on stdin, which is what Compose's `stdin_open: true` and `docker run -i` give it, is a stdio server; its health check reports it as running, because an instance serving stdio has no listener to probe, while the published port refuses every connection. Measured with the default command:
 
 ```text
-$ docker run -d -i -p 127.0.0.1:8080:8080 ghcr.io/jmrplens/libgen-mcp:2.1.0
+$ docker run -d -i -p 127.0.0.1:8080:8080 ghcr.io/jmrplens/libgen-mcp:%%VERSION%%
 $ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/health
 000
 $ docker exec <container> libgen-mcp --healthcheck
@@ -50,7 +50,7 @@ Why the image decides from stdin, and how `auto` reads it, is in [One image, two
 ```yaml
 services:
   libgen-mcp:
-    image: ghcr.io/jmrplens/libgen-mcp:2.1.0
+    image: ghcr.io/jmrplens/libgen-mcp:%%VERSION%%
     command:
       - --http=0.0.0.0:8080
       - --public-url=https://mcp.example.org
@@ -107,7 +107,7 @@ The server listens on a socket in a volume both containers mount, and nothing bu
 ```yaml
 services:
   libgen-mcp:
-    image: ghcr.io/jmrplens/libgen-mcp:2.1.0
+    image: ghcr.io/jmrplens/libgen-mcp:%%VERSION%%
     # 101 is the nginx group in the official nginx images. The socket is created
     # 0660 with this process's group, so nginx's workers can open it as they are.
     user: "10001:101"
@@ -210,7 +210,7 @@ Every HTTP flag has a `LIBGEN_MCP_*` variable, which is what a platform that onl
 ```yaml
 services:
   libgen-mcp:
-    image: ghcr.io/jmrplens/libgen-mcp:2.1.0
+    image: ghcr.io/jmrplens/libgen-mcp:%%VERSION%%
     command: ["--transport", "http"]
     environment:
       LIBGEN_MCP_HTTP_ADDR: "0.0.0.0:8080"
@@ -294,7 +294,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: libgen-mcp
-          image: ghcr.io/jmrplens/libgen-mcp:2.1.0
+          image: ghcr.io/jmrplens/libgen-mcp:%%VERSION%%
           # Replaces the image's default command, whose --http would otherwise
           # win over LIBGEN_MCP_HTTP_ADDR.
           args: ["--transport=http"]

@@ -89,7 +89,7 @@ Después:
 
 ```bash
 libgen-mcp --version
-# libgen-mcp 2.1.0 (commit 5493887)
+# libgen-mcp %%VERSION%% (commit <commit>)
 ```
 
 ## Verificar lo que instalaste
@@ -177,13 +177,13 @@ Un cliente que ya tiene el servidor en marcha conserva el proceso viejo hasta qu
 ## Fijar una versión
 
 ```bash
-uvx libgen-mcp@2.1.0
-uv tool install libgen-mcp==2.1.0
-pipx install libgen-mcp==2.1.0
-pip install libgen-mcp==2.1.0
+uvx libgen-mcp@%%VERSION%%
+uv tool install libgen-mcp==%%VERSION%%
+pipx install libgen-mcp==%%VERSION%%
+pip install libgen-mcp==%%VERSION%%
 ```
 
-En la configuración de un cliente es `"args": ["libgen-mcp@2.1.0"]` bajo `uvx`.
+En la configuración de un cliente es `"args": ["libgen-mcp@%%VERSION%%"]` bajo `uvx`.
 
 ## Desinstalar
 

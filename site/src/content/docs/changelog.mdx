@@ -47,9 +47,9 @@ curl -s http://127.0.0.1:8080/health   # "version", "commit" and "build" fields
 
 ## Where release notes live
 
-- **The signed tag message** is the hand-written, user-facing summary of each release: what changed and what to do about it. Read it with `git show v2.1.0` in a clone, or verify it with `git tag -v v2.1.0`. The sections below are drawn from these messages.
+- **The signed tag message** is the hand-written, user-facing summary of each release: what changed and what to do about it. Read it with `git show v%%VERSION%%` in a clone, or verify it with `git tag -v v%%VERSION%%`. The sections below are drawn from these messages.
 - **The [GitHub release](https://github.com/jmrplens/libgen-mcp/releases)** lists every commit in the release, grouped by kind (features, fixes, documentation, maintenance), and carries the assets: the binaries, their SBOMs, the signed `checksums.txt` and the `.mcpb` bundles. Subscribe to [`releases.atom`](https://github.com/jmrplens/libgen-mcp/releases.atom) or watch the repository's releases to hear of a new one.
-- **What is on `main` and not yet released** is the [compare view from the latest tag](https://github.com/jmrplens/libgen-mcp/compare/v2.1.0...main). This page keeps no hand-written "unreleased" list: it would need editing in three copies on every merge and would be stale between them. The summary of those changes is written once, into the next tag message, and lands here with that release.
+- **What is on `main` and not yet released** is the [compare view from the latest tag](https://github.com/jmrplens/libgen-mcp/compare/v%%VERSION%%...main). This page keeps no hand-written "unreleased" list: it would need editing in three copies on every merge and would be stale between them. The summary of those changes is written once, into the next tag message, and lands here with that release.
 
 ## Release by release
 
@@ -110,16 +110,16 @@ Every release stays downloadable, and every channel can be held at an exact vers
 	its next call. See [Installation](/libgen-mcp/install/overview/).
 </Aside>
 
-| Channel                                               | Upgrade                                          | Pin a version                                                                     | Roll back                                                                        |
-| ----------------------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| [npm](/libgen-mcp/install/npm/)                       | `npm install -g @jmrp.io/libgen-mcp@latest`      | `npx -y @jmrp.io/libgen-mcp@2.1.0`, or `npm install -g @jmrp.io/libgen-mcp@2.1.0` | Install the older version the same way                                           |
-| [PyPI](/libgen-mcp/install/pypi/)                     | `pipx upgrade libgen-mcp`                        | `uvx libgen-mcp@2.1.0`, or `pipx install libgen-mcp==2.1.0`                       | `pipx install --force libgen-mcp==2.0.1`                                         |
-| [NuGet](/libgen-mcp/install/nuget/)                   | `dotnet tool update -g libgen-mcp`               | `dnx libgen-mcp@2.1.0`, or `dotnet tool install -g libgen-mcp --version 2.1.0`    | `dotnet tool uninstall -g libgen-mcp`, then install with `--version`             |
-| [Homebrew](/libgen-mcp/install/homebrew/)             | `brew upgrade libgen-mcp`                        | `brew pin libgen-mcp` holds the installed version                                 | The tap carries only the current formula: use the release binary of that version |
-| [Docker](/libgen-mcp/install/docker/)                 | `docker pull ghcr.io/jmrplens/libgen-mcp:latest` | The version tag, `ghcr.io/jmrplens/libgen-mcp:2.1.0`, or its `@sha256:` digest    | Point at the previous tag or digest                                              |
-| [Release binary](/libgen-mcp/install/binary/)         | Download the new asset over the old one          | Download from the tagged release, `releases/download/v2.1.0/…`                    | Download the older asset the same way                                            |
-| [Claude Desktop](/libgen-mcp/install/claude-desktop/) | Download the new bundle and open it              | Keep the bundle file of the version you want                                      | Remove the extension, then open the older bundle                                 |
-| [`go install`](/libgen-mcp/install/binary/)           | `…/v2/cmd/server@latest`                         | `…/v2/cmd/server@v2.1.0`                                                          | `…/v2/cmd/server@v2.0.1`                                                         |
+| Channel                                               | Upgrade                                          | Pin a version                                                                                 | Roll back                                                                        |
+| ----------------------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [npm](/libgen-mcp/install/npm/)                       | `npm install -g @jmrp.io/libgen-mcp@latest`      | `npx -y @jmrp.io/libgen-mcp@%%VERSION%%`, or `npm install -g @jmrp.io/libgen-mcp@%%VERSION%%` | Install the older version the same way                                           |
+| [PyPI](/libgen-mcp/install/pypi/)                     | `pipx upgrade libgen-mcp`                        | `uvx libgen-mcp@%%VERSION%%`, or `pipx install libgen-mcp==%%VERSION%%`                       | `pipx install --force libgen-mcp==<older version>`                               |
+| [NuGet](/libgen-mcp/install/nuget/)                   | `dotnet tool update -g libgen-mcp`               | `dnx libgen-mcp@%%VERSION%%`, or `dotnet tool install -g libgen-mcp --version %%VERSION%%`    | `dotnet tool uninstall -g libgen-mcp`, then install with `--version`             |
+| [Homebrew](/libgen-mcp/install/homebrew/)             | `brew upgrade libgen-mcp`                        | `brew pin libgen-mcp` holds the installed version                                             | The tap carries only the current formula: use the release binary of that version |
+| [Docker](/libgen-mcp/install/docker/)                 | `docker pull ghcr.io/jmrplens/libgen-mcp:latest` | The version tag, `ghcr.io/jmrplens/libgen-mcp:%%VERSION%%`, or its `@sha256:` digest          | Point at the previous tag or digest                                              |
+| [Release binary](/libgen-mcp/install/binary/)         | Download the new asset over the old one          | Download from the tagged release, `releases/download/v%%VERSION%%/…`                          | Download the older asset the same way                                            |
+| [Claude Desktop](/libgen-mcp/install/claude-desktop/) | Download the new bundle and open it              | Keep the bundle file of the version you want                                                  | Remove the extension, then open the older bundle                                 |
+| [`go install`](/libgen-mcp/install/binary/)           | `…/v2/cmd/server@latest`                         | `…/v2/cmd/server@v%%VERSION%%`                                                                | `…/v2/cmd/server@v<older version>`                                               |
 
 Two of these deserve a sentence more.
 
@@ -130,13 +130,13 @@ Two of these deserve a sentence more.
   	"mcpServers": {
   		"libgen": {
   			"command": "npx",
-  			"args": ["-y", "@jmrp.io/libgen-mcp@2.1.0"]
+  			"args": ["-y", "@jmrp.io/libgen-mcp@%%VERSION%%"]
   		}
   	}
   }
   ```
 
-- **A version tag on an image is a name, a digest is the bytes.** The release pushes `2.1.0` and `latest` to both registries, and a registry tag is a pointer that can be moved, so a digest is what a deployment that must be reproducible should name. Read it with `docker buildx imagetools inspect ghcr.io/jmrplens/libgen-mcp:2.1.0`, and verify the image you pinned as [Run with Docker](/libgen-mcp/install/docker/) shows.
+- **A version tag on an image is a name, a digest is the bytes.** The release pushes `%%VERSION%%` and `latest` to both registries, and a registry tag is a pointer that can be moved, so a digest is what a deployment that must be reproducible should name. Read it with `docker buildx imagetools inspect ghcr.io/jmrplens/libgen-mcp:%%VERSION%%`, and verify the image you pinned as [Run with Docker](/libgen-mcp/install/docker/) shows.
 
 Whichever version you land on, check it is the one this project published before running it: [Installation](/libgen-mcp/install/overview/#verifying-what-you-install) has the recipe per channel.
 

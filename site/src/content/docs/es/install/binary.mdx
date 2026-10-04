@@ -91,7 +91,7 @@ Después:
 
 ```bash
 libgen-mcp --version
-# libgen-mcp 2.1.0 (commit 5493887)
+# libgen-mcp %%VERSION%% (commit <commit>)
 ```
 
 ## Verificar lo que instalaste
@@ -124,7 +124,7 @@ Cada binario lleva además procedencia de compilación SLSA en el almacén de at
 ```bash
 gh attestation verify libgen-mcp-linux-amd64 -R jmrplens/libgen-mcp \
   --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml \
-  --source-ref refs/tags/v2.1.0
+  --source-ref refs/tags/v%%VERSION%%
 ```
 
 `--source-ref` la ata a la release que querías; usa la versión que descargaste.
@@ -163,7 +163,7 @@ Cada release conserva sus archivos en una dirección fija. Cambia `latest/downlo
 
 ```bash
 curl -fL -o libgen-mcp \
-  https://github.com/jmrplens/libgen-mcp/releases/download/v2.1.0/libgen-mcp-linux-amd64
+  https://github.com/jmrplens/libgen-mcp/releases/download/v%%VERSION%%/libgen-mcp-linux-amd64
 ```
 
 Un binario descargado nunca se actualiza solo, así que queda fijado hasta que lo reemplazas.
@@ -191,9 +191,9 @@ go build -o libgen-mcp ./cmd/server
 
 </Aside>
 
-El `/v2` de la ruta es obligatorio: desde la versión mayor 2, Go solo resuelve un módulo bajo su ruta con sufijo, y la ruta sin sufijo se queda en la última release 1.x. Fija una versión con `@v2.1.0` en lugar de `@latest`; actualiza ejecutando la orden otra vez; desinstala borrando el archivo de `$(go env GOPATH)/bin`.
+El `/v2` de la ruta es obligatorio: desde la versión mayor 2, Go solo resuelve un módulo bajo su ruta con sufijo, y la ruta sin sufijo se queda en la última release 1.x. Fija una versión con `@v%%VERSION%%` en lugar de `@latest`; actualiza ejecutando la orden otra vez; desinstala borrando el archivo de `$(go env GOPATH)/bin`.
 
-**Verificar.** La toolchain de Go comprueba cada módulo que descarga contra la base de datos pública de checksums. Eso verifica el **código fuente** del que compiló, no un binario que publicó este proyecto: el resultado es tu compilación, y por eso no lleva firma de release. Una compilación con `go install` informa de su versión a partir del módulo (`libgen-mcp 2.1.0 (commit none)`), ya que no lleva ningún commit estampado.
+**Verificar.** La toolchain de Go comprueba cada módulo que descarga contra la base de datos pública de checksums. Eso verifica el **código fuente** del que compiló, no un binario que publicó este proyecto: el resultado es tu compilación, y por eso no lleva firma de release. Una compilación con `go install` informa de su versión a partir del módulo (`libgen-mcp %%VERSION%% (commit none)`), ya que no lleva ningún commit estampado.
 
 ## Notas por plataforma
 
@@ -209,6 +209,6 @@ El `/v2` de la ruta es obligatorio: desde la versión mayor 2, Go solo resuelve 
 
 **`sha256sum: checksums.txt: no file was verified`.** Ningún archivo del directorio tiene un nombre que liste `checksums.txt`. Conserva el nombre del asset hasta terminar la comprobación, y renómbralo después.
 
-**`go install` dice `libgen-mcp 1.7.3`, o falla con `unknown revision cmd/server/v2.1.0`.** Falta el `/v2` en la ruta: sin él `@latest` resuelve la última release 1.x, y una versión 2.x no se encuentra.
+**`go install` dice `libgen-mcp 1.7.3`, o falla con `unknown revision cmd/server/v%%VERSION%%`.** Falta el `/v2` en la ruta: sin él `@latest` resuelve la última release 1.x, y una versión 2.x no se encuentra.
 
 Los demás canales se comparan en la [instalación](/libgen-mcp/es/install/overview/).

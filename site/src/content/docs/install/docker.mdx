@@ -27,10 +27,10 @@ import { Tabs, TabItem, Aside } from "@astrojs/starlight/components";
 
 Both receive the same image index on every release, with the same digest, under two tags:
 
-| Tag         | Moves                       |
-| ----------- | --------------------------- |
-| `<version>` | Never. `2.1.0`, with no `v` |
-| `latest`    | To each new release         |
+| Tag         | Moves                             |
+| ----------- | --------------------------------- |
+| `<version>` | Never. `%%VERSION%%`, with no `v` |
+| `latest`    | To each new release               |
 
 There is no `2` or `2.1` tag: pin the full version, or a digest.
 
@@ -136,19 +136,19 @@ Run under another UID, the process has no home directory in the image (`HOME` is
 **The signature.** The image index and both platform manifests are signed keylessly with cosign. Verify with a **cosign 3.x** client: a 2.x client reports "no signatures found" on an image a 3.x client verifies.
 
 ```bash
-cosign verify ghcr.io/jmrplens/libgen-mcp:2.1.0 \
+cosign verify ghcr.io/jmrplens/libgen-mcp:%%VERSION%% \
   --certificate-identity-regexp '^https://github.com/jmrplens/libgen-mcp/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-The same command verifies `docker.io/jmrplens/libgen-mcp:2.1.0`.
+The same command verifies `docker.io/jmrplens/libgen-mcp:%%VERSION%%`.
 
 **The provenance**, which answers which commit and which workflow run produced it:
 
 ```bash
-gh attestation verify oci://ghcr.io/jmrplens/libgen-mcp:2.1.0 -R jmrplens/libgen-mcp \
+gh attestation verify oci://ghcr.io/jmrplens/libgen-mcp:%%VERSION%% -R jmrplens/libgen-mcp \
   --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml \
-  --source-ref refs/tags/v2.1.0
+  --source-ref refs/tags/v%%VERSION%%
 ```
 
 The image also carries an SBOM and the BuildKit provenance attached at build time. What `--signer-workflow` and `--source-ref` add is explained on the [installation overview](/libgen-mcp/install/overview/#verifying-what-you-install).
@@ -205,11 +205,11 @@ docker pull ghcr.io/jmrplens/libgen-mcp:latest
 Name the version tag, or the digest for bytes that can never change under you:
 
 ```bash
-docker run -i --rm ghcr.io/jmrplens/libgen-mcp:2.1.0
-docker run -i --rm ghcr.io/jmrplens/libgen-mcp@sha256:98854e3e78ce5f0e08a57ba69e3d8a8982a96190ac62539bc71ba1235e6519ec
+docker run -i --rm ghcr.io/jmrplens/libgen-mcp:%%VERSION%%
+docker run -i --rm ghcr.io/jmrplens/libgen-mcp@sha256:<digest>
 ```
 
-That digest is 2.1.0's image index, the same on both registries. For any tag, `docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/jmrplens/libgen-mcp:<tag>` prints it after a pull.
+The digest is the image index's, the same on both registries. For any tag, `docker buildx imagetools inspect ghcr.io/jmrplens/libgen-mcp:<tag>` prints it without a pull, and `docker image inspect --format '{{index .RepoDigests 0}}' ghcr.io/jmrplens/libgen-mcp:<tag>` after one. The latest release's is also in the repository's [`server.json`](https://github.com/jmrplens/libgen-mcp/blob/main/server.json), beside the version tag it was published under.
 
 ## Uninstall
 
