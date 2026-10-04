@@ -37,6 +37,10 @@ type scanResult struct {
 	// summaries holds the one-line summary of every advisory the run printed,
 	// by id, which is how a finding is described without a second lookup.
 	summaries map[string]string
+	// imports holds, by declaration key, the packages each advisory names for
+	// each module it is filed against: what a not-linked declaration claims
+	// the binaries do not link, read from the same record the scan matched.
+	imports map[string][]string
 	// sawConfig and sawSBOM record that the stream said what it scanned with
 	// and what it scanned, without which it is not a scan at all.
 	sawConfig, sawSBOM bool
@@ -55,8 +59,18 @@ type scanMessage struct {
 		Modules   []json.RawMessage `json:"modules"`
 	} `json:"SBOM"`
 	OSV *struct {
-		ID      string `json:"id"`
-		Summary string `json:"summary"`
+		ID       string `json:"id"`
+		Summary  string `json:"summary"`
+		Affected []struct {
+			Package struct {
+				Name string `json:"name"`
+			} `json:"package"`
+			EcosystemSpecific struct {
+				Imports []struct {
+					Path string `json:"path"`
+				} `json:"imports"`
+			} `json:"ecosystem_specific"`
+		} `json:"affected"`
 	} `json:"osv"`
 	Finding *struct {
 		OSV          string `json:"osv"`
@@ -92,7 +106,7 @@ func scanBinary(ctx context.Context, db, path string) (scanResult, error) {
 // found nothing would otherwise look the same, and only one of them is a
 // binary somebody checked.
 func parseScan(r io.Reader) (scanResult, error) {
-	result := scanResult{summaries: map[string]string{}}
+	result := scanResult{summaries: map[string]string{}, imports: map[string][]string{}}
 	decoder := json.NewDecoder(r)
 	for {
 		var msg scanMessage
@@ -125,6 +139,12 @@ func (r *scanResult) read(msg *scanMessage) {
 	}
 	if msg.OSV != nil {
 		r.summaries[msg.OSV.ID] = msg.OSV.Summary
+		for _, affected := range msg.OSV.Affected {
+			key := declarationKey(msg.OSV.ID, affected.Package.Name)
+			for _, imp := range affected.EcosystemSpecific.Imports {
+				r.imports[key] = append(r.imports[key], imp.Path)
+			}
+		}
 	}
 	if msg.Finding != nil {
 		r.findings = append(r.findings, findingOf(msg))

@@ -1,0 +1,53 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/jmrplens/libgen-mcp/blob/main/.vex/libgen-mcp.openvex.json",
+  "author": "José M. Requena Plens",
+  "timestamp": "2026-10-04T19:19:44Z",
+  "version": 1,
+  "tooling": "https://github.com/jmrplens/libgen-mcp/tree/main/cmd/audit_binary_vulns",
+  "statements": [
+    {
+      "vulnerability": {
+        "@id": "https://pkg.go.dev/vuln/GO-2026-5932",
+        "name": "GO-2026-5932"
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/github.com/jmrplens/libgen-mcp/v2@2.2.0",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:golang/github.com/jmrplens/libgen-mcp/v2@v2.2.0",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/jmrplens/libgen-mcp@2.2.0",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:docker/jmrplens/libgen-mcp@2.2.0?repository_url=ghcr.io",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "the advisory names x/crypto's openpgp packages (golang.org/x/crypto/openpgp and its subpackages), and the one package of the module the binaries link is golang.org/x/crypto/ocsp, which github.com/pdfcpu/pdfcpu/pkg/pdfcpu/sign imports and internal/extract reaches through pdfcpu. This is false as soon as any openpgp package is linked into a release binary, which the release gate checks on every run against go list -deps of each release target and fails on. With no fixed version, the declaration becomes unnecessary only when pdfcpu stops importing ocsp"
+    }
+  ]
+}

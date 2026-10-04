@@ -47,6 +47,13 @@ func runMain(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	config := flags.String("config", ".goreleaser.yml", "GoReleaser configuration that names the release targets")
 	binaries := flags.String("binaries", "", "glob of prebuilt release binaries to scan instead of building them (one per target)")
 	db := flags.String("db", defaultDB, "vulnerability database URL, file:// for a copy on disk")
+	var vex vexConfig
+	flags.StringVar(&vex.check, "vex-check", "", "OpenVEX document to hold to the not-linked declarations, instead of scanning")
+	flags.StringVar(&vex.write, "vex-write", "", "OpenVEX document to rewrite from the not-linked declarations, instead of scanning")
+	flags.StringVar(&vex.version, "vex-version", "", "the version the committed OpenVEX document describes (the VERSION file), without the leading v")
+	flags.StringVar(&vex.out, "vex-out", "", "with -vex-check, where to write the copy pinned to -vex-release and -vex-index-digest, once the gate passed on -dir")
+	flags.StringVar(&vex.release.version, "vex-release", "", "the release version the -vex-out copy is pinned to, without the leading v")
+	flags.StringVar(&vex.release.indexDigest, "vex-index-digest", "", "the digest of the image index the release pushed")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -58,6 +65,14 @@ func runMain(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	cfg := auditConfig{dir: *dir, config: *config, binaries: *binaries, db: *db, declared: acceptedAdvisories}
+	if vex.requested() {
+		if err := vex.validate(); err != nil {
+			fmt.Fprintf(stderr, "%s: %v\n", toolName, err)
+			return 2
+		}
+		vex.declared, vex.audit = acceptedAdvisories, cfg
+		return runVEX(ctx, vex, stdout, stderr)
+	}
 	return run(ctx, cfg, stdout, stderr)
 }
 
@@ -110,5 +125,9 @@ func audit(ctx context.Context, cfg auditConfig) (report, error) {
 		}
 		scans = append(scans, scanned{binary: bin, result: result})
 	}
-	return judge(scans, cfg.declared), nil
+	rep := judge(scans, cfg.declared)
+	if linkErr := checkNotLinked(ctx, cfg.dir, builds, &rep); linkErr != nil {
+		return report{}, linkErr
+	}
+	return rep, nil
 }
