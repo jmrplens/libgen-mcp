@@ -53,6 +53,25 @@ curl -s http://127.0.0.1:8080/health   # campos "version", "commit" y "build"
 
 ## Release a release
 
+### 2.2.0
+
+- `search` consulta también OpenAlex y Europe PMC, diez proveedores además del catálogo en total, y los dos marcan el acceso abierto solo cuando el artículo se puede leer gratis de verdad. Sin clave, OpenAlex da a cada dirección 1000 créditos al día y una búsqueda cuesta diez. `LIBGEN_MCP_OPENALEX_KEY` amplía ese margen, y la extensión de Claude Desktop tiene un ajuste para ella. Consulta [Cómo funciona la búsqueda](/libgen-mcp/es/how-search-works/).
+- `search` acepta `year_from` y `year_to`. Un proveedor que puede acotar por año lo hace en su propia consulta. La página del catálogo se filtra al llegar, y `year_filtered` dice cuántos registros ha quitado el rango de esa página.
+- `get_details` acepta `citation`: pega una referencia y se resuelve a su DOI con Crossref, pero solo cuando la mejor coincidencia está clara. Si no, se devuelven los candidatos para que elijas.
+- `get_details` acepta `cite_as` para APA, MLA, Chicago, Harvard, Vancouver, IEEE y CSL-JSON. El texto llega de doi.org cuando el DOI del registro está confirmado, y se construye con los campos del registro en otro caso. Un DOI de DataCite o mEDRA tiene ahora un registro propio. Consulta [Citas](/libgen-mcp/es/citations/).
+- `get_details` acepta `related` para listar las referencias de un registro, o los trabajos que lo citan, a partir de OpenAlex.
+- `read` acepta `section` para leer una entrada del índice, y cada entrada del índice lleva el número con el que se nombra.
+- Una búsqueda que solo han podido responder los proveedores de fuera del catálogo ya no se presenta como «No results».
+- La fuente de descarga `europepmc` toma los PDF de los PMC Article Datasets de NCBI, porque los enlaces a PDF de Europe PMC responden ahora a los clientes automáticos con un desafío de navegador. Un artículo retractado se rechaza.
+- dblp se consulta a través de su servicio SPARQL, porque su API de búsqueda rechaza ahora a los clientes automáticos. Cada servicio externo lleva un ritmo común a todo el proceso, y un proveedor al que le falta más de un segundo para su siguiente turno se queda fuera de esa búsqueda en lugar de retrasar la respuesta.
+- La dirección de contacto del User-Agent se queda en el servicio al que se envió. Una redirección a otro origen la quita, y cada salto de una cadena de redirecciones se juzga frente a su primera petición, así que ninguna credencial sigue a un salto que ha salido del origen, incluido uno a `http`.
+- Claude Desktop tiene un paquete por sistema operativo, además del paquete universal.
+- Las wheels de macOS en PyPI se etiquetan para macOS 13, la versión más antigua en la que arranca el binario.
+- Un flag que sustituye a una variable de entorno se nombra en un aviso, `--shutdown` espera a que termine el drenaje de la instancia que detiene, cada arranque rechazado se registra en ERROR como su último registro, y una caché de mirrors que no se puede escribir se avisa una sola vez.
+- **Upgrade note:** una variable que el cliente pasa vacía ya no oculta la misma variable de un fichero de configuración. Ahora se aplica el valor del fichero, así que un campo vacío en Claude Desktop ya no anula una clave guardada en `~/.libgen-mcp.env`.
+- **Upgrade note:** `config_digest` en `/health` cubre ahora las fuentes que el servidor ha activado de verdad, así que el digest de todos los despliegues cambia una vez con esta release. Una flota que se actualiza réplica a réplica aparece como desigual hasta que se sustituye la última.
+- **Upgrade note:** `LIBGEN_MCP_UNPAYWALL_EMAIL` ya no puede contener un paréntesis, y un servidor que lo recibe se niega a arrancar.
+
 ### 2.1.0
 
 - Un despliegue HTTP acota las llamadas y las sesiones con estado que mantiene abiertas, dimensionadas a partir del límite de descriptores del proceso al arrancar (83 llamadas y 41 sesiones con un límite duro de 1024). Pasado cualquiera de los dos, una petición recibe `503` con `Retry-After`, en lugar de que el proceso se quede sin descriptores y rechace también `/health`. Consulta [Modo servidor HTTP](/libgen-mcp/es/http-server-mode/#qué-puede-retener-el-proceso-entero).

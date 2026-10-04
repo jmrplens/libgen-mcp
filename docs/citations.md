@@ -293,7 +293,7 @@ license = {MIT},
 month = oct,
 title = {{libgen-mcp}},
 url = {https://github.com/jmrplens/libgen-mcp},
-version = {2.1.0},
+version = {2.2.0},
 year = {2026}
 }
 ```
@@ -301,10 +301,10 @@ year = {2026}
 And the APA form:
 
 ```text
-Requena Plens, J. M. (2026). libgen-mcp (Version 2.1.0) [Computer software]. https://github.com/jmrplens/libgen-mcp
+Requena Plens, J. M. (2026). libgen-mcp (Version 2.2.0) [Computer software]. https://github.com/jmrplens/libgen-mcp
 ```
 
-These are the entries for 2.1.0. Each release stamps its own version and date into the file,
+These are the entries for 2.2.0. Each release stamps its own version and date into the file,
 so it always names the latest one. If you used another release, change the version to match:
 `libgen-mcp --version` prints the one you have.
 

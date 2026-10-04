@@ -53,6 +53,25 @@ curl -s http://127.0.0.1:8080/health   # "version", "commit" and "build" fields
 
 ## Release by release
 
+### 2.2.0
+
+- `search` also asks OpenAlex and Europe PMC, ten providers beyond the catalog in all, and both mark open access only where the paper really is free to read. Without a key, OpenAlex allows each address 1000 credits a day and a search costs ten. `LIBGEN_MCP_OPENALEX_KEY` raises the allowance, and the Claude Desktop extension has a setting for it. See [How search works](/libgen-mcp/how-search-works/).
+- `search` takes `year_from` and `year_to`. A provider that can narrow by year does it in its own query. The catalog page is filtered after it arrives, and `year_filtered` says how many records the range dropped from that page.
+- `get_details` takes `citation`: paste a reference and it is resolved to its DOI through Crossref, but only when the best match is clear. Otherwise the candidates come back for you to choose from.
+- `get_details` takes `cite_as` for APA, MLA, Chicago, Harvard, Vancouver, IEEE and CSL-JSON. The text comes from doi.org when the record's DOI is confirmed, and is built from the record's fields otherwise. A DataCite or mEDRA DOI now gets a record of its own. See [Citations](/libgen-mcp/citations/).
+- `get_details` takes `related` to list a record's references, or the works that cite it, from OpenAlex.
+- `read` takes `section` to read one table-of-contents entry, and every outline entry carries the index it is named by.
+- A search that only the providers beyond the catalog could answer is no longer reported as "No results".
+- The `europepmc` download source takes its PDFs from NCBI's PMC Article Datasets, because Europe PMC's own PDF links now answer automated clients with a browser challenge. A retracted article is declined.
+- dblp is searched through its SPARQL service, because its search API now refuses automated clients. Each upstream is paced for the whole process, and a provider whose next turn is more than a second away sits a search out instead of delaying the answer.
+- The contact address in the User-Agent stays with the service it was sent to. A redirect to another origin drops it, and every hop of a redirect chain is judged against its first request, so no credential follows a hop that left the origin, an `http` one included.
+- Claude Desktop gets one bundle per operating system, beside the universal bundle.
+- The macOS wheels on PyPI are tagged for macOS 13, the oldest release the binary starts on.
+- A flag that overrides an environment variable is named in a warning, `--shutdown` waits for the drain of the instance it stops, every refused start is logged at ERROR as its last record, and a mirror cache that cannot be written is reported once.
+- **Upgrade note:** a variable the client passes blank no longer hides the same variable in a settings file. The file's value now applies, so a blank field in Claude Desktop no longer clears a key kept in `~/.libgen-mcp.env`.
+- **Upgrade note:** `config_digest` on `/health` now covers the sources a server actually enabled, so every deployment's digest changes once with this release. A fleet upgraded one replica at a time reads as mismatched until the last one is replaced.
+- **Upgrade note:** `LIBGEN_MCP_UNPAYWALL_EMAIL` may no longer contain a parenthesis, and a server given one refuses to start.
+
 ### 2.1.0
 
 - An HTTP deployment bounds the calls and stateful sessions it holds open, sized from the process's descriptor limit at startup (83 calls and 41 sessions under a hard limit of 1024). Past either bound a request is answered `503` with `Retry-After`, instead of the process running out of descriptors and refusing `/health` too. See [HTTP server mode](/libgen-mcp/http-server-mode/#what-the-whole-process-may-hold).

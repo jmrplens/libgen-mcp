@@ -41,7 +41,7 @@ Then:
 
 ```bash
 dnx libgen-mcp -- --version
-# libgen-mcp 2.1.0 (commit <commit>)
+# libgen-mcp 2.2.0 (commit <commit>)
 ```
 
 ## Verify what you installed
@@ -73,7 +73,7 @@ Use your runtime identifier in place of `linux-x64`.
 **The packages themselves (from 2.1.0).** The release workflow attests all seven packages as they were before nuget.org added its repository signature. Remove that one entry from a downloaded copy and verify what is left:
 
 ```bash
-version=2.1.0
+version=2.2.0
 curl -sSLO https://api.nuget.org/v3-flatcontainer/libgen-mcp/$version/libgen-mcp.$version.nupkg
 zip -q -d libgen-mcp.$version.nupkg .signature.p7s
 gh attestation verify libgen-mcp.$version.nupkg -R jmrplens/libgen-mcp \
@@ -117,11 +117,11 @@ A client that already has the server running keeps the old process until it rest
 ## Pin a version
 
 ```bash
-dnx libgen-mcp@2.1.0
-dotnet tool install -g libgen-mcp --version 2.1.0
+dnx libgen-mcp@2.2.0
+dotnet tool install -g libgen-mcp --version 2.2.0
 ```
 
-In a client's configuration that is `"args": ["libgen-mcp@2.1.0"]`. For a repository that should run one version for everybody, a local tool manifest pins it in the tree: `dotnet new tool-manifest`, then `dotnet tool install libgen-mcp --version 2.1.0`, and `dotnet tool run libgen-mcp` starts it.
+In a client's configuration that is `"args": ["libgen-mcp@2.2.0"]`. For a repository that should run one version for everybody, a local tool manifest pins it in the tree: `dotnet new tool-manifest`, then `dotnet tool install libgen-mcp --version 2.2.0`, and `dotnet tool run libgen-mcp` starts it.
 
 ## Uninstall
 

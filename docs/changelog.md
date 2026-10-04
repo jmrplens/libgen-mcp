@@ -49,8 +49,8 @@ curl -s http://127.0.0.1:8080/health   # "version", "commit" and "build" fields
 ## Where release notes live
 
 - **The signed tag message** is the hand-written, user-facing summary of each release: what
-  changed and what to do about it. Read it with `git show v2.1.0` in a clone, or verify it
-  with `git tag -v v2.1.0`. The sections below are drawn from these messages.
+  changed and what to do about it. Read it with `git show v2.2.0` in a clone, or verify it
+  with `git tag -v v2.2.0`. The sections below are drawn from these messages.
 - **The [GitHub release](https://github.com/jmrplens/libgen-mcp/releases)** lists every
   commit in the release, grouped by kind (features, fixes, documentation, maintenance), and
   carries the assets: the binaries, their SBOMs, the signed `checksums.txt` and the `.mcpb`
@@ -58,12 +58,58 @@ curl -s http://127.0.0.1:8080/health   # "version", "commit" and "build" fields
   [`releases.atom`](https://github.com/jmrplens/libgen-mcp/releases.atom) or watch the
   repository's releases to hear of a new one.
 - **What is on `main` and not yet released** is the
-  [compare view from the latest tag](https://github.com/jmrplens/libgen-mcp/compare/v2.1.0...main).
+  [compare view from the latest tag](https://github.com/jmrplens/libgen-mcp/compare/v2.2.0...main).
   This page keeps no hand-written "unreleased" list: it would need editing in three copies on
   every merge and would be stale between them. The summary of those changes is written once,
   into the next tag message, and lands here with that release.
 
 ## Release by release
+
+### 2.2.0
+
+- `search` also asks OpenAlex and Europe PMC, ten providers beyond the catalog in all, and both
+  mark open access only where the paper really is free to read. Without a key, OpenAlex allows
+  each address 1000 credits a day and a search costs ten. `LIBGEN_MCP_OPENALEX_KEY` raises the
+  allowance, and the Claude Desktop extension has a setting for it. See
+  [How search works](how-search-works.md).
+- `search` takes `year_from` and `year_to`. A provider that can narrow by year does it in its
+  own query. The catalog page is filtered after it arrives, and `year_filtered` says how many
+  records the range dropped from that page.
+- `get_details` takes `citation`: paste a reference and it is resolved to its DOI through
+  Crossref, but only when the best match is clear. Otherwise the candidates come back for you to
+  choose from.
+- `get_details` takes `cite_as` for APA, MLA, Chicago, Harvard, Vancouver, IEEE and CSL-JSON.
+  The text comes from doi.org when the record's DOI is confirmed, and is built from the record's
+  fields otherwise. A DataCite or mEDRA DOI now gets a record of its own. See
+  [Citations](citations.md).
+- `get_details` takes `related` to list a record's references, or the works that cite it, from
+  OpenAlex.
+- `read` takes `section` to read one table-of-contents entry, and every outline entry carries
+  the index it is named by.
+- A search that only the providers beyond the catalog could answer is no longer reported as
+  "No results".
+- The `europepmc` download source takes its PDFs from NCBI's PMC Article Datasets, because
+  Europe PMC's own PDF links now answer automated clients with a browser challenge. A retracted
+  article is declined.
+- dblp is searched through its SPARQL service, because its search API now refuses automated
+  clients. Each upstream is paced for the whole process, and a provider whose next turn is more
+  than a second away sits a search out instead of delaying the answer.
+- The contact address in the User-Agent stays with the service it was sent to. A redirect to
+  another origin drops it, and every hop of a redirect chain is judged against its first request,
+  so no credential follows a hop that left the origin, an `http` one included.
+- Claude Desktop gets one bundle per operating system, beside the universal bundle.
+- The macOS wheels on PyPI are tagged for macOS 13, the oldest release the binary starts on.
+- A flag that overrides an environment variable is named in a warning, `--shutdown` waits for
+  the drain of the instance it stops, every refused start is logged at ERROR as its last
+  record, and a mirror cache that cannot be written is reported once.
+- **Upgrade note:** a variable the client passes blank no longer hides the same variable in a
+  settings file. The file's value now applies, so a blank field in Claude Desktop no longer
+  clears a key kept in `~/.libgen-mcp.env`.
+- **Upgrade note:** `config_digest` on `/health` now covers the sources a server actually
+  enabled, so every deployment's digest changes once with this release. A fleet upgraded one
+  replica at a time reads as mismatched until the last one is replaced.
+- **Upgrade note:** `LIBGEN_MCP_UNPAYWALL_EMAIL` may no longer contain a parenthesis, and a
+  server given one refuses to start.
 
 ### 2.1.0
 
@@ -155,14 +201,14 @@ new one on its next call. See [Installation](install/overview.md).
 
 | Channel                                     | Upgrade                                          | Pin a version                                                                     | Roll back                                                                        |
 | ------------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| [npm](install/npm.md)                       | `npm install -g @jmrp.io/libgen-mcp@latest`      | `npx -y @jmrp.io/libgen-mcp@2.1.0`, or `npm install -g @jmrp.io/libgen-mcp@2.1.0` | Install the older version the same way                                           |
-| [PyPI](install/pypi.md)                     | `pipx upgrade libgen-mcp`                        | `uvx libgen-mcp@2.1.0`, or `pipx install libgen-mcp==2.1.0`                       | `pipx install --force libgen-mcp==<older version>`                               |
-| [NuGet](install/nuget.md)                   | `dotnet tool update -g libgen-mcp`               | `dnx libgen-mcp@2.1.0`, or `dotnet tool install -g libgen-mcp --version 2.1.0`    | `dotnet tool uninstall -g libgen-mcp`, then install with `--version`             |
+| [npm](install/npm.md)                       | `npm install -g @jmrp.io/libgen-mcp@latest`      | `npx -y @jmrp.io/libgen-mcp@2.2.0`, or `npm install -g @jmrp.io/libgen-mcp@2.2.0` | Install the older version the same way                                           |
+| [PyPI](install/pypi.md)                     | `pipx upgrade libgen-mcp`                        | `uvx libgen-mcp@2.2.0`, or `pipx install libgen-mcp==2.2.0`                       | `pipx install --force libgen-mcp==<older version>`                               |
+| [NuGet](install/nuget.md)                   | `dotnet tool update -g libgen-mcp`               | `dnx libgen-mcp@2.2.0`, or `dotnet tool install -g libgen-mcp --version 2.2.0`    | `dotnet tool uninstall -g libgen-mcp`, then install with `--version`             |
 | [Homebrew](install/homebrew.md)             | `brew upgrade libgen-mcp`                        | `brew pin libgen-mcp` holds the installed version                                 | The tap carries only the current formula: use the release binary of that version |
-| [Docker](install/docker.md)                 | `docker pull ghcr.io/jmrplens/libgen-mcp:latest` | The version tag, `ghcr.io/jmrplens/libgen-mcp:2.1.0`, or its `@sha256:` digest    | Point at the previous tag or digest                                              |
-| [Release binary](install/binary.md)         | Download the new asset over the old one          | Download from the tagged release, `releases/download/v2.1.0/…`                    | Download the older asset the same way                                            |
+| [Docker](install/docker.md)                 | `docker pull ghcr.io/jmrplens/libgen-mcp:latest` | The version tag, `ghcr.io/jmrplens/libgen-mcp:2.2.0`, or its `@sha256:` digest    | Point at the previous tag or digest                                              |
+| [Release binary](install/binary.md)         | Download the new asset over the old one          | Download from the tagged release, `releases/download/v2.2.0/…`                    | Download the older asset the same way                                            |
 | [Claude Desktop](install/claude-desktop.md) | Download the new bundle and open it              | Keep the bundle file of the version you want                                      | Remove the extension, then open the older bundle                                 |
-| [`go install`](install/binary.md)           | `…/v2/cmd/server@latest`                         | `…/v2/cmd/server@v2.1.0`                                                          | `…/v2/cmd/server@v<older version>`                                               |
+| [`go install`](install/binary.md)           | `…/v2/cmd/server@latest`                         | `…/v2/cmd/server@v2.2.0`                                                          | `…/v2/cmd/server@v<older version>`                                               |
 
 Two of these deserve a sentence more.
 
@@ -173,15 +219,15 @@ Two of these deserve a sentence more.
   ```json
   {
     "mcpServers": {
-      "libgen": { "command": "npx", "args": ["-y", "@jmrp.io/libgen-mcp@2.1.0"] }
+      "libgen": { "command": "npx", "args": ["-y", "@jmrp.io/libgen-mcp@2.2.0"] }
     }
   }
   ```
 
 - **A version tag on an image is a name, a digest is the bytes.** The release pushes
-  `2.1.0` and `latest` to both registries, and a registry tag is a pointer that can be moved,
+  `2.2.0` and `latest` to both registries, and a registry tag is a pointer that can be moved,
   so a digest is what a deployment that must be reproducible should name. Read it with
-  `docker buildx imagetools inspect ghcr.io/jmrplens/libgen-mcp:2.1.0`, and verify the image
+  `docker buildx imagetools inspect ghcr.io/jmrplens/libgen-mcp:2.2.0`, and verify the image
   you pinned as [Run with Docker](install/docker.md) shows.
 
 Whichever version you land on, check it is the one this project published before running it:
