@@ -927,6 +927,11 @@ jobs:
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           cosign-release: ${{ env.COSIGN_VERSION }}
+      # For cmd/gen_doc_versions below: the stamp moves CITATION.cff's
+      # date-released, which docs/citations.md repeats.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
       - name: Take the rehearsal's own build
         if: env.REHEARSAL == 'true'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -979,12 +984,18 @@ jobs:
           bash scripts/update-server-json-sha.sh dist/checksums.txt "${VERSION}" \
             dist/libgen-mcp-darwin.mcpb,dist/libgen-mcp-windows.mcpb,dist/libgen-mcp-linux.mcpb \
             "${OCI_DIGEST}"
+          # The stamp just wrote the tag's date into CITATION.cff, and
+          # docs/citations.md repeats its year and month (the site reads them
+          # at build). Bring docs/ along in the same commit, or main's
+          # `check-doc-versions` fails from the stamp onwards.
+          go run ./cmd/gen_doc_versions/
           # Every manifest the script stamps, not just the two it stamped first;
           # `if` rather than `[ -f … ] &&`, whose non-zero status would abort the
           # step under `set -e` the day a manifest is renamed away.
           for manifest in server.json lhm.plugin.json mcpb/manifest.json .plugin/plugin.json plugin.json npm/libgen-mcp/package.json CITATION.cff; do
             if [ -f "${manifest}" ]; then git add "${manifest}"; fi
           done
+          git add docs
           if git diff --cached --quiet; then
             echo "::notice::No manifest changes to commit"
             exit 0

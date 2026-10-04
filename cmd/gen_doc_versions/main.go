@@ -16,16 +16,12 @@ import (
 	"strings"
 )
 
-// versionToken is what a Starlight page writes where the current release
-// belongs. site/src/lib/release-version.mjs replaces it at build time.
-const versionToken = "%%VERSION%%"
-
 // twinDir is where the English Starlight pages live, relative to the root.
 const twinDir = "site/src/content/docs"
 
 // versionPattern matches a version-shaped string: three numeric fields and an
-// optional prerelease suffix. Boundaries are checked by [atBoundary], since Go
-// regular expressions have no lookbehind.
+// optional prerelease suffix. Boundaries are checked by [versionBoundary],
+// since Go regular expressions have no lookbehind.
 var versionPattern = regexp.MustCompile(`\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?`)
 
 // releasePattern is what the VERSION file must hold.
@@ -34,17 +30,45 @@ var versionPattern = regexp.MustCompile(`\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:[.-][0-
 // written by a rewrite and then read back by --check as `2.2.0-rc`.
 var releasePattern = regexp.MustCompile(`^` + versionPattern.String() + `$`)
 
-// errStale reports that check mode found docs/ naming another release.
-var errStale = errors.New("docs/ disagrees with VERSION")
+// datePattern finds CITATION.cff's `date-released`, quoted or not.
+var datePattern = regexp.MustCompile(`(?m)^date-released:\s*["']?(\d{4})-(\d{2})-(\d{2})["']?\s*$`)
 
-// mention is one version-shaped string, or one token, at a byte range of a page.
+// frontmatterPattern matches a page's leading YAML block, which the site never
+// substitutes into and docs/ has no counterpart of.
+var frontmatterPattern = regexp.MustCompile(`\A---\n[\s\S]*?\n---\n`)
+
+// bibtexMonths are BibTeX's month macros, which GitHub's CITATION.cff
+// converter writes.
+var bibtexMonths = []string{"jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"}
+
+// errStale reports that check mode found docs/ naming another release.
+var errStale = errors.New("docs/ disagrees with the current release")
+
+// kind is one token: what a page writes, what its value looks like written
+// out, and where such a value stands on its own.
+type kind struct {
+	placeholder string
+	pattern     *regexp.Regexp
+	boundary    func(src string, start, end int) bool
+}
+
+// kinds lists every token the site replaces, in the order a page is rewritten.
+// The month is matched only in BibTeX's `month = …` form, the one place it is
+// written, because the abbreviations are also English words (`may`).
+var kinds = []kind{
+	{placeholder: "%%VERSION%%", pattern: versionPattern, boundary: versionBoundary},
+	{placeholder: "%%RELEASE_YEAR%%", pattern: regexp.MustCompile(`\d{4}`), boundary: wordBoundary},
+	{placeholder: "%%RELEASE_MONTH%%", pattern: regexp.MustCompile(`month = ([a-z]{3}|%%RELEASE_MONTH%%)`), boundary: wordBoundary},
+}
+
+// mention is one value-shaped string, or one token, at a byte range of a page.
 type mention struct {
 	start, end int
 	token      bool
 	text       string
 }
 
-// page pairs an English Starlight page that writes the token with its docs/
+// page pairs an English Starlight page that writes a token with its docs/
 // twin, both relative to the root.
 type page struct {
 	twin, doc string
@@ -63,13 +87,13 @@ func main() {
 	}
 }
 
-// run parses args, reads VERSION and syncs or checks every page pair.
+// run parses args, reads the release values and syncs or checks every page pair.
 func run(args []string, stdout io.Writer) error {
 	opts, err := parseOptions(args)
 	if err != nil {
 		return err
 	}
-	version, err := readVersion(opts.root)
+	values, err := readValues(opts.root)
 	if err != nil {
 		return err
 	}
@@ -79,15 +103,16 @@ func run(args []string, stdout io.Writer) error {
 	}
 	var stale []string
 	for _, p := range pages {
-		found, pageErr := processPage(opts, p, version, stdout)
+		found, pageErr := processPage(opts, p, values, stdout)
 		if pageErr != nil {
 			return pageErr
 		}
 		stale = append(stale, found...)
 	}
 	if len(stale) > 0 {
-		return fmt.Errorf("%w (VERSION is %s), run `make gen-doc-versions`:\n  %s",
-			errStale, version, strings.Join(stale, "\n  "))
+		return fmt.Errorf("%w (VERSION %s, CITATION.cff date-released %s %s), run `make gen-doc-versions`:\n  %s",
+			errStale, values["%%VERSION%%"], values["%%RELEASE_MONTH%%"], values["%%RELEASE_YEAR%%"],
+			strings.Join(stale, "\n  "))
 	}
 	return nil
 }
@@ -97,7 +122,7 @@ func parseOptions(args []string) (options, error) {
 	fs := flag.NewFlagSet("gen_doc_versions", flag.ContinueOnError)
 	var opts options
 	fs.StringVar(&opts.root, "root", ".", "repository root")
-	fs.BoolVar(&opts.check, "check", false, "fail when docs/ disagrees with VERSION instead of rewriting it")
+	fs.BoolVar(&opts.check, "check", false, "fail when docs/ disagrees with the current release instead of rewriting it")
 	if err := fs.Parse(args); err != nil {
 		return options{}, err
 	}
@@ -107,24 +132,41 @@ func parseOptions(args []string) (options, error) {
 	return opts, nil
 }
 
-// readVersion returns the trimmed VERSION file, refusing anything that is not a
-// release number.
-func readVersion(root string) (string, error) {
+// readValues returns every token's value: the VERSION file, and the year and
+// BibTeX month of CITATION.cff's date-released. Both are read strictly, as the
+// site build reads them.
+func readValues(root string) (map[string]string, error) {
 	raw, err := os.ReadFile(filepath.Join(root, "VERSION"))
 	if err != nil {
-		return "", fmt.Errorf("read VERSION: %w", err)
+		return nil, fmt.Errorf("read VERSION: %w", err)
 	}
 	version := strings.TrimSpace(string(raw))
 	if !releasePattern.MatchString(version) {
-		return "", fmt.Errorf("VERSION holds %q, which is not a release number", version)
+		return nil, fmt.Errorf("VERSION holds %q, which is not a release number", version)
 	}
-	return version, nil
+	cff, err := os.ReadFile(filepath.Join(root, "CITATION.cff"))
+	if err != nil {
+		return nil, fmt.Errorf("read CITATION.cff: %w", err)
+	}
+	m := datePattern.FindStringSubmatch(string(cff))
+	month := 0
+	if m != nil {
+		_, _ = fmt.Sscanf(m[2], "%d", &month)
+	}
+	if month < 1 || month > 12 {
+		return nil, errors.New("CITATION.cff has no date-released of the form YYYY-MM-DD")
+	}
+	return map[string]string{
+		"%%VERSION%%":       version,
+		"%%RELEASE_YEAR%%":  m[1],
+		"%%RELEASE_MONTH%%": bibtexMonths[month-1],
+	}, nil
 }
 
-// findPages lists every English Starlight page that writes the token, paired
-// with its docs/ twin. A page that writes the token and has no twin is an
-// error: the token's positions are the only record of which docs/ mentions are
-// current, so a twin renamed away would silently stop being kept.
+// findPages lists every English Starlight page that writes a token, paired
+// with its docs/ twin. A page that writes one and has no twin is an error: the
+// token's positions are the only record of which docs/ mentions are current,
+// so a twin renamed away would silently stop being kept.
 func findPages(root string) ([]page, error) {
 	base := filepath.Join(root, twinDir)
 	var pages []page
@@ -147,7 +189,17 @@ func findPages(root string) ([]page, error) {
 	return pages, nil
 }
 
-// addPage appends the pair for one Starlight file when it writes the token.
+// holdsToken reports whether src writes any token.
+func holdsToken(src string) bool {
+	for _, k := range kinds {
+		if strings.Contains(src, k.placeholder) {
+			return true
+		}
+	}
+	return false
+}
+
+// addPage appends the pair for one Starlight file when it writes a token.
 func addPage(root, base, path string, pages *[]page) error {
 	ext := filepath.Ext(path)
 	if ext != ".mdx" && ext != ".md" {
@@ -157,7 +209,7 @@ func addPage(root, base, path string, pages *[]page) error {
 	if err != nil {
 		return err
 	}
-	if !strings.Contains(string(src), versionToken) {
+	if !holdsToken(string(src)) {
 		return nil
 	}
 	rel, err := filepath.Rel(base, path)
@@ -167,54 +219,69 @@ func addPage(root, base, path string, pages *[]page) error {
 	doc := filepath.ToSlash(filepath.Join("docs", strings.TrimSuffix(rel, ext)+".md"))
 	twin := filepath.ToSlash(filepath.Join(twinDir, rel))
 	if _, statErr := os.Stat(filepath.Join(root, doc)); statErr != nil {
-		return fmt.Errorf("%s writes %s but has no docs/ twin at %s", twin, versionToken, doc)
+		return fmt.Errorf("%s writes a release token but has no docs/ twin at %s", twin, doc)
 	}
 	*pages = append(*pages, page{twin: twin, doc: doc})
 	return nil
 }
 
-// processPage aligns one pair and, outside check mode, writes the docs/ page
-// when it changed. It returns one line per stale mention in check mode.
-func processPage(opts options, p page, version string, stdout io.Writer) ([]string, error) {
-	twinSrc, err := os.ReadFile(filepath.Join(opts.root, p.twin))
+// processPage aligns one pair for every token its twin writes and, outside
+// check mode, writes the docs/ page when it changed. It returns one line per
+// stale mention in check mode.
+func processPage(opts options, p page, values map[string]string, stdout io.Writer) ([]string, error) {
+	twinRaw, err := os.ReadFile(filepath.Join(opts.root, p.twin))
 	if err != nil {
 		return nil, err
 	}
 	docPath := filepath.Join(opts.root, p.doc)
-	docSrc, err := os.ReadFile(docPath)
+	docRaw, err := os.ReadFile(docPath)
 	if err != nil {
 		return nil, err
 	}
-	out, stale, err := syncPage(string(twinSrc), string(docSrc), version)
-	if err != nil {
-		return nil, fmt.Errorf("%s against %s: %w", p.doc, p.twin, err)
+	// The frontmatter is blanked rather than cut, so a line number reported
+	// against the twin is still the file's.
+	twinSrc := frontmatterPattern.ReplaceAllStringFunc(string(twinRaw), func(fm string) string {
+		return strings.Repeat("\n", strings.Count(fm, "\n"))
+	})
+	docSrc := string(docRaw)
+	var lines []string
+	changed := 0
+	for _, k := range kinds {
+		if !strings.Contains(twinSrc, k.placeholder) {
+			continue
+		}
+		out, stale, syncErr := syncPage(k, twinSrc, docSrc, values[k.placeholder])
+		if syncErr != nil {
+			return nil, fmt.Errorf("%s against %s: %w", p.doc, p.twin, syncErr)
+		}
+		for _, m := range stale {
+			lines = append(lines, fmt.Sprintf("%s:%d names %s where %s writes %s",
+				p.doc, lineOf(docSrc, m.start), m.text, p.twin, k.placeholder))
+		}
+		changed += len(stale)
+		docSrc = out
 	}
 	if opts.check {
-		lines := make([]string, 0, len(stale))
-		for _, m := range stale {
-			lines = append(lines, fmt.Sprintf("%s:%d names %s where %s writes the current release",
-				p.doc, lineOf(string(docSrc), m.start), m.text, p.twin))
-		}
 		return lines, nil
 	}
-	if len(stale) == 0 {
+	if changed == 0 {
 		return nil, nil
 	}
-	if writeErr := os.WriteFile(docPath, []byte(out), 0o644); writeErr != nil { //nolint:gosec // a tracked docs page, world-readable like its siblings
+	if writeErr := os.WriteFile(docPath, []byte(docSrc), 0o644); writeErr != nil { //nolint:gosec // a tracked docs page, world-readable like its siblings
 		return nil, writeErr
 	}
-	_, err = fmt.Fprintf(stdout, "%s: %d mention(s) set to %s\n", p.doc, len(stale), version)
+	_, err = fmt.Fprintf(stdout, "%s: %d mention(s) brought up to date\n", p.doc, changed)
 	return nil, err
 }
 
-// syncPage lines up the docs page's mentions with the twin's and returns the
-// page with every current-release mention set to version, plus the mentions
-// that did not already say it.
-func syncPage(twinSrc, docSrc, version string) (string, []mention, error) {
-	twin := mentions(twinSrc, true)
-	doc := mentions(docSrc, false)
+// syncPage lines up the docs page's mentions of one kind with the twin's and
+// returns the page with every current-release mention set to value, plus the
+// mentions that did not already say it.
+func syncPage(k kind, twinSrc, docSrc, value string) (string, []mention, error) {
+	twin := mentions(k, twinSrc, true)
+	doc := mentions(k, docSrc, false)
 	if i := firstDisagreement(twin, doc); i >= 0 {
-		return "", nil, misaligned(twinSrc, docSrc, twin, doc, i)
+		return "", nil, misaligned(k, twinSrc, docSrc, twin, doc, i)
 	}
 	var b strings.Builder
 	var stale []mention
@@ -224,9 +291,9 @@ func syncPage(twinSrc, docSrc, version string) (string, []mention, error) {
 			continue
 		}
 		b.WriteString(docSrc[last:m.start])
-		b.WriteString(version)
+		b.WriteString(value)
 		last = m.end
-		if m.text != version {
+		if m.text != value {
 			stale = append(stale, m)
 		}
 	}
@@ -251,46 +318,53 @@ func firstDisagreement(twin, doc []mention) int {
 }
 
 // misaligned describes where the two copies of a page stopped agreeing.
-func misaligned(twinSrc, docSrc string, twin, doc []mention, i int) error {
+func misaligned(k kind, twinSrc, docSrc string, twin, doc []mention, i int) error {
 	describe := func(src string, ms []mention) string {
 		if i >= len(ms) {
-			return "nothing (the page has no more versions)"
+			return "nothing (the page has no more of them)"
 		}
 		return fmt.Sprintf("%q at line %d", ms[i].text, lineOf(src, ms[i].start))
 	}
-	return fmt.Errorf("version mention %d differs: the twin has %s, docs/ has %s. "+
-		"The two copies must name the same versions in the same order, with %s where the twin means the current release",
-		i+1, describe(twinSrc, twin), describe(docSrc, doc), versionToken)
+	return fmt.Errorf("mention %d of the kind %s writes differs: the twin has %s, docs/ has %s. "+
+		"The two copies must name the same values in the same order, with %s where the twin means the current release",
+		i+1, k.placeholder, describe(twinSrc, twin), describe(docSrc, doc), k.placeholder)
 }
 
-// mentions returns every version-shaped string of src in order and, when
-// withToken is set, every token as well.
-func mentions(src string, withToken bool) []mention {
+// mentions returns every string of src shaped like a value of k, in order,
+// counting a token in place of a value when withToken is set. A pattern with a
+// capture group names the value by the group.
+func mentions(k kind, src string, withToken bool) []mention {
 	var out []mention
-	for _, loc := range versionPattern.FindAllStringIndex(src, -1) {
-		if atBoundary(src, loc[0], loc[1]) {
-			out = append(out, mention{start: loc[0], end: loc[1], text: src[loc[0]:loc[1]]})
+	for _, loc := range k.pattern.FindAllStringSubmatchIndex(src, -1) {
+		start, end := loc[0], loc[1]
+		if len(loc) > 2 {
+			start, end = loc[2], loc[3]
 		}
+		if src[start:end] == k.placeholder || !k.boundary(src, start, end) {
+			continue
+		}
+		out = append(out, mention{start: start, end: end, text: src[start:end]})
 	}
 	if withToken {
 		for offset := 0; ; {
-			i := strings.Index(src[offset:], versionToken)
+			i := strings.Index(src[offset:], k.placeholder)
 			if i < 0 {
 				break
 			}
 			start := offset + i
-			offset = start + len(versionToken)
-			out = append(out, mention{start: start, end: offset, token: true, text: versionToken})
+			offset = start + len(k.placeholder)
+			out = append(out, mention{start: start, end: offset, token: true, text: k.placeholder})
 		}
 	}
 	sort.Slice(out, func(a, b int) bool { return out[a].start < out[b].start })
 	return out
 }
 
-// atBoundary reports whether src[start:end] stands on its own as a version: not
-// the tail of a longer number or identifier (`go1.27.0`, `10.0.0.1`), though a
-// leading `v` is allowed, and not the head of a four-part address.
-func atBoundary(src string, start, end int) bool {
+// versionBoundary reports whether src[start:end] stands on its own as a
+// version: not the tail of a longer number or identifier (`go1.27.0`,
+// `10.0.0.1`), though a leading `v` is allowed, and not the head of a
+// four-part address.
+func versionBoundary(src string, start, end int) bool {
 	if start > 0 {
 		c := src[start-1]
 		if isDigit(c) || c == '.' || (isLetter(c) && c != 'v') {
@@ -298,6 +372,15 @@ func atBoundary(src string, start, end int) bool {
 		}
 	}
 	return end+1 >= len(src) || src[end] != '.' || !isDigit(src[end+1])
+}
+
+// wordBoundary reports whether src[start:end] is not part of a longer run of
+// letters or digits.
+func wordBoundary(src string, start, end int) bool {
+	if start > 0 && (isDigit(src[start-1]) || isLetter(src[start-1])) {
+		return false
+	}
+	return end >= len(src) || (!isDigit(src[end]) && !isLetter(src[end]))
 }
 
 // isDigit reports whether c is an ASCII digit.

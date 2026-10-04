@@ -250,21 +250,21 @@ For a record Anna's Archive answered in the catalog's place, it names Anna's Arc
 The repository has a [`CITATION.cff`](https://github.com/jmrplens/libgen-mcp/blob/main/CITATION.cff) file at its root, in Citation File Format 1.2.0. GitHub reads it and shows a _Cite this repository_ link on the repository page, which copies an APA or a BibTeX reference. The BibTeX generated from the file is:
 
 ```bibtex
-@software{Requena_Plens_libgen-mcp_2026,
+@software{Requena_Plens_libgen-mcp_%%RELEASE_YEAR%%,
 author = {Requena Plens, José Manuel},
 license = {MIT},
-month = oct,
+month = %%RELEASE_MONTH%%,
 title = {{libgen-mcp}},
 url = {https://github.com/jmrplens/libgen-mcp},
 version = {%%VERSION%%},
-year = {2026}
+year = {%%RELEASE_YEAR%%}
 }
 ```
 
 And the APA form:
 
 ```text
-Requena Plens, J. M. (2026). libgen-mcp (Version %%VERSION%%) [Computer software]. https://github.com/jmrplens/libgen-mcp
+Requena Plens, J. M. (%%RELEASE_YEAR%%). libgen-mcp (Version %%VERSION%%) [Computer software]. https://github.com/jmrplens/libgen-mcp
 ```
 
 These are the entries for %%VERSION%%. Each release stamps its own version and date into the file, so it always names the latest one. If you used another release, change the version to match: `libgen-mcp --version` prints the one you have.

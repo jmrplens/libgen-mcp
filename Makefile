@@ -385,11 +385,11 @@ check-md-tables: ## Fail if any Markdown table needs formatting (CI mode)
 
 # The table pass follows because a longer number (2.9.0 to 2.10.0) widens a
 # cell, and docs/ tables are held to their normalized widths.
-gen-doc-versions: ## Write VERSION into docs/ wherever the Starlight twin writes %%VERSION%%
+gen-doc-versions: ## Write VERSION and CITATION.cff's date into docs/ wherever the Starlight twin writes a release token
 	go run ./cmd/gen_doc_versions/
 	go run ./cmd/format_md_tables/
 
-check-doc-versions: ## Fail if docs/ names another release where the Starlight twin writes %%VERSION%%
+check-doc-versions: ## Fail if docs/ names another release or date where the Starlight twin writes a release token
 	go run ./cmd/gen_doc_versions/ --check
 
 check-doc-links: ## Fail if any tracked Markdown/MDX local link, path or anchor is broken

@@ -41,6 +41,11 @@ citation file. To cut a release:
    alone. `make check-doc-versions` (CI's `Generated docs` job) fails a bump
    that skipped it. Release notes that add a new *current-release* example
    write `%%VERSION%%` on the site pages and the literal number in `docs/`.
+   The citation sample's year and month are `%%RELEASE_YEAR%%` and
+   `%%RELEASE_MONTH%%`, read from `CITATION.cff`'s `date-released`. The stamper
+   writes that date at release time and the `commit-manifests` job runs the
+   generator before committing, so between the bump and the stamp the sample
+   still carries the previous release's date.
 6. Open a PR; once merged, **rehearse it** (below), then tag `vX.Y.Z` on main to
    trigger the release.
 

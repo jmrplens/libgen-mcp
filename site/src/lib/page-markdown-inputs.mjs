@@ -9,15 +9,15 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { readReleaseVersion } from "./release-version.mjs";
+import { readReleaseValues } from "./release-version.mjs";
 
 /**
  * @param {string} root - The site directory.
- * @returns {{labels: Record<string, Record<string,string>>, schema: object, chain: {id: string, keyedBy: string}[], version: string}}
+ * @returns {{labels: Record<string, Record<string,string>>, schema: object, chain: {id: string, keyedBy: string}[], release: Record<string, string>}}
  */
 export function loadInputs(root) {
 	return {
-		version: readReleaseVersion(join(root, "..", "VERSION")),
+		release: readReleaseValues(join(root, "..")),
 		labels: {
 			en: JSON.parse(
 				readFileSync(join(root, "src/content/i18n/en.json"), "utf8"),

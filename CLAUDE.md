@@ -1000,7 +1000,10 @@ Docs are **bilingual and kept in parity**:
   `make gen-doc-versions` rewrites exactly the spots where the English twin
   holds the token (`make check-doc-versions` gates it). A version that is a
   fact about the past — "up to 2.1.0", a changelog section, a measured build —
-  is never the token. A token in frontmatter is not replaced.
+  is never the token. A token in frontmatter is not replaced. The citation
+  sample's `%%RELEASE_YEAR%%` and `%%RELEASE_MONTH%%` work the same way from
+  `CITATION.cff`'s `date-released`, which the release's `commit-manifests` job
+  stamps and then runs the generator for.
 - Architecture Decision Records live in `docs/decisions/`.
 
 ## Testing

@@ -16,7 +16,7 @@
 // Markdown copy says "Qué no cubre" on a Spanish page for the same reason the
 // page does.
 
-import { substituteVersion, VERSION_TOKEN } from "./release-version.mjs";
+import { hasReleaseToken, substituteRelease } from "./release-version.mjs";
 
 /**
  * Element names this renderer knows how to unwrap. Named in the build failure so
@@ -116,19 +116,19 @@ const unescape = (text) =>
  * @param {Record<string,string>} labels - The locale's `lgm.*` strings.
  * @param {object} [schema] - The generated tool-schema.json, for <SchemaTable>.
  * @param {{id: string, keyedBy: string}[]} [chain] - The download chain, in order.
- * @param {string} [version] - The current release, written where the page holds
- *   VERSION_TOKEN. Required when it holds one.
+ * @param {Record<string, string>} [release] - Token to value, from
+ *   readReleaseValues. Required when the page holds a release token.
  * @returns {string} Markdown.
  */
-export function toMarkdown(source, labels, schema, chain, version) {
-	// The release number goes in first, so every rendering below (a Fact body, a
-	// tab, an alert) carries the number and none of them can carry the token.
-	if (source.includes(VERSION_TOKEN) && !version) {
+export function toMarkdown(source, labels, schema, chain, release) {
+	// The release values go in first, so every rendering below (a Fact body, a
+	// tab, an alert) carries the value and none of them can carry a token.
+	if (hasReleaseToken(source) && !release) {
 		throw new Error(
-			`[page-markdown] the page writes ${VERSION_TOKEN} but no release version was given`,
+			"[page-markdown] the page writes a release token but no release values were given",
 		);
 	}
-	let text = version ? substituteVersion(source, version) : source;
+	let text = release ? substituteRelease(source, release) : source;
 
 	// Frontmatter and the import block are machinery, not content.
 	text = text.replace(/^---\n[\s\S]*?\n---\n/, "");

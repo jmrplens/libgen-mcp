@@ -8,6 +8,7 @@ import rehypeMermaid from "rehype-mermaid";
 
 import { devMarkdown } from "./src/lib/dev-markdown.mjs";
 import {
+	readReleaseValues,
 	readReleaseVersion,
 	remarkReleaseVersion,
 } from "./src/lib/release-version.mjs";
@@ -409,7 +410,12 @@ export default defineConfig({
 		// A remark plugin, so the release number is in place before Expressive
 		// Code (a rehype plugin) highlights a fenced block and before a link URL
 		// is percent-encoded. See src/lib/release-version.mjs.
-		remarkPlugins: [[remarkReleaseVersion, { version: softwareVersion }]],
+		remarkPlugins: [
+			[
+				remarkReleaseVersion,
+				{ values: readReleaseValues(new URL("../", import.meta.url)) },
+			],
+		],
 		rehypePlugins: [
 			// BEFORE rehypeMermaid, deliberately: at this point a diagram is still
 			// a fenced code block, so its markup cannot be mistaken for a content
