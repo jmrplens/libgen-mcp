@@ -470,9 +470,12 @@ configuration survives to production.
 
 Every string a client receives from `tools/list` or `prompts/list` — a tool
 description, a title, every `jsonschema:"…"` tag that becomes a schema
-description, a prompt's description and its arguments' — is **pure ASCII prose
-with no semicolon**. `make check-gateway-chars` reads a real round-trip and
-gates it.
+description, a prompt's description and its arguments' — and the instructions
+`initialize` returns is **pure ASCII prose with no semicolon**. `make
+check-gateway-chars` reads a real round-trip and gates it, and reads every
+variant of the instructions (`internal/instructions`) a deployment can serve.
+The instructions live in their own package rather than in `cmd/server` so the
+gate can import them.
 
 The reason is a door this server has to get through. An MCP gateway refused a
 sibling project's onboarding with `Description contains unsafe characters:
