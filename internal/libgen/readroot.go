@@ -96,8 +96,8 @@ type readRoot struct {
 // directory cannot be made inside it: the root is given up, onLost is told
 // which one so the cache can forget the files that went with it, and a new
 // root is made once. Without that, every fetch failed for the rest of the
-// process's life. onLost runs with the root's lock held, so it must not call
-// back into the root.
+// process's life. onLost runs with r.mu held, so it must not call back into
+// the root.
 func (r *readRoot) fetchDir(onLost func(root string)) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
