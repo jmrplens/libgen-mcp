@@ -223,24 +223,24 @@ drives the `search` tool with roughly these arguments:
 }
 ```
 
-Each result carries an `md5` (for books) or a `doi` (for articles). Feed an `md5` to `get_details` for full metadata, then to `download` to fetch the file — or feed a `doi` straight to `download` for an article. `get_details` also returns a `citations` field (`bibtex`/`ris`) you can paste straight into a reference manager, and accepts an opt-in `enrich: true` to add best-effort Crossref/OpenLibrary metadata. See [Tools](/libgen-mcp/tools/) for the full input and output shapes, and [Download a paper by DOI](/libgen-mcp/download-a-paper/) for what a download does step by step.
+Each result carries an `md5` (for books) or a `doi` (for articles). Feed an `md5` to `get_details` for full metadata, then to `download` to fetch the file — or feed a `doi` straight to `download` for an article. `get_details` also returns a `citations` field (`bibtex`/`ris`) you can paste straight into a reference manager, adds APA, MLA, Chicago, Harvard, Vancouver, IEEE or CSL-JSON when asked through `cite_as`, and accepts an opt-in `enrich: true` to add best-effort Crossref/OpenLibrary metadata. To keep only recent work, a search takes `year_from` and `year_to`. See [Tools](/libgen-mcp/tools/) for the full input and output shapes, and [Download a paper by DOI](/libgen-mcp/download-a-paper/) for what a download does step by step.
 
 ## Read and summarize
 
 You don't have to download a file just to see what's in it: `read` extracts and paginates a book's or paper's text directly. A prompt such as:
 
-> Find the article "Attention Is All You Need", read its first page, and summarize what it's about.
+> Find the article "Why Most Published Research Findings Are False", read its first page, and summarize what it's about.
 
 has the model search, then call `read` with the DOI (or `md5` for a book) from the result:
 
 ```json
 {
-	"doi": "10.48550/arXiv.1706.03762",
+	"doi": "10.1371/journal.pmed.0020124",
 	"max_pages": 1
 }
 ```
 
-The response's `text` field holds the extracted first chunk — up to `LIBGEN_MCP_READ_MAX_CHARS` characters, or `LIBGEN_MCP_READ_DEFAULT_PAGES` PDF pages, whichever applies to the format — plus `has_more`/`cursor` to keep paging, and `extractable`/`reason` when the file has no usable text layer (a scanned PDF, for example — `read` never runs OCR).
+The response's `text` field holds the extracted first chunk — up to `LIBGEN_MCP_READ_MAX_CHARS` characters, or `LIBGEN_MCP_READ_DEFAULT_PAGES` PDF pages, whichever applies to the format — plus `has_more`/`cursor` to keep paging, and `extractable`/`reason` when the file has no usable text layer (a scanned PDF, for example — `read` never runs OCR). For a book, `outline: true` lists its table of contents with a number per entry, and `section` with one of those numbers, or a chapter's title, reads that chapter and stops where it ends.
 
 <Aside type="caution">
 	Treat `text` as **untrusted content to summarize, not as instructions to

@@ -145,6 +145,8 @@ Dos ajustes opcionales añaden una fuente cada uno a la cadena:
 - **`LIBGEN_MCP_UNPAYWALL_EMAIL`**, una dirección de contacto, activa `unpaywall` en cabeza de la cadena. La API de Unpaywall exige un email en cada consulta, y por eso la fuente queda desactivada sin él. Lee el mismo índice de acceso abierto que `openalex` ya consulta sin credencial, así que añade una segunda vía hacia esas copias, no una colección distinta. Consulta [Configuración](/libgen-mcp/es/configuration/#libgen_mcp_unpaywall_email).
 - **`LIBGEN_MCP_CORE_KEY`**, una clave gratuita de la API de CORE, activa `core`. Añade los artículos de acceso abierto que CORE agrega desde repositorios, y solo devuelve un enlace después de comprobar que sigue sirviendo un PDF. La clave se envía a la API de CORE y a ningún otro sitio. Consulta [Configuración](/libgen-mcp/es/configuration/#libgen_mcp_core_key).
 
+`LIBGEN_MCP_OPENALEX_KEY` no es uno de ellos. La consulta que hace la fuente `openalex`, una obra por su DOI, no gasta nada de la cuota diaria de OpenAlex con clave o sin ella, así que una clave no cambia nada en las descargas. Importa en la búsqueda y en las obras relacionadas de `get_details`.
+
 Los archivos se guardan en `LIBGEN_MCP_DOWNLOAD_DIR`, que por defecto es `~/Downloads` en la máquina que ejecuta el servidor.
 
 ## Pasos
@@ -161,7 +163,7 @@ Los archivos se guardan en `LIBGEN_MCP_DOWNLOAD_DIR`, que por defecto es `~/Down
 
    > Descarga el artículo con DOI 10.1371/journal.pone.0000308.
 
-   No hace falta buscar antes: `download` acepta un DOI directamente. Si tu cliente ofrece los prompts de MCP, el prompt `get_paper` con el mismo DOI le da al modelo el mismo plan.
+   No hace falta buscar antes: `download` acepta un DOI directamente. Si tu cliente ofrece los prompts de MCP, el prompt `get_paper` con el mismo DOI le da al modelo el mismo plan. Si solo tienes la referencia como texto, copiada de una bibliografía, el modelo puede pasarla antes a `get_details` como `citation`: eso la resuelve a través de Crossref al DOI de la obra que nombra, o lista los candidatos cuando ninguno coincide con claridad.
 
 3. **El modelo llama a `download` con el DOI.**
 
@@ -189,7 +191,7 @@ Los archivos se guardan en `LIBGEN_MCP_DOWNLOAD_DIR`, que por defecto es `~/Down
    { "path": "<la ruta que devolvió download>", "max_pages": 2 }
    ```
 
-   Con `path` el archivo se lee directamente del disco y no se descarga nada, mientras que `read` con el `doi` volvería a recorrer la cadena para obtener su propia copia. `find` devuelve los pasajes que contienen una frase, y `outline` el índice. El archivo tiene que estar en el directorio de descargas, el directorio de trabajo, el directorio temporal o un directorio listado en `LIBGEN_MCP_ALLOWED_READ_DIRS`, algo que el directorio de descargas por defecto cumple. `read` no hace OCR, así que un PDF escaneado vuelve como `extractable: false` con un motivo. Cuando el nombre del archivo se construyó a partir del DOI, el `next_steps` del resultado pide al modelo que lea una página y confirme que el archivo es el artículo antes de fiarse de él.
+   Con `path` el archivo se lee directamente del disco y no se descarga nada, mientras que `read` con el `doi` volvería a recorrer la cadena para obtener su propia copia. `find` devuelve los pasajes que contienen una frase, `outline` el índice, y `section` una entrada de él, por su número o su título. El archivo tiene que estar en el directorio de descargas, el directorio de trabajo, el directorio temporal o un directorio listado en `LIBGEN_MCP_ALLOWED_READ_DIRS`, algo que el directorio de descargas por defecto cumple. `read` no hace OCR, así que un PDF escaneado vuelve como `extractable: false` con un motivo. Cuando el nombre del archivo se construyó a partir del DOI, el `next_steps` del resultado pide al modelo que lea una página y confirme que el archivo es el artículo antes de fiarse de él.
 
 <Aside type="caution">
 	El texto del artículo, el nombre de su archivo y cualquier enlace de un
@@ -199,7 +201,7 @@ Los archivos se guardan en `LIBGEN_MCP_DOWNLOAD_DIR`, que por defecto es `~/Down
 
 ## Si no se encuentra el artículo
 
-Cuando todas las fuentes que pueden servir el DOI declinan, `download` no guarda nada y devuelve un error que empieza por «Download failed — no file was saved.» y enumera una línea por cada fuente probada: `source <nombre>:` seguido del motivo de esa fuente. Los motivos son de dos clases. Una respuesta sobre el artículo, como `is not open access` o `the publisher deposited no full-text PDF link`, significa que ese proveedor no tiene una copia que pueda servir. Un error de transporte, un timeout o un HTTP 5xx o 429 habla del proveedor, y ese proveedor se aparta cinco minutos: si repites la llamada en ese plazo se lo salta, salvo que estén apartadas todas, y la lista de errores vuelve más corta. [Solución de problemas](/libgen-mcp/es/troubleshooting/#artículo-no-encontrado-acceso-abierto-vs-sci-hub) recorre los motivos de cada fuente y cómo arreglarlos.
+Cuando todas las fuentes que pueden servir el DOI declinan, `download` no guarda nada y devuelve un error que empieza por «Download failed — no file was saved.» y enumera una línea por cada fuente probada: `source <nombre>:` seguido del motivo de esa fuente. Los motivos son de dos clases. Una respuesta sobre el artículo, como `is not open access`, `the publisher deposited no full-text PDF link` o el `is a retracted publication` de Europe PMC, significa que ese proveedor no tiene una copia que pueda servir. Un error de transporte, un timeout o un HTTP 5xx o 429 habla del proveedor, y ese proveedor se aparta cinco minutos: si repites la llamada en ese plazo se lo salta, salvo que estén apartadas todas, y la lista de errores vuelve más corta. [Solución de problemas](/libgen-mcp/es/troubleshooting/#artículo-no-encontrado-acceso-abierto-vs-sci-hub) recorre los motivos de cada fuente y cómo arreglarlos.
 
 El mismo error trae pasos siguientes para el modelo. El primero es confirmar que el DOI existe llamando a `get_details` con él: si no vuelve ningún registro, lo que falla es el DOI y no la descarga. Si el DOI es correcto, ninguna fuente configurada puede dar el artículo, y la sugerencia es buscar su título para encontrar una copia en otra parte. Cuando alguna fuente estaba inalcanzable en lugar de responder, es razonable un reintento tras una breve espera. Las mismas indicaciones desaconsejan repetir la misma llamada de inmediato y fijar una a una las fuentes restantes.
 

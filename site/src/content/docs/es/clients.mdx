@@ -50,13 +50,14 @@ Con `dnx`, los argumentos para el propio servidor van después de un `--`, porqu
 
 ### Claves y otros ajustes
 
-El servidor no necesita configuración, y nada en esta página la pone. Tres ajustes opcionales son credenciales, y cada uno activa una fuente que el servidor sin claves deja apagada o lenta:
+El servidor no necesita configuración, y nada en esta página la pone. Cuatro ajustes opcionales son credenciales, y cada uno levanta algo que el servidor sin claves deja apagado, lento o racionado:
 
-| Variable                     | Qué activa                                                                              |
-| ---------------------------- | --------------------------------------------------------------------------------------- |
-| `LIBGEN_MCP_UNPAYWALL_EMAIL` | la fuente `unpaywall`, que necesita una dirección de contacto en cada consulta          |
-| `LIBGEN_MCP_CORE_KEY`        | la fuente `core`, con una clave de API gratuita de core.ac.uk                           |
-| `LIBGEN_MCP_ANNAS_KEY`       | las descargas de socio de Anna's Archive, con la clave secreta de una membresía de pago |
+| Variable                     | Qué activa                                                                                                                |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `LIBGEN_MCP_UNPAYWALL_EMAIL` | la fuente `unpaywall`, que necesita una dirección de contacto en cada consulta                                            |
+| `LIBGEN_MCP_CORE_KEY`        | la fuente `core`, con una clave de API gratuita de core.ac.uk                                                             |
+| `LIBGEN_MCP_ANNAS_KEY`       | las descargas de socio de Anna's Archive, con la clave secreta de una membresía de pago                                   |
+| `LIBGEN_MCP_OPENALEX_KEY`    | una cuota diaria de OpenAlex más amplia para la búsqueda y las obras relacionadas, con una clave gratuita de openalex.org |
 
 No tienen flags de línea de órdenes, a propósito: un secreto en un argumento lo ve cualquier usuario de la máquina con `ps`. Dáselas al servidor de una de estas tres formas, de mayor a menor precedencia:
 

@@ -8,7 +8,7 @@ mentions:
     wikidata: Q121746046
 datePublished: "2026-10-04"
 # Generated from PRIVACY.md by scripts/sync-privacy.mjs — do not edit by hand.
-privacySource: "d2aa72551a5db409"
+privacySource: "ecec6b16650c57f9"
 head:
   - tag: script
     attrs:
@@ -36,7 +36,7 @@ head:
             "name": "What data leaves my machine, and who receives it?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Only the identifiers you ask for, and only to the service being asked. A search sends your query text to a Library Genesis mirror; a download by DOI sends that DOI to the article sources in the chain; a download by ISBN sends that ISBN to OAPEN and the Internet Archive. Every destination is listed under Data flows. Nothing is sent to the maintainer, and there are no background connections — every request is a direct consequence of a tool call."
+              "text": "Only the identifiers you ask for, and only to the service being asked. A search sends your query text to a Library Genesis mirror; a citation you paste into get_details is sent to Crossref to find its DOI; a download by DOI sends that DOI to the article sources in the chain; a download by ISBN sends that ISBN to OAPEN and the Internet Archive. Every destination is listed under Data flows. Nothing is sent to the maintainer, and there are no background connections — every request is a direct consequence of a tool call."
             }
           },
           {
@@ -44,7 +44,7 @@ head:
             "name": "Does libgen-mcp store my credentials?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "No credentials are required, and none are persisted. The two optional ones — an Anna's Archive membership key and a free CORE API key — are read from the environment and sent only to the single service each belongs to. A credential supplied per call through your client's elicitation prompt is used for that one request and never written to disk."
+              "text": "No credentials are required, and none are persisted. The three optional ones — an Anna's Archive membership key, a free CORE API key and a free OpenAlex API key — are read from the environment and sent only to the single service each belongs to. A credential supplied per call through your client's elicitation prompt is used for that one request and never written to disk."
             }
           },
           {
@@ -150,7 +150,9 @@ AI assistant) make. There are no background connections. The destinations are:
   personal data is sent.
 - **Keyless open-access providers (only when you request an article by DOI).**
   Before any shadow-library fallback, the article `download` chain asks the open
-  repositories for a freely licensed copy: [Europe PMC](https://europepmc.org)
+  repositories for a freely licensed copy: [OpenAlex](https://openalex.org)
+  (`api.openalex.org`, then the repository or publisher host its open-access PDF
+  link names), [Europe PMC](https://europepmc.org)
   (`ebi.ac.uk`, with the PDF itself fetched from NCBI's PMC Article Datasets at
   `pmc-oa-opendata.s3.amazonaws.com`), [bioRxiv/medRxiv](https://www.biorxiv.org)
   (`api.biorxiv.org`, plus the `biorxiv.org`/`medrxiv.org` content hosts), the
@@ -166,9 +168,15 @@ AI assistant) make. There are no background connections. The destinations are:
   [FAO Knowledge Repository](https://openknowledge.fao.org)
   (`openknowledge.fao.org`) for a `10.4060` DOI,
   and Internet Archive Scholar / fatcat (`scholar.archive.org`, then
-  `web.archive.org` for the file). A monograph DOI is also offered to
+  `web.archive.org` for the file). Past those, the DOI goes to
+  [Crossref](https://www.crossref.org) (`api.crossref.org`) for the full-text link
+  the publisher deposited there, which is then fetched from that publisher's own
+  host. A monograph DOI is also offered to
   [OAPEN](https://library.oapen.org) (`library.oapen.org`). Each request carries
-  only the DOI.
+  only the DOI, with two additions you control: an OpenAlex request carries your
+  `LIBGEN_MCP_OPENALEX_KEY` as a bearer token when you set one, and the Crossref
+  request carries your `LIBGEN_MCP_UNPAYWALL_EMAIL` as its polite-pool contact
+  when you set that.
 - **Open-access book sources (only when you request a book by ISBN).** A
   `download` by `isbn` sends **only that ISBN** to [OAPEN](https://library.oapen.org)
   (`library.oapen.org`) and to [OpenLibrary](https://openlibrary.org)
@@ -186,7 +194,9 @@ AI assistant) make. There are no background connections. The destinations are:
   `sci-hub.ee`), requesting `https://<host>/<doi>` until one serves the paper.
 - **The extra searchers (when a search reaches beyond the catalog).** A `search`
   may send **your query text** to Anna's Archive (`annas-archive.gl` and its
-  mirrors), [arXiv](https://arxiv.org), [Crossref](https://www.crossref.org),
+  mirrors), [arXiv](https://arxiv.org), [OpenAlex](https://openalex.org)
+  (`api.openalex.org`), [Europe PMC](https://europepmc.org) (its search service at
+  `www.ebi.ac.uk`), [Crossref](https://www.crossref.org),
   [OpenLibrary](https://openlibrary.org), Project Gutenberg via the third-party
   [Gutendex](https://gutendex.com) API (`gutendex.com`; the ebook files it links
   to live on `gutenberg.org`, which is contacted only if you fetch one),
@@ -198,14 +208,35 @@ AI assistant) make. There are no background connections. The destinations are:
   default (`auto`) only when the Library Genesis catalog returns nothing or
   fails, with `always` on every search, and with `never` not at all. When — and
   only when — you have configured `LIBGEN_MCP_UNPAYWALL_EMAIL`, the Crossref
-  request carries that same address as its polite-pool contact, and the PubMed
-  requests carry it as the contact address NCBI's usage etiquette asks for; with
-  no address configured, none is sent and none is invented. An ERIC hit for a
+  request carries that same address as its polite-pool contact, the OpenLibrary
+  request carries it in its User-Agent as OpenLibrary's etiquette asks, and the
+  PubMed requests carry it as the contact address NCBI's usage etiquette asks for; with
+  no address configured, none is sent and none is invented. The OpenAlex request
+  carries `LIBGEN_MCP_OPENALEX_KEY` as a bearer token if you set one, and nothing
+  of the kind if you do not. A search bounded with `year_from` or `year_to` sends
+  those years along with the query. An ERIC hit for a
   document ERIC hosts carries a `files.eric.ed.gov` full-text URL; that host is
   named in the result but is **never contacted by this server** — nothing is
   fetched from it unless you follow the link yourself. `get_details`
   also queries
   Anna's Archive, sending **only the md5**, when the catalog has no record for it.
+- **Metadata services (when `get_details` looks a record up).** Beyond the Library
+  Genesis catalog, `get_details` sends only what identifies the work, and only to
+  the service whose answer it needs. A record that carries a DOI has that DOI
+  checked against [Crossref](https://www.crossref.org) (`api.crossref.org`), which
+  is also asked for a DOI the catalog does not carry. A reference pasted into
+  `citation` is sent there **as you pasted it**, to find the DOI it names.
+  `enrich` asks Crossref by DOI and [OpenLibrary](https://openlibrary.org)
+  (`openlibrary.org`) by ISBN. A DOI neither the catalog nor Crossref knows, and
+  each `cite_as` style for a record whose DOI was confirmed, is asked of the DOI
+  resolver (`doi.org`),
+  which forwards the request to the agency that registered that DOI:
+  `api.crossref.org` for Crossref, `data.crosscite.org` for DataCite,
+  `data.medra.org` for mEDRA. `related` asks [OpenAlex](https://openalex.org)
+  (`api.openalex.org`) by DOI, with your `LIBGEN_MCP_OPENALEX_KEY` as a bearer
+  token if you set one. The requests to Crossref, OpenLibrary and `doi.org` carry your
+  `LIBGEN_MCP_UNPAYWALL_EMAIL` as a contact address when you configured one, and
+  none otherwise. `LIBGEN_MCP_ENRICH=false` turns every one of these lookups off.
 - **Anna's Archive and IPFS gateways (only when you download through them).**
   The `scidb` source resolves an article `download` by `doi` through Anna's
   Archive, and the `annas` source resolves a book `download` by `md5` there,
@@ -225,7 +256,7 @@ update checks, no phone-home.
 ## Credentials
 
 None are required. Library Genesis, its mirrors, and the keyless article and
-search sources used here need no account or token. Two credentials are optional:
+search sources used here need no account or token. Three credentials are optional:
 
 - An **Anna's Archive membership key** (`LIBGEN_MCP_ANNAS_KEY`, or supplied for a
   single call through your client's elicitation prompt), which unlocks that
@@ -234,6 +265,10 @@ search sources used here need no account or token. Two credentials are optional:
 - A **CORE API key** (`LIBGEN_MCP_CORE_KEY`, free registration at core.ac.uk),
   which enables the `core` open-access article source. It is sent only to
   `api.core.ac.uk`, and never with the file URL that CORE resolves to.
+- An **OpenAlex API key** (`LIBGEN_MCP_OPENALEX_KEY`, free from openalex.org),
+  which enables nothing on its own: it moves every OpenAlex request onto the
+  key's own daily allowance instead of the one OpenAlex grants your address. It
+  is sent only to `api.openalex.org`, as a bearer token and never in a URL.
 
 The Unpaywall contact email (`LIBGEN_MCP_UNPAYWALL_EMAIL`) is not a credential —
 it is an attribution address the Unpaywall API requires — but it is likewise
@@ -301,9 +336,9 @@ it to download, the 24-hour mirror cache, and any temporary `read` files not yet
 evicted. None of them records a query or an identifier of yours except the names
 of the files you chose to fetch. It shares data with no third parties beyond the
 destinations listed under [Data flows](#data-flows) — the Library Genesis
-mirrors, the extra searchers a `search` may reach, and the article and book
-download sources you invoke. With
-[OpenTelemetry](#opentelemetry-if-you-turn-it-on) enabled, a fourth destination
+mirrors, the extra searchers a `search` may reach, the metadata services
+`get_details` asks, and the article and book download sources you invoke. With
+[OpenTelemetry](#opentelemetry-if-you-turn-it-on) enabled, a fifth destination
 exists and it is one you named: the collector you configured, whose retention is
 yours to set.
 
@@ -332,7 +367,8 @@ rather than what was searched for. See
 ### What data leaves my machine, and who receives it?
 
 Only the identifiers you ask for, and only to the service being asked. A search
-sends your query text to a Library Genesis mirror; a download by DOI sends that
+sends your query text to a Library Genesis mirror; a citation you paste into
+`get_details` is sent to Crossref to find its DOI; a download by DOI sends that
 DOI to the article sources in the chain; a download by ISBN sends that ISBN to
 OAPEN and the Internet Archive. Every destination is listed under
 [Data flows](#data-flows). Nothing is sent to the maintainer, and there are no
@@ -340,8 +376,8 @@ background connections — every request is a direct consequence of a tool call.
 
 ### Does libgen-mcp store my credentials?
 
-No credentials are required, and none are persisted. The two optional ones — an
-Anna's Archive membership key and a free CORE API key — are read from the
+No credentials are required, and none are persisted. The three optional ones — an
+Anna's Archive membership key, a free CORE API key and a free OpenAlex API key — are read from the
 environment and sent only to the single service each belongs to. A credential
 supplied per call through your client's elicitation prompt is used for that one
 request and never written to disk.

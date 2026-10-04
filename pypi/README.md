@@ -1,6 +1,6 @@
 # libgen-mcp
 
-Books and papers for your AI assistant: a [Model Context Protocol](https://modelcontextprotocol.io) server that searches, cites, downloads and reads across Library Genesis and the open-access web — arXiv, Crossref, OpenLibrary, Unpaywall, Europe PMC, the RFC Editor, Zenodo and more. Four tools (`search`, `get_details`, `download`, `read`), no account, no API key.
+Books and papers for your AI assistant: a [Model Context Protocol](https://modelcontextprotocol.io) server that searches, cites, downloads and reads across Library Genesis and the open-access web — arXiv, OpenAlex, Crossref, OpenLibrary, Unpaywall, Europe PMC, the RFC Editor, Zenodo and more. Four tools (`search`, `get_details`, `download`, `read`), no account, no API key.
 
 This package wraps the native `libgen-mcp` binary (written in Go) in a platform wheel, the same distribution model `uv`, `ruff` and `ziglang` use: `pip` selects the wheel for your OS and architecture and installs the binary onto your `PATH`. No Go toolchain, no runtime downloads, no install scripts, and nothing runs at install time.
 

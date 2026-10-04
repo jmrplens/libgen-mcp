@@ -50,7 +50,8 @@ have.
   network fetch beyond the package itself.
 - **No credential.** Library Genesis needs none, and neither does any of the
   open-access providers the server falls back to. Keys exist for two optional
-  sources and are opt-in; see [Configuration](../configuration.md).
+  sources, for Anna's Archive member downloads and for a larger OpenAlex
+  allowance, and all of them are opt-in; see [Configuration](../configuration.md).
 - **No libc.** The binary is built `CGO_ENABLED=0` and **without**
   `-buildmode=pie`, so it names no dynamic loader at all: the same file runs on
   glibc and on musl, in a distroless image and on `scratch`. That is also why

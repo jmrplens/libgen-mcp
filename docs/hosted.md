@@ -80,6 +80,10 @@ whose machine the server is on.
   `source` enum `download` advertises. An Anna's Archive membership key can still be passed
   per call in `download`'s `annas_member` argument; it is used for that request and never
   stored, but it does travel to a machine you do not run.
+- **OpenAlex's daily allowance is shared by every caller.** OpenAlex meters an address, or a
+  key, not a person, so on the endpoint one allowance serves everyone using it. A search may
+  find the OpenAlex provider stepped aside to keep a reserve, and `get_details`' `related`
+  may report the allowance spent, sooner than a server of your own would.
 - **The version is whatever is deployed.** The endpoint follows this repository's releases
   and can lag a fresh tag; `/health` reports the `version` and `commit` serving. If you need
   a version that stays put, run it yourself.

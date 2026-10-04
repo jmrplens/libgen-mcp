@@ -10,7 +10,7 @@ datePublished: "2026-10-04"
 # Traducción de PRIVACY.md. El digest de abajo fija la versión del original de la
 # que procede: scripts/sync-privacy.mjs --check falla cuando el original cambia y
 # esta traducción se queda atrás.
-privacySource: "d2aa72551a5db409"
+privacySource: "ecec6b16650c57f9"
 head:
   - tag: script
     attrs:
@@ -38,7 +38,7 @@ head:
             "name": "¿Qué datos salen de mi máquina, y quién los recibe?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Solo los identificadores que pides, y solo al servicio al que se pregunta. Una búsqueda envía el texto de tu consulta a un mirror de Library Genesis; una descarga por DOI envía ese DOI a las fuentes de artículos de la cadena; una descarga por ISBN envía ese ISBN a OAPEN y al Internet Archive. Todos los destinos están listados en Flujos de datos. No se envía nada al mantenedor, y no hay conexiones en segundo plano: cada petición es consecuencia directa de una llamada a una herramienta."
+              "text": "Solo los identificadores que pides, y solo al servicio al que se pregunta. Una búsqueda envía el texto de tu consulta a un mirror de Library Genesis; una cita que pegas en get_details se envía a Crossref para encontrar su DOI; una descarga por DOI envía ese DOI a las fuentes de artículos de la cadena; una descarga por ISBN envía ese ISBN a OAPEN y al Internet Archive. Todos los destinos están listados en Flujos de datos. No se envía nada al mantenedor, y no hay conexiones en segundo plano: cada petición es consecuencia directa de una llamada a una herramienta."
             }
           },
           {
@@ -46,7 +46,7 @@ head:
             "name": "¿Almacena libgen-mcp mis credenciales?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "No se requiere ninguna credencial, y ninguna se persiste. Las dos opcionales — una clave de membresía de Anna's Archive y una clave gratuita de la API de CORE — se leen del entorno y se envían solo al único servicio al que corresponden. Una credencial proporcionada por llamada mediante la elicitación de tu cliente se usa para esa única petición y nunca se escribe en disco."
+              "text": "No se requiere ninguna credencial, y ninguna se persiste. Las tres opcionales — una clave de membresía de Anna's Archive, una clave gratuita de la API de CORE y una clave gratuita de la API de OpenAlex — se leen del entorno y se envían solo al único servicio al que corresponden. Una credencial proporcionada por llamada mediante la elicitación de tu cliente se usa para esa única petición y nunca se escribe en disco."
             }
           },
           {
@@ -154,7 +154,9 @@ destinos son:
 - **Proveedores de acceso abierto sin clave (solo cuando pides un artículo por
   DOI).** Antes de cualquier alternativa de shadow library, la cadena de
   `download` de artículos pregunta a los repositorios abiertos por una copia con
-  licencia libre: [Europe PMC](https://europepmc.org) (`ebi.ac.uk`, con el PDF
+  licencia libre: [OpenAlex](https://openalex.org) (`api.openalex.org`, y
+  después el host del repositorio o del editor que nombra su enlace al PDF de
+  acceso abierto), [Europe PMC](https://europepmc.org) (`ebi.ac.uk`, con el PDF
   en sí descargado de los PMC Article Datasets del NCBI en
   `pmc-oa-opendata.s3.amazonaws.com`), [bioRxiv/medRxiv](https://www.biorxiv.org)
   (`api.biorxiv.org`, más los hosts de contenido `biorxiv.org`/`medrxiv.org`), el
@@ -170,9 +172,15 @@ destinos son:
   [FAO Knowledge Repository](https://openknowledge.fao.org)
   (`openknowledge.fao.org`) para un DOI `10.4060` e
   Internet Archive Scholar / fatcat (`scholar.archive.org`, y después
-  `web.archive.org` para el fichero). Un DOI de monografía se ofrece además a
+  `web.archive.org` para el fichero). Tras ellos, el DOI va a
+  [Crossref](https://www.crossref.org) (`api.crossref.org`) en busca del enlace
+  al texto completo que el editor depositó allí, que se obtiene después del host
+  de ese mismo editor. Un DOI de monografía se ofrece además a
   [OAPEN](https://library.oapen.org) (`library.oapen.org`). Cada petición lleva
-  únicamente el DOI.
+  únicamente el DOI, con dos añadidos que controlas tú: una petición a OpenAlex
+  lleva tu `LIBGEN_MCP_OPENALEX_KEY` como bearer token cuando fijas una, y la
+  petición a Crossref lleva tu `LIBGEN_MCP_UNPAYWALL_EMAIL` como contacto de su
+  polite pool cuando fijas esa.
 - **Fuentes de libros de acceso abierto (solo cuando pides un libro por ISBN).**
   Un `download` por `isbn` envía **solo ese ISBN** a
   [OAPEN](https://library.oapen.org) (`library.oapen.org`) y a
@@ -195,7 +203,9 @@ destinos son:
 - **Los buscadores adicionales (cuando una búsqueda va más allá del catálogo).**
   Un `search` puede enviar **el texto de tu consulta** a Anna's Archive
   (`annas-archive.gl` y sus mirrors), [arXiv](https://arxiv.org),
-  [Crossref](https://www.crossref.org), [OpenLibrary](https://openlibrary.org),
+  [OpenAlex](https://openalex.org) (`api.openalex.org`),
+  [Europe PMC](https://europepmc.org) (su servicio de búsqueda en
+  `www.ebi.ac.uk`), [Crossref](https://www.crossref.org), [OpenLibrary](https://openlibrary.org),
   Project Gutenberg a través de la API de terceros
   [Gutendex](https://gutendex.com) (`gutendex.com`; los ficheros de libro a los
   que enlaza viven en `gutenberg.org`, que solo se contacta si obtienes uno),
@@ -206,14 +216,34 @@ destinos son:
   por defecto (`auto`) solo cuando el catálogo de Library Genesis no devuelve
   nada o falla, con `always` en cada búsqueda, y con `never` nunca. Cuando — y
   solo cuando — has configurado `LIBGEN_MCP_UNPAYWALL_EMAIL`, la petición a
-  Crossref lleva esa misma dirección como contacto de su polite pool, y las
-  peticiones a PubMed la llevan como la dirección de contacto que pide la
+  Crossref lleva esa misma dirección como contacto de su polite pool, la petición
+  a OpenLibrary la lleva en su User-Agent como pide la etiqueta de OpenLibrary, y
+  las peticiones a PubMed la llevan como la dirección de contacto que pide la
   etiqueta de uso de NCBI; sin dirección configurada, no se envía ninguna ni se
-  inventa ninguna. Un resultado de ERIC para un documento que ERIC aloja lleva
+  inventa ninguna. La petición a OpenAlex lleva `LIBGEN_MCP_OPENALEX_KEY` como
+  bearer token si fijas una, y nada parecido si no. Una búsqueda acotada con
+  `year_from` o `year_to` envía esos años junto con la consulta. Un resultado de ERIC para un documento que ERIC aloja lleva
   una URL de texto completo en `files.eric.ed.gov`; ese host se nombra en el
   resultado pero **este servidor nunca lo contacta** — no se obtiene nada de él
   salvo que sigas el enlace tú mismo. `get_details` también consulta a Anna's
   Archive, enviando **solo el md5**, cuando el catálogo no tiene registro de él.
+- **Servicios de metadatos (cuando `get_details` busca un registro).** Más allá
+  del catálogo de Library Genesis, `get_details` envía solo lo que identifica la
+  obra, y solo al servicio cuya respuesta necesita. Un registro que lleva DOI ve
+  ese DOI comprobado contra [Crossref](https://www.crossref.org)
+  (`api.crossref.org`), al que también se pregunta por un DOI que el catálogo no
+  tiene. Una referencia pegada en `citation` se le envía **tal como la pegaste**,
+  para encontrar el DOI que nombra. `enrich` pregunta a Crossref por DOI y a
+  [OpenLibrary](https://openlibrary.org) (`openlibrary.org`) por ISBN. Un DOI que
+  ni el catálogo ni Crossref conocen, y cada estilo de `cite_as` para un registro
+  cuyo DOI quedó confirmado, se piden al resolvedor de DOI (`doi.org`), que
+  reenvía la petición a la agencia que registró ese DOI: `api.crossref.org` para
+  Crossref, `data.crosscite.org` para DataCite, `data.medra.org` para mEDRA.
+  `related` pregunta a [OpenAlex](https://openalex.org) (`api.openalex.org`) por
+  DOI, con tu `LIBGEN_MCP_OPENALEX_KEY` como bearer token si fijas una. Las
+  peticiones a Crossref, a OpenLibrary y a `doi.org` llevan tu `LIBGEN_MCP_UNPAYWALL_EMAIL` como
+  dirección de contacto cuando configuraste una, y ninguna en otro caso.
+  `LIBGEN_MCP_ENRICH=false` apaga todas estas consultas.
 - **Anna's Archive y pasarelas IPFS (solo cuando descargas a través de ellas).**
   La fuente `scidb` resuelve un `download` de artículo por `doi` a través de
   Anna's Archive, y la fuente `annas` resuelve un `download` de libro por `md5`
@@ -234,7 +264,7 @@ de actualizaciones, ni llamadas a casa.
 ## Credenciales
 
 No se requiere ninguna. Library Genesis, sus mirrors y las fuentes de artículos y
-búsqueda sin clave que se usan aquí no necesitan cuenta ni token. Dos
+búsqueda sin clave que se usan aquí no necesitan cuenta ni token. Tres
 credenciales son opcionales:
 
 - Una **clave de socio de Anna's Archive** (`LIBGEN_MCP_ANNAS_KEY`, o
@@ -246,6 +276,11 @@ credenciales son opcionales:
   core.ac.uk), que habilita la fuente de artículos de acceso abierto `core`. Se
   envía solo a `api.core.ac.uk`, y nunca junto a la URL de fichero que CORE
   resuelve.
+- Una **clave de API de OpenAlex** (`LIBGEN_MCP_OPENALEX_KEY`, gratuita en
+  openalex.org), que por sí sola no habilita nada: lleva cada petición a OpenAlex
+  a la cuota diaria propia de la clave en lugar de la que OpenAlex concede a tu
+  dirección. Se envía solo a `api.openalex.org`, como bearer token y nunca en una
+  URL.
 
 El email de contacto de Unpaywall (`LIBGEN_MCP_UNPAYWALL_EMAIL`) no es una
 credencial — es una dirección de atribución que la API de Unpaywall exige — pero
@@ -319,9 +354,10 @@ pediste descargar, la caché de mirrors de 24 horas y los ficheros temporales de
 identificador tuyo, más allá de los nombres de los ficheros que elegiste obtener.
 No comparte datos con terceros más allá de los destinos listados en [Flujos de
 datos](#flujos-de-datos) — los mirrors de Library Genesis, los buscadores
-adicionales a los que puede llegar un `search`, y las fuentes de descarga de
-artículos y libros que invocas. Con
-[OpenTelemetry](#opentelemetry-si-lo-activas) activado existe un cuarto destino, y
+adicionales a los que puede llegar un `search`, los servicios de metadatos a los
+que pregunta `get_details`, y las fuentes de descarga de artículos y libros que
+invocas. Con
+[OpenTelemetry](#opentelemetry-si-lo-activas) activado existe un quinto destino, y
 es uno que nombraste tú: el colector que configuraste, cuya retención te toca fijar
 a ti.
 
@@ -351,7 +387,8 @@ llevan describe operaciones y no lo que se buscó. Consulta
 ### ¿Qué datos salen de mi máquina, y quién los recibe?
 
 Solo los identificadores que pides, y solo al servicio al que se pregunta. Una
-búsqueda envía el texto de tu consulta a un mirror de Library Genesis; una
+búsqueda envía el texto de tu consulta a un mirror de Library Genesis; una cita
+que pegas en `get_details` se envía a Crossref para encontrar su DOI; una
 descarga por DOI envía ese DOI a las fuentes de artículos de la cadena; una
 descarga por ISBN envía ese ISBN a OAPEN y al Internet Archive. Todos los
 destinos están listados en [Flujos de datos](#flujos-de-datos). No se envía nada
@@ -360,9 +397,9 @@ consecuencia directa de una llamada a una herramienta.
 
 ### ¿Almacena libgen-mcp mis credenciales?
 
-No se requiere ninguna credencial, y ninguna se persiste. Las dos opcionales —
-una clave de membresía de Anna's Archive y una clave gratuita de la API de CORE
-— se leen del entorno y se envían solo al único servicio al que corresponden.
+No se requiere ninguna credencial, y ninguna se persiste. Las tres opcionales —
+una clave de membresía de Anna's Archive, una clave gratuita de la API de CORE y
+una clave gratuita de la API de OpenAlex — se leen del entorno y se envían solo al único servicio al que corresponden.
 Una credencial proporcionada por llamada mediante la elicitación de tu cliente
 se usa para esa única petición y nunca se escribe en disco.
 
