@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -114,13 +115,21 @@ var (
 )
 
 // validate refuses a release pin that would write an identifier no scanner
-// computes.
+// computes, or one that pins nothing.
 func (r vexRelease) validate() error {
 	if !releaseVersion.MatchString(r.version) {
 		return fmt.Errorf("-vex-release %q is not a version without its leading v, e.g. 2.2.0", r.version)
 	}
 	if !indexDigest.MatchString(r.indexDigest) {
 		return fmt.Errorf("-vex-index-digest %q is not a sha256 digest", r.indexDigest)
+	}
+	return nil
+}
+
+// validVersion refuses a committed document's version that is not one.
+func validVersion(version string) error {
+	if !releaseVersion.MatchString(version) {
+		return fmt.Errorf("-vex-version %q is not a version without its leading v, e.g. 2.2.0", version)
 	}
 	return nil
 }
@@ -149,37 +158,33 @@ func dockerPURL(tag, registry string) string {
 	return purl
 }
 
-// vexProducts are the identifiers a statement is made about.
+// vexProducts are the identifiers a statement is made about, every one of
+// them pinned to one version, so a document can never suppress the finding
+// on a release it was not checked against.
 //
-// Without a release they carry no version, which is what the committed
-// document says: every build of the server, under every name a scanner gives
-// it. A release's copy pins each one to that release, and spells the module
-// version both ways, because Trivy reads it from the version the build stamps
-// (2.2.0) and a reader of the module path writes it with the v.
-func vexProducts(rel *vexRelease) []string {
-	if rel == nil {
-		return []string{
-			vexModulePURL,
-			ociPURL(vexGHCRRepo, ""),
-			ociPURL("index.docker.io/"+vexDockerHubRepo, ""),
-			dockerPURL("", ""),
-			dockerPURL("", "ghcr.io"),
-		}
-	}
-	return []string{
+// The module version is spelled both ways, because Trivy reads it from the
+// version the build stamps (2.2.0) and a reader of the module path writes it
+// with the v. The image's OCI purls are written only with the index digest,
+// since Trivy reads an OCI purl with no digest as every image of the
+// repository, and the committed document, which describes the version in
+// VERSION before its image exists, has none.
+func vexProducts(rel vexRelease) []string {
+	products := []string{
 		vexModulePURL + "@" + rel.version,
 		vexModulePURL + "@v" + rel.version,
-		ociPURL(vexGHCRRepo, rel.indexDigest),
-		ociPURL("index.docker.io/"+vexDockerHubRepo, rel.indexDigest),
-		dockerPURL(rel.version, ""),
-		dockerPURL(rel.version, "ghcr.io"),
 	}
+	if rel.indexDigest != "" {
+		products = append(products,
+			ociPURL(vexGHCRRepo, rel.indexDigest),
+			ociPURL("index.docker.io/"+vexDockerHubRepo, rel.indexDigest))
+	}
+	return append(products, dockerPURL(rel.version, ""), dockerPURL(rel.version, "ghcr.io"))
 }
 
 // vexStatements are the statements the table implies: one per not-linked
 // declaration, in key order. A fix-not-yet-adoptable declaration implies
 // none, since the code it excuses is in the binary.
-func vexStatements(declared map[string]declaration, rel *vexRelease) []vexStatement {
+func vexStatements(declared map[string]declaration, rel vexRelease) []vexStatement {
 	keys := make([]string, 0, len(declared))
 	for key, entry := range declared {
 		if entry.category == categoryNotLinked {
@@ -230,11 +235,12 @@ func statementKeys(s vexStatement) []string {
 	return keys
 }
 
-// vexDrift lists every way the committed document disagrees with the table,
-// in a stable order: a statement no not-linked declaration stands behind, a
-// not-linked declaration with no statement, and a statement whose text is not
-// the one the table writes.
-func vexDrift(doc vexDocument, declared map[string]declaration) []string {
+// vexDrift lists every way the committed document disagrees with the table
+// and the version it describes, in a stable order: a statement no not-linked
+// declaration stands behind, a not-linked declaration with no statement, and a
+// statement whose text or products are not the ones the table writes for that
+// version.
+func vexDrift(doc vexDocument, declared map[string]declaration, version string) []string {
 	var drift []string
 	if doc.Context != vexContext || doc.ID != vexCommittedID || doc.Author != vexAuthor || doc.Tooling != vexTooling {
 		drift = append(drift, "the document header (@context, @id, author, tooling) is not the one this command writes")
@@ -244,7 +250,7 @@ func vexDrift(doc vexDocument, declared map[string]declaration) []string {
 	}
 
 	want := map[string]vexStatement{}
-	for _, s := range vexStatements(declared, nil) {
+	for _, s := range vexStatements(declared, vexRelease{version: version}) {
 		want[declarationKey(s.Vulnerability.Name, strings.TrimPrefix(s.Products[0].Subcomponents[0].ID, golangPURLPrefix))] = s
 	}
 	seen := map[string]bool{}
@@ -279,7 +285,7 @@ func judgeStatement(s vexStatement, want map[string]vexStatement, declared map[s
 	}
 	seen[key] = true
 	if !jsonEqual(s, expected) {
-		return []string{fmt.Sprintf("the statement on %q is not the one the declaration writes (run make gen-vex)", key)}
+		return []string{fmt.Sprintf("the statement on %q is not the one the declaration writes for this version (run make gen-vex)", key)}
 	}
 	return nil
 }
@@ -327,11 +333,11 @@ func encodeVEX(doc vexDocument) ([]byte, error) {
 // test can fix it.
 var now = func() time.Time { return time.Now().UTC().Truncate(time.Second) }
 
-// committedVEX is the document the table implies, keeping the timestamp and
-// version of the one at path while its statements are unchanged, and
-// advancing both when they are not: an OpenVEX version is a revision of the
-// statements, not of the file.
-func committedVEX(path string, declared map[string]declaration) (vexDocument, error) {
+// committedVEX is the document the table implies for the version in VERSION,
+// keeping the timestamp and version of the one at path while its statements
+// are unchanged, and advancing both when they are not: an OpenVEX version is a
+// revision of the statements, not of the file.
+func committedVEX(path string, declared map[string]declaration, version string) (vexDocument, error) {
 	doc := vexDocument{
 		Context:    vexContext,
 		ID:         vexCommittedID,
@@ -339,7 +345,7 @@ func committedVEX(path string, declared map[string]declaration) (vexDocument, er
 		Timestamp:  now().Format(time.RFC3339),
 		Version:    1,
 		Tooling:    vexTooling,
-		Statements: vexStatements(declared, nil),
+		Statements: vexStatements(declared, vexRelease{version: version}),
 	}
 	old, err := readVEX(path)
 	switch {
@@ -365,22 +371,24 @@ func releaseVEX(declared map[string]declaration, rel vexRelease) vexDocument {
 		Timestamp:  now().Format(time.RFC3339),
 		Version:    1,
 		Tooling:    vexTooling,
-		Statements: vexStatements(declared, &rel),
+		Statements: vexStatements(declared, rel),
 	}
 }
 
-// vexConfig is one VEX run: the committed document to check or rewrite, and
-// the release copy to write, if any.
+// vexConfig is one VEX run: the committed document to check or rewrite and
+// the version it describes, and the release copy to write, if any, with the
+// audit that has to pass before it is.
 type vexConfig struct {
-	check, write, out string
-	release           vexRelease
-	declared          map[string]declaration
+	check, write, out, version string
+	release                    vexRelease
+	declared                   map[string]declaration
+	audit                      auditConfig
 }
 
 // requested reports whether any VEX flag was given, which turns the run into a
-// VEX run and away from building and scanning.
+// VEX run.
 func (c vexConfig) requested() bool {
-	return c.check != "" || c.write != "" || c.out != "" || c.release != (vexRelease{})
+	return c.check != "" || c.write != "" || c.out != "" || c.version != "" || c.release != (vexRelease{})
 }
 
 // validate refuses a combination of flags that says two things at once, or
@@ -388,14 +396,16 @@ func (c vexConfig) requested() bool {
 func (c vexConfig) validate() error {
 	switch {
 	case c.write != "" && (c.check != "" || c.out != "" || c.release != (vexRelease{})):
-		return errors.New("-vex-write rewrites the committed document and takes no other -vex flag")
-	case c.write != "":
-		return nil
-	case c.check == "":
-		return errors.New("-vex-out, -vex-release and -vex-index-digest need -vex-check: a release copy is written only from a committed document that matches the table")
+		return errors.New("-vex-write rewrites the committed document and takes no -vex flag but -vex-version")
+	case c.write == "" && c.check == "":
+		return errors.New("-vex-version, -vex-out, -vex-release and -vex-index-digest need -vex-check: a release copy is written only from a committed document that matches the table")
 	case c.out == "" && c.release != (vexRelease{}):
 		return errors.New("-vex-release and -vex-index-digest pin the copy -vex-out writes, and there is no -vex-out")
-	case c.out != "":
+	}
+	if err := validVersion(c.version); err != nil {
+		return err
+	}
+	if c.out != "" {
 		return c.release.validate()
 	}
 	return nil
@@ -403,8 +413,13 @@ func (c vexConfig) validate() error {
 
 // runVEX checks, rewrites or stamps a document and returns the exit code: 0
 // when the committed copy matches the table (and the release copy, if asked
-// for, is written), 1 on drift, 2 when the run could not be made.
-func runVEX(cfg vexConfig, stdout, stderr io.Writer) int {
+// for, is written), 1 on drift or on an audit that did not pass, 2 when the
+// run could not be made.
+//
+// A release copy is written only after the whole gate passed on the release
+// targets, the not-linked check included: the copy is what gets signed, and a
+// statement is only as true as the measurement made for the bytes it names.
+func runVEX(ctx context.Context, cfg vexConfig, stdout, stderr io.Writer) int {
 	if cfg.write != "" {
 		return writeCommittedVEX(cfg, stdout, stderr)
 	}
@@ -413,23 +428,28 @@ func runVEX(cfg vexConfig, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "%s: %v\n", toolName, err)
 		return 2
 	}
-	if drift := vexDrift(doc, cfg.declared); len(drift) != 0 {
+	if drift := vexDrift(doc, cfg.declared, cfg.version); len(drift) != 0 {
 		for _, problem := range drift {
 			fmt.Fprintf(stdout, "VEX DRIFT %s\n", problem)
 		}
-		fmt.Fprintf(stdout, "%s: FAILED: %s disagrees with the declarations in %d ways (make gen-vex rewrites it)\n", toolName, cfg.check, len(drift))
+		fmt.Fprintf(stdout, "%s: FAILED: %s disagrees with the declarations for %s in %d ways (make gen-vex rewrites it)\n", toolName, cfg.check, cfg.version, len(drift))
 		return 1
 	}
-	fmt.Fprintf(stdout, "%s: %s states exactly the %d not-linked declarations\n", toolName, cfg.check, len(doc.Statements))
+	fmt.Fprintf(stdout, "%s: %s states exactly the %d not-linked declarations, for %s\n", toolName, cfg.check, len(doc.Statements), cfg.version)
 	if cfg.out == "" {
 		return 0
+	}
+	cfg.audit.declared = cfg.declared
+	if code := run(ctx, cfg.audit, stdout, stderr); code != 0 {
+		fmt.Fprintf(stdout, "%s: wrote no statement: the gate did not pass on the release targets\n", toolName)
+		return code
 	}
 	return writeVEX(cfg.out, releaseVEX(cfg.declared, cfg.release), stdout, stderr)
 }
 
 // writeCommittedVEX rewrites the committed document from the table.
 func writeCommittedVEX(cfg vexConfig, stdout, stderr io.Writer) int {
-	doc, err := committedVEX(cfg.write, cfg.declared)
+	doc, err := committedVEX(cfg.write, cfg.declared, cfg.version)
 	if err != nil {
 		fmt.Fprintf(stderr, "%s: %v\n", toolName, err)
 		return 2

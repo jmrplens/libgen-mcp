@@ -78,23 +78,41 @@ fixed removes the statement in the same change, and no statement exists without
 the measured declaration behind it. A `fix-not-yet-adoptable` declaration writes
 no statement: the code it excuses is in the binary.
 
-The products are the identifiers the scanners compute, measured rather than
-guessed. Trivy matches the main module's purl
-(`pkg:golang/github.com/jmrplens/libgen-mcp/v2`, its version the one the build
-stamps, `2.2.0` without the `v`) and the image's
-`pkg:oci/libgen-mcp?repository_url=…`, whose Docker Hub form is
-`index.docker.io/jmrplens/libgen-mcp`. Docker Scout documents
-`pkg:docker/jmrplens/libgen-mcp`. Every product names `pkg:golang/<module>` as
-its subcomponent.
+**The measurement is remade on every run, not trusted.** The scan reads modules,
+so on its own a `not-linked` declaration would be a claim made once by hand. The
+gate therefore reads the packages each such advisory names (its
+`ecosystem_specific.imports`, from the record the scan matched) and fails,
+reporting `LINKED`, if any of them appears in `go list -deps` of the main package
+of any release target, built with that target's environment and flags. An
+advisory that names no package covers the whole module, which the binaries link,
+so it is reported `UNCHECKED` and fails too. The declaration's reason, which
+becomes the statement's `impact_statement`, says the same: the statement is
+false as soon as an `openpgp` package is linked.
+
+**Every product is pinned to a version.** The products are the identifiers the
+scanners compute, measured rather than guessed. Trivy matches the main module's
+purl (`pkg:golang/github.com/jmrplens/libgen-mcp/v2@2.2.0`, the version the build
+stamps, without the `v`; the document also writes the `@v2.2.0` spelling) and
+the image's `pkg:oci/libgen-mcp@<index digest>?repository_url=…`, whose Docker
+Hub form is `index.docker.io/jmrplens/libgen-mcp`. Docker Scout documents
+`pkg:docker/jmrplens/libgen-mcp@<tag>`. Every product names
+`pkg:golang/<module>` as its subcomponent. None is written without a version: a
+product with none matches every release, including ones the gate never saw,
+which measured with Trivy is exactly what happens. The committed document names
+the version in `VERSION`, so `check-vex` fails a version bump until
+`make gen-vex` has run, and it carries no OCI purl, because before the image is
+pushed there is no digest to pin it to.
 
 Three jobs carry it through a release:
 
-- **`vex`** runs `make vex-release` after `docker`: the committed document is
-  checked against the table again, and a copy is written with every product
-  pinned to this version and to the index digest `docker` pushed. It compiles
-  the gate's module, so it holds `contents: read` and nothing else, and it runs
-  in a rehearsal against the rehearsed digest. Its `statements` output is the
-  number of statements; with none, nothing below runs.
+- **`vex`** runs `make vex-release` after `binary-vulns` and `docker`. That
+  checks the committed document against the table again, then runs the whole
+  binary-vuln gate, the linkage check included, on this tree's six targets, and
+  writes nothing unless it passes. The copy it writes pins every product to this
+  version and to the index digest `docker` pushed. It compiles the gate's module,
+  so it holds `contents: read` and nothing else, and it runs in a rehearsal
+  against the rehearsed digest. Its `statements` output is the number of
+  statements; with none, nothing below runs.
 - **`sign-attest`** attaches the copy with `actions/attest` to the same six
   subjects as the SBOM (index and both platform manifests, on both registries),
   predicate type `https://openvex.dev/ns/v0.2.0`, `push-to-registry: true`.
@@ -106,15 +124,20 @@ Three jobs carry it through a release:
 **`verify-published` reads it back the way a scanner does.**
 `.github/scripts/verify-vex-attestation.sh` runs `gh attestation verify
 --bundle-from-oci` against the index on each registry, requiring the release
-workflow at this tag as the signer, the index digest as the subject and the
-release asset as the predicate. An attestation that reached GitHub's store and
-not the registry is one no scanner sees, and fails there.
+workflow at this tag as the signer and the index digest as the subject, and
+at least one such bundle carrying exactly the release asset. Other OpenVEX
+bundles on the same digest are reported and not failed on: an attestation cannot
+be withdrawn, so an image attached again after the declarations changed keeps
+the earlier one, and requiring every bundle to match would fail forever after.
+An attestation that reached GitHub's store and not the registry is one no
+scanner sees, and fails there.
 
 What was measured, on 2026-10-04 against the 2.2.0 image (which carries no
 statement): Trivy 0.75 reports GO-2026-5932 at `usr/local/bin/libgen-mcp` and
-nothing else. With the committed document passed as `--vex`, it lists the
-finding as suppressed, `not_affected`, on both registries' images and on the
-bare binary (`trivy rootfs`). With a Sigstore bundle of the release copy attached
+nothing else. With the committed document (naming 2.2.0) passed as `--vex`, it
+lists the finding as suppressed, `not_affected`, on both registries' images and
+on the bare binary (`trivy rootfs`), and still reports it on the 2.1.0 image,
+which the document does not name. With a Sigstore bundle of the release copy attached
 as a referrer to a copy of the 2.2.0 index in a local registry, `--vex oci`
 does the same, citing "VEX attestation in OCI registry". Grype 0.120 does not
 report the advisory against the binary at all. Docker Scout requires a Docker
@@ -137,15 +160,19 @@ gh workflow run vex-attach.yml --ref main -f tag=v2.2.0 -f dry_run=false  # atta
 
 Its jobs keep the release's shape. `resolve` reads the index the tag points at
 on both registries, refuses them if they differ, and requires the release
-workflow's own cosign signature for that tag on it. `gate` runs the module-grain
-gate on the tagged tree's six targets with `main`'s declarations and today's
-database, then `make vex-release` for that version and digest. Both hold
-`contents: read` and no secret. `attest`, the only job with `id-token`, runs no
-build: it writes the six attestations and repairs the ghcr.io referrers
-fallback tags as `sign-attest` does. `verify` reads the statement back from both
-registries with the same script, requiring `vex-attach.yml` on `main` as the
-signer. Nothing is uploaded to the GitHub release, because a published release
-is immutable; the committed document is the file to read for such a release.
+workflow's own cosign signature for that tag on it. It also refuses an attach
+dispatched from any ref but `main`, which would otherwise skip `attest` and
+finish green. `gate` runs `make vex-release` with `VEX_DIR` set to the tagged
+checkout: the whole gate, the linkage check included, on the tagged tree's six
+targets with `main`'s declarations and today's database, and the copy for that
+version and digest only if it passes. Both hold `contents: read` and no secret.
+`attest`, the only job with `id-token`, runs no build: it writes the six
+attestations and repairs the ghcr.io referrers fallback tags as `sign-attest`
+does. `verify` reads the statement back from both registries with the same
+script, requiring `vex-attach.yml` on `main` as the signer. Nothing is uploaded
+to the GitHub release, because a published release is immutable. The registry
+attestation is the copy of the statement for such a release, since the committed
+document names only the version in `VERSION`.
 
 ## What the GoReleaser job checks before anything leaves the draft
 

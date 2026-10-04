@@ -148,15 +148,17 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: ${{ env.GO_VERSION }}
-      - name: The tagged release's binaries carry no undeclared advisory
-        run: go -C cmd/audit_binary_vulns run . -dir "${GITHUB_WORKSPACE}/tagged" -config "${GITHUB_WORKSPACE}/tagged/.goreleaser.yml"
-      - name: Write the OpenVEX document for the tag
+      # One command for both halves: `make vex-release` runs the whole gate on
+      # the tagged tree (every not-linked claim remade against `go list -deps`
+      # of each of its release targets) and writes nothing unless it passes.
+      - name: Gate the tagged release, then write its OpenVEX document
         env:
-          VERSION: ${{ needs.resolve.outputs.version }}
+          TAG_VERSION: ${{ needs.resolve.outputs.version }}
           INDEX_DIGEST: ${{ needs.resolve.outputs.index }}
         run: |
           set -euo pipefail
-          make vex-release VEX_VERSION="${VERSION}" VEX_DIGEST="${INDEX_DIGEST}" VEX_OUT="${RUNNER_TEMP}/libgen-mcp.openvex.json"
+          make vex-release VEX_VERSION="${TAG_VERSION}" VEX_DIGEST="${INDEX_DIGEST}" \
+            VEX_DIR="${GITHUB_WORKSPACE}/tagged" VEX_OUT="${RUNNER_TEMP}/libgen-mcp.openvex.json"
           statements=$(jq '.statements | length' "${RUNNER_TEMP}/libgen-mcp.openvex.json")
           if [ "${statements}" -lt 1 ]; then
             echo "::error::the declarations make no not-linked statement, so there is nothing to attach"

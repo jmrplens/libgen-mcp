@@ -1418,20 +1418,27 @@ jobs:
   # it to the image in both registries, which is where Trivy's `--vex oci`
   # looks, and the release job publishes it as an asset.
   #
+  # `make vex-release` writes nothing until the whole binary-vuln gate has
+  # passed on this tree's six release targets, and that gate remakes every
+  # not-linked claim: none of the packages the advisory names may appear in
+  # `go list -deps` of any target. The statement that gets signed is therefore
+  # one measured for these bytes, not one written once by hand. `binary-vulns`
+  # is named in `needs` as well, so the two gates cannot be reordered apart.
+  #
   # A job of its own, holding nothing but `contents: read`, because writing it
   # means compiling and running the gate's module, and the signing job runs no
   # build of anything. It runs in a rehearsal too, against the rehearsed index
-  # digest: the generation and its check are the part that can rot, and only
-  # attaching it is irreversible.
+  # digest: the gate, the generation and its check are the part that can rot,
+  # and only attaching it is irreversible.
   #
   # `statements` is how many statements the document makes. With none there is
   # nothing to tell a scanner, so nothing is attested or published, rather than
   # an empty document that would read as a claim.
   vex:
     name: OpenVEX document
-    needs: [preflight, docker]
+    needs: [preflight, binary-vulns, docker]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     env:
       RELEASE_TAG: ${{ needs.preflight.outputs.release_tag }}
       INDEX_DIGEST: ${{ needs.docker.outputs.digest }}
@@ -1446,7 +1453,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: ${{ env.GO_VERSION }}
-      - name: Write the release's OpenVEX document
+      - name: Gate the release targets, then write the release's OpenVEX document
         id: vex
         run: |
           set -euo pipefail

@@ -52,25 +52,33 @@ gh attestation verify "oci://${ref}" \
 	--format json >"$out"
 
 digest="${ref##*@sha256:}"
-# Every verified bundle must name this digest and carry the expected
-# predicate. A re-run of the attesting job can leave two identical bundles,
-# which is fine; one that says something else is not.
+# At least one verified bundle must name this digest and carry exactly the
+# expected document. Others may legitimately exist beside it: a re-run leaves
+# an identical one, and an image attached again after the declarations
+# changed keeps the earlier statement, since an attestation cannot be
+# withdrawn. Those are reported, not failed on, because requiring every bundle
+# to match would make the check fail forever after a second attach.
 count=$(jq 'length' "$out")
 if [ "${count:-0}" -lt 1 ]; then
 	echo "::error::no OpenVEX attestation on ${ref}" >&2
 	exit 1
 fi
 want="$(jq -S . "$expected")"
+matches=0
 for i in $(seq 0 $((count - 1))); do
 	if ! jq -e --arg d "$digest" ".[$i].verificationResult.statement.subject | any(.digest.sha256 == \$d)" "$out" >/dev/null; then
-		echo "::error::the OpenVEX attestation $i on ${ref} does not name that digest as its subject" >&2
-		exit 1
+		echo "::warning::OpenVEX attestation $i on ${ref} does not name that digest as its subject"
+		continue
 	fi
 	got="$(jq -S ".[$i].verificationResult.statement.predicate" "$out")"
-	if [ "$got" != "$want" ]; then
-		echo "::error::the OpenVEX attestation $i on ${ref} is not ${expected}" >&2
-		diff <(printf '%s\n' "$want") <(printf '%s\n' "$got") >&2 || true
-		exit 1
+	if [ "$got" = "$want" ]; then
+		matches=$((matches + 1))
+		continue
 	fi
+	echo "::notice::OpenVEX attestation $i on ${ref} is another document (@id $(jq -r ".[$i].verificationResult.statement.predicate[\"@id\"]" "$out"), timestamp $(jq -r ".[$i].verificationResult.statement.predicate.timestamp" "$out"))"
 done
-echo "${ref}: ${count} OpenVEX attestation(s), each verified against ${workflow} at ${source_ref} and equal to ${expected}"
+if [ "$matches" -lt 1 ]; then
+	echo "::error::none of the ${count} OpenVEX attestation(s) on ${ref} is ${expected}" >&2
+	exit 1
+fi
+echo "${ref}: ${matches} of ${count} OpenVEX attestation(s) verified against ${workflow} at ${source_ref} and equal to ${expected}"

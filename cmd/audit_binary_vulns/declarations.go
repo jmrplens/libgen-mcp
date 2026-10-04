@@ -20,9 +20,9 @@ import (
 // v1.83.2 instead of keeping v1.84.0, which no fixed release covers.
 const (
 	// categoryNotLinked accepts an advisory against a module the binaries
-	// link when none of the packages or symbols it names is linked: what a
-	// scanner reads is the module, and what is vulnerable is not in the
-	// binary.
+	// link when none of the packages it names is linked: what a scanner reads
+	// is the module, and what is vulnerable is not in the binary. The claim is
+	// not trusted as written: checkNotLinked remakes it on every run.
 	categoryNotLinked = "not-linked"
 
 	// categoryFixNotYetAdoptable accepts an advisory whose fix exists in a
@@ -37,7 +37,7 @@ const (
 // A declaration naming anything else is reported rather than trusted, since a
 // category nobody defined is an excuse nobody reviewed.
 var categories = map[string]string{
-	categoryNotLinked:          "the binaries link the module and none of the packages or symbols the advisory names, which a symbol-level scan of an unstripped build shows; the reason names the packages",
+	categoryNotLinked:          "the binaries link the module and none of the packages the advisory names, which every run checks against go list -deps of each release target; the reason names the packages and what would make it false",
 	categoryFixNotYetAdoptable: "a fixed version exists and cannot be taken yet; the reason names the version and where its adoption is tracked",
 }
 
@@ -60,10 +60,12 @@ type declaration struct {
 var acceptedAdvisories = map[string]declaration{
 	"GO-2026-5932 golang.org/x/crypto": {
 		category: categoryNotLinked,
-		reason: "the advisory names x/crypto's openpgp packages, and the one package of the module the binaries link is " +
-			"golang.org/x/crypto/ocsp, which github.com/pdfcpu/pdfcpu/pkg/pdfcpu/sign imports and internal/extract " +
-			"reaches through pdfcpu (go list -deps ./cmd/server, on every release target); the advisory has no " +
-			"fixed version, so this goes stale only when pdfcpu stops importing ocsp",
+		reason: "the advisory names x/crypto's openpgp packages (golang.org/x/crypto/openpgp and its subpackages), and the " +
+			"one package of the module the binaries link is golang.org/x/crypto/ocsp, which " +
+			"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/sign imports and internal/extract reaches through pdfcpu. This is false " +
+			"as soon as any openpgp package is linked into a release binary, which the release gate checks on every " +
+			"run against go list -deps of each release target and fails on. With no fixed version, the declaration " +
+			"becomes unnecessary only when pdfcpu stops importing ocsp",
 	},
 }
 

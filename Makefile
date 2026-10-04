@@ -360,24 +360,30 @@ check-binary-vulns: ## Fail when a release binary carries an undeclared advisory
 	go -C $(VULNGATE_DIR) run . -dir $(CURDIR) -config $(CURDIR)/.goreleaser.yml $(if $(BINARIES),-binaries '$(CURDIR)/$(BINARIES)')
 
 # The OpenVEX document scanners read: one not_affected statement per not-linked
-# declaration in the table above, generated from it and never edited by hand.
-# check-vex holds the committed copy to the table in both directions (offline,
-# no build), so a declaration removed without its statement fails, and so does a
-# statement with no declaration behind it. vex-release writes the copy a release
-# attaches to its image and publishes as an asset, pinned to VEX_VERSION and the
-# image index VEX_DIGEST, and only after the same check passed.
+# declaration in the table above, every product pinned to the version in
+# VERSION, generated from the table and never edited by hand. check-vex holds the
+# committed copy to the table and to VERSION in both directions (offline, no
+# build), so a declaration removed without its statement fails, a statement with
+# no declaration behind it fails, and a version bump fails until gen-vex has run.
+# vex-release writes the copy a release attaches to its image and publishes as an
+# asset, pinned to VEX_VERSION and the image index VEX_DIGEST: it runs the whole
+# binary-vuln gate on VEX_DIR first (the not-linked check included) and writes
+# nothing unless that passes, so it needs the network. VEX_DIR is the tree the
+# release is built from, which vex-attach sets to the tagged checkout.
 VEX_DOC := .vex/libgen-mcp.openvex.json
 VEX_OUT ?= dist/libgen-mcp.openvex.json
+VEX_DIR ?= $(CURDIR)
 
-gen-vex: ## Rewrite .vex/libgen-mcp.openvex.json from the binary-vuln declarations
-	go -C $(VULNGATE_DIR) run . -vex-write $(CURDIR)/$(VEX_DOC)
+gen-vex: ## Rewrite .vex/libgen-mcp.openvex.json from the binary-vuln declarations and VERSION
+	go -C $(VULNGATE_DIR) run . -vex-write $(CURDIR)/$(VEX_DOC) -vex-version $(VERSION)
 
-check-vex: ## Fail when .vex/libgen-mcp.openvex.json disagrees with the binary-vuln declarations
-	go -C $(VULNGATE_DIR) run . -vex-check $(CURDIR)/$(VEX_DOC)
+check-vex: ## Fail when .vex/libgen-mcp.openvex.json disagrees with the binary-vuln declarations or VERSION
+	go -C $(VULNGATE_DIR) run . -vex-check $(CURDIR)/$(VEX_DOC) -vex-version $(VERSION)
 
-vex-release: ## Write the release's OpenVEX copy (VEX_VERSION=2.2.0 VEX_DIGEST=sha256:... [VEX_OUT=path])
-	@test -n "$(VEX_VERSION)" && test -n "$(VEX_DIGEST)" || { echo "usage: make vex-release VEX_VERSION=<x.y.z> VEX_DIGEST=sha256:<index> [VEX_OUT=<path>]"; exit 2; }
-	go -C $(VULNGATE_DIR) run . -vex-check $(CURDIR)/$(VEX_DOC) \
+vex-release: ## Gate VEX_DIR, then write the release's OpenVEX copy (VEX_VERSION=x.y.z VEX_DIGEST=sha256:... [VEX_OUT=path] [VEX_DIR=tree]; needs network)
+	@test -n "$(VEX_VERSION)" && test -n "$(VEX_DIGEST)" || { echo "usage: make vex-release VEX_VERSION=<x.y.z> VEX_DIGEST=sha256:<index> [VEX_OUT=<path>] [VEX_DIR=<tree>]"; exit 2; }
+	go -C $(VULNGATE_DIR) run . -vex-check $(CURDIR)/$(VEX_DOC) -vex-version $(VERSION) \
+		-dir $(abspath $(VEX_DIR)) -config $(abspath $(VEX_DIR))/.goreleaser.yml \
 		-vex-out $(abspath $(VEX_OUT)) -vex-release $(VEX_VERSION) -vex-index-digest $(VEX_DIGEST)
 
 # The nested module's tests, with the same floor the root module is held to.

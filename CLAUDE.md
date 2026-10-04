@@ -1701,10 +1701,16 @@ in the same change. Two things about it are easy to get wrong:
   and each release attaches a pinned copy to the image. The file is generated:
   change the table, then `make gen-vex`, never the JSON by hand. `make
   check-vex` (CI and the release's `binary-vulns`) fails when the two disagree
-  either way. The product identifiers are the ones Trivy and Docker Scout were
-  measured to compute (`docs/development/release-chain.md` § *The OpenVEX
-  statement*), so do not "tidy" them into another purl form without measuring
-  the scanner again.
+  either way, and on a `VERSION` bump until `make gen-vex` has run, because
+  every product is pinned to that version (an unversioned product would
+  suppress the finding on releases nobody checked). The product identifiers are
+  the ones Trivy and Docker Scout were measured to compute
+  (`docs/development/release-chain.md` § *The OpenVEX statement*), so do not
+  "tidy" them into another purl form without measuring the scanner again.
+- **"Not linked" is remade on every run.** The gate reads the packages each
+  `not-linked` advisory names and fails (`LINKED`) if any is in `go list -deps`
+  of a release target. The release copy of the VEX document is written only
+  after that passes, so the claim a release signs is the one measured for it.
 
 ## Commit & PR Conventions
 

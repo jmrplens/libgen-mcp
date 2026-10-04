@@ -17,6 +17,9 @@ import (
 // fixtureAdvisory is one entry of the database the tests write.
 type fixtureAdvisory struct {
 	id, module, summary string
+	// imports are the packages the advisory names: fmt when nil, which the
+	// fixture module does not link, and none at all when empty.
+	imports []string
 }
 
 // The two advisories every fixture database holds: one against the standard
@@ -47,6 +50,13 @@ func writeVulnDB(t *testing.T, advisories ...fixtureAdvisory) string {
 	files := map[string]any{"index/db.json": map[string]string{"modified": modified}}
 	for _, a := range advisories {
 		modules = append(modules, module{Path: a.module, Vulns: []vuln{{ID: a.id, Modified: modified}}})
+		imports := []any{map[string]string{"path": "fmt"}}
+		if a.imports != nil {
+			imports = []any{}
+			for _, path := range a.imports {
+				imports = append(imports, map[string]string{"path": path})
+			}
+		}
 		files["ID/"+a.id+".json"] = map[string]any{
 			"schema_version": "1.3.1",
 			"id":             a.id,
@@ -58,7 +68,7 @@ func writeVulnDB(t *testing.T, advisories ...fixtureAdvisory) string {
 				"package": map[string]string{"name": a.module, "ecosystem": "Go"},
 				"ranges":  []any{map[string]any{"type": "SEMVER", "events": []any{map[string]string{"introduced": "0"}}}},
 				"ecosystem_specific": map[string]any{
-					"imports": []any{map[string]string{"path": "fmt"}},
+					"imports": imports,
 				},
 			}},
 		}
@@ -120,6 +130,9 @@ func TestScanBinary_ReportsTheModuleAdvisoryAndNothingElse(t *testing.T) {
 	f := result.findings[0]
 	if f.osv != everyStdlib.id || f.module != "stdlib" || f.version == "" || f.fixed != "" {
 		t.Errorf("finding = %+v, want %s against stdlib at the binary's version, with no fix", f, everyStdlib.id)
+	}
+	if got := result.imports[declarationKey(everyStdlib.id, "stdlib")]; len(got) != 1 || got[0] != "fmt" {
+		t.Errorf("imports = %v, want the one package the record names", got)
 	}
 	if result.summaries[everyStdlib.id] != everyStdlib.summary {
 		t.Errorf("summary = %q, want %q", result.summaries[everyStdlib.id], everyStdlib.summary)

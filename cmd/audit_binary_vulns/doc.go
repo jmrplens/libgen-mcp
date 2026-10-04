@@ -81,19 +81,35 @@
 // statement), about every identifier the products go by: the main module's
 // purl, which Trivy reports as the root of the binary in an image or on its
 // own, the image's pkg:oci purl in each registry, and Docker Scout's
-// pkg:docker form. A fix-not-yet-adoptable declaration writes nothing, since
-// the code it excuses is in the binary.
+// pkg:docker form. Every one is pinned to a version, since a product with none
+// matches every release, ones the gate never saw included, and the OCI purls
+// are written only with the index digest. A fix-not-yet-adoptable declaration
+// writes nothing, since the code it excuses is in the binary.
 //
-// The document is generated from the table and never edited by hand.
-// -vex-check holds it to the table in both directions, and so does a test of
-// this package: a statement with no not-linked declaration behind it fails,
-// and so does a declaration with no statement, which is what makes removing a
-// declaration (an advisory fixed) remove its statement in the same change.
-// -vex-write rewrites it, keeping its timestamp and version while the
-// statements are unchanged. -vex-out with -vex-release and -vex-index-digest
-// writes the copy a release attaches to its image and publishes as an asset,
-// each product pinned to that release, and only after -vex-check passed.
-// None of these modes builds or scans anything.
+// The committed document names the version -vex-version gives (the VERSION
+// file), is generated from the table and is never edited by hand. -vex-check
+// holds it to the table and that version in both directions, and so does a
+// test of this package: a statement with no not-linked declaration behind it
+// fails, and so does a declaration with no statement, which is what makes
+// removing a declaration (an advisory fixed) remove its statement in the same
+// change. -vex-write rewrites it, keeping its timestamp and version while the
+// statements are unchanged. Neither builds or scans anything.
+//
+// -vex-out with -vex-release and -vex-index-digest writes the copy a release
+// attaches to its image and publishes as an asset, each product pinned to
+// that release and its index. It runs the whole audit on -dir first, the
+// not-linked check below included, and writes nothing unless it passes: the
+// copy is what gets signed.
+//
+// # Not-linked is checked, not trusted
+//
+// The scan reads modules, so a not-linked declaration would otherwise be a
+// measurement made once by hand. Every run remakes it: the packages the
+// advisory names (ecosystem_specific.imports of the record the scan matched)
+// must not appear in go list -deps of the main package of any release target,
+// listed with that target's GOOS, GOARCH, env and flags. One that does fails
+// the run as LINKED. An advisory that names no package covers the whole
+// module, which the binaries link, and fails as UNCHECKED.
 //
 // # Why it is a module of its own
 //

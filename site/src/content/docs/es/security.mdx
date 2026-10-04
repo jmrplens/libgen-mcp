@@ -196,14 +196,21 @@ Un escáner que lee el binario del servidor (Trivy, Docker Scout, osv-scanner, e
 go list -deps ./cmd/server | grep '^golang.org/x/crypto'
 ```
 
-La puerta de la release (`make check-binary-vulns`) falla ante cualquier aviso así salvo que lo acepte una declaración revisada, y este está declarado `not-linked`. Esa declaración se publica como una declaración [OpenVEX](https://openvex.dev), `not_affected` con la justificación `vulnerable_code_not_present`, en [`.vex/libgen-mcp.openvex.json`](https://github.com/jmrplens/libgen-mcp/blob/main/.vex/libgen-mcp.openvex.json). Se genera a partir de las declaraciones y una comprobación de CI falla cuando las dos no coinciden, así que una declaración no puede sobrevivir a la evidencia que la sostiene. Desde la release siguiente a la 2.2.0, cada release además adjunta a la imagen en GHCR y en Docker Hub una copia fijada a su propia versión y al digest de su imagen, como attestation firmada, y la publica como el asset `libgen-mcp.openvex.json` de la release.
+La puerta de la release (`make check-binary-vulns`) falla ante cualquier aviso así salvo que lo acepte una declaración revisada, y este está declarado `not-linked`. Esa afirmación no se da por buena tal como está escrita: en cada ejecución, la puerta lee del registro del aviso los paquetes que nombra y falla si alguno aparece en `go list -deps` de cualquiera de los seis objetivos de la release. La declaración sería falsa en cuanto se enlazara un paquete `openpgp`, y eso es justo lo que detiene una release.
 
-| Escáner         | Cómo usa la declaración                                                                                                                                                                                                                                                                                                                |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Trivy           | `--vex oci` lee la attestation del registro. `--vex <fichero>` lee el documento del repositorio o de la release. El aviso pasa a listarse como suprimido, `not_affected`, en lugar de como vulnerabilidad                                                                                                                              |
-| Docker Scout    | `docker scout cves --vex-location <dir>` lee una copia local. El documento también nombra la imagen como `pkg:docker/jmrplens/libgen-mcp`, la forma que documenta Scout. Scout exige iniciar sesión en Docker, así que esto no se ha medido aquí, y aún no se sabe si Scout y la página de Docker Hub leen la attestation del registro |
-| Grype           | No informa de este aviso contra el binario, así que no hay nada que suprimir                                                                                                                                                                                                                                                           |
-| Otros registros | Un escáner que no lee VEX sigue mostrando el aviso. La explicación de arriba es la respuesta que dar                                                                                                                                                                                                                                   |
+La declaración se publica como una declaración [OpenVEX](https://openvex.dev), `not_affected` con la justificación `vulnerable_code_not_present`:
+
+- [`.vex/libgen-mcp.openvex.json`](https://github.com/jmrplens/libgen-mcp/blob/main/.vex/libgen-mcp.openvex.json), en el repositorio, nombra la release actual (la versión de `VERSION`) y ninguna otra. Se genera a partir de las declaraciones, y una comprobación de CI falla cuando las dos no coinciden, así que una declaración no puede sobrevivir a la evidencia que la sostiene.
+- Desde la release siguiente a la 2.2.0, cada release escribe su propia copia, fijada a su versión y al digest de su imagen, solo después de que la puerta haya pasado sobre esa release. Adjunta esa copia a la imagen en GHCR y en Docker Hub como attestation firmada y la publica como el asset `libgen-mcp.openvex.json` de la release.
+
+Todos los productos de ambos ficheros llevan versión, así que una declaración no puede suprimir el aviso en una release contra la que no se comprobó. Usa la copia que corresponde a la release que ejecutas.
+
+| Escáner         | Cómo usa la declaración                                                                                                                                                                                                                                                                                                                          |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Trivy           | `--vex oci` lee la attestation del registro. `--vex <fichero>` lee el documento del repositorio o de la release. En la release que nombra el documento, el aviso pasa a listarse como suprimido, `not_affected`, en lugar de como vulnerabilidad. En cualquier otra release se sigue informando                                                  |
+| Docker Scout    | `docker scout cves --vex-location <dir>` lee una copia local. El documento también nombra la imagen como `pkg:docker/jmrplens/libgen-mcp@<versión>`, la forma que documenta Scout. Scout exige iniciar sesión en Docker, así que esto no se ha medido aquí, y aún no se sabe si Scout y la página de Docker Hub leen la attestation del registro |
+| Grype           | No informa de este aviso contra el binario, así que no hay nada que suprimir                                                                                                                                                                                                                                                                     |
+| Otros registros | Un escáner que no lee VEX sigue mostrando el aviso. La explicación de arriba es la respuesta que dar                                                                                                                                                                                                                                             |
 
 Para comprobarlo tú mismo:
 
@@ -211,7 +218,7 @@ Para comprobarlo tú mismo:
 # La declaración aplicada desde el registro (adjunta desde la release siguiente a la 2.2.0)
 trivy image --vex oci --show-suppressed ghcr.io/jmrplens/libgen-mcp:latest
 
-# La declaración del repositorio aplicada a cualquier imagen o binario, incluida la 2.2.0
+# La declaración del repositorio, que nombra solo la release actual
 curl -fsSLO https://raw.githubusercontent.com/jmrplens/libgen-mcp/main/.vex/libgen-mcp.openvex.json
 trivy image --vex libgen-mcp.openvex.json --show-suppressed ghcr.io/jmrplens/libgen-mcp:latest
 mkdir -p vex && mv libgen-mcp.openvex.json vex/
