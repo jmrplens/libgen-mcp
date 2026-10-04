@@ -422,6 +422,61 @@ func TestRunMain_VEXFlags(t *testing.T) {
 	}
 }
 
+// TestVEX_AnEmptyTableIsAnEmptyDocument covers the day the last not-linked
+// declaration goes (its module dropped from the binaries): the committed
+// document regenerates with no statements, encoded as an empty list rather
+// than null, the check accepts it, and a release writes a copy with none,
+// whose zero count is what makes the release skip attesting and uploading.
+func TestVEX_AnEmptyTableIsAnEmptyDocument(t *testing.T) {
+	fixedClock(t, time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC))
+
+	for _, tc := range []struct {
+		name     string
+		declared map[string]declaration
+	}{
+		{name: "no declarations"},
+		{name: "only fixes in waiting", declared: map[string]declaration{"GO-2026-0002 example.com/upgraded": {category: categoryFixNotYetAdoptable, reason: "v1.2.3 is in its cooldown"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if statements := vexStatements(tc.declared, vexRelease{version: fixtureVersion}); statements == nil || len(statements) != 0 {
+				t.Errorf("statements = %#v, want an empty, non-nil list", statements)
+			}
+		})
+	}
+
+	committed := filepath.Join(t.TempDir(), "doc.openvex.json")
+	var stdout, stderr bytes.Buffer
+	if code := runVEX(context.Background(), vexConfig{write: committed, version: fixtureVersion}, &stdout, &stderr); code != 0 {
+		t.Fatalf("write: exit %d\n%s%s", code, stdout.String(), stderr.String())
+	}
+	data, err := os.ReadFile(committed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(data, []byte(`"statements": []`)) {
+		t.Errorf("the empty document does not say it has no statements:\n%s", data)
+	}
+
+	dir, config := fixtureRelease(t)
+	out := filepath.Join(t.TempDir(), vexReleaseAsset)
+	stdout.Reset()
+	cfg := vexConfig{
+		check: committed, out: out, version: fixtureVersion,
+		release: vexRelease{version: fixtureVersion, indexDigest: "sha256:" + strings.Repeat("0f", 32)},
+		audit:   auditConfig{dir: dir, config: config, db: writeVulnDB(t, neverLinked)},
+	}
+	if code := runVEX(context.Background(), cfg, &stdout, &stderr); code != 0 {
+		t.Fatalf("release: exit %d\n%s%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "states exactly the 0 not-linked declarations") {
+		t.Errorf("the check did not accept the empty document:\n%s", stdout.String())
+	}
+	release, err := readVEX(out)
+	if err != nil || release.Statements == nil || len(release.Statements) != 0 {
+		t.Errorf("release copy = %+v, %v, want one with an empty statement list", release, err)
+	}
+}
+
 // TestWriteVEX_AnUnwritablePathFails covers the write itself failing.
 func TestWriteVEX_AnUnwritablePathFails(t *testing.T) {
 	t.Parallel()

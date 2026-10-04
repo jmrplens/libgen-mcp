@@ -76,7 +76,10 @@ binaries` job, and `binary-vulns` here) fails when the document and the table
 disagree in either direction, so removing a declaration because its advisory was
 fixed removes the statement in the same change, and no statement exists without
 the measured declaration behind it. A `fix-not-yet-adoptable` declaration writes
-no statement: the code it excuses is in the binary.
+no statement: the code it excuses is in the binary. A table with no `not-linked`
+entry left is a valid state, not an error: `make gen-vex` writes a document with
+an empty statement list, `check-vex` accepts it, and a release writes a copy with
+none, so its `statements` count is 0 and nothing is attested or uploaded.
 
 **The measurement is remade on every run, not trusted.** The scan reads modules,
 so on its own a `not-linked` declaration would be a claim made once by hand. The
@@ -151,7 +154,12 @@ on the bare binary (`trivy rootfs`), and still reports it on the 2.1.0 image,
 which the document does not name. With a Sigstore bundle of the release copy attached
 as a referrer to a copy of the 2.2.0 index in a local registry, `--vex oci`
 does the same, citing "VEX attestation in OCI registry". Grype 0.120 does not
-report the advisory against the binary at all. Docker Scout requires a Docker
+report the advisory on an image or binary scan, but does on the SPDX and
+CycloneDX SBOMs the release attaches and on a default syft-json SBOM. Neither
+scanner can apply the statement to the shipped SPDX SBOMs: Trivy finds no
+relationship data tying the module to the image, and Grype has no image digest
+or tag to match. Grype suppresses it only on a syft-json SBOM of the image,
+through the digest-pinned `pkg:oci` products of a release copy. Docker Scout requires a Docker
 login even for a public image, so its reading of the statement is not measured;
 `docker scout attestation add` writes into the image index by default, which
 would move the digest `server.json` pins, and is deliberately not used.
