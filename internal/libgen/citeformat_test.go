@@ -10,6 +10,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/jmrplens/libgen-mcp/v2/internal/config"
 )
 
 // Answers doi.org gave on 2026-10-03, kept verbatim: DataCite's APA with its
@@ -185,6 +188,53 @@ func TestFetchCSL_Registries(t *testing.T) {
 				t.Error("author affiliations were kept")
 			}
 		})
+	}
+}
+
+// TestFetchCSL_ContactStaysWithTheResolver follows a negotiated request the
+// way doi.org answers it, with a redirect to the agency that registered the
+// DOI, and checks where the operator's contact address went. The resolver,
+// which is the service the address was configured for, receives it. The
+// agency, on another origin, receives the product and version and no address.
+func TestFetchCSL_ContactStaysWithTheResolver(t *testing.T) {
+	body, err := os.ReadFile("testdata/csl_datacite.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	var resolverUA, agencyUA string
+	agency := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		agencyUA = r.Header.Get("User-Agent")
+		mu.Unlock()
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(agency.Close)
+	resolver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		resolverUA = r.Header.Get("User-Agent")
+		mu.Unlock()
+		http.Redirect(w, r, agency.URL+"/10.5061/dryad.8515", http.StatusFound)
+	}))
+	t.Cleanup(resolver.Close)
+
+	cfg := &config.Config{
+		DownloadDir: t.TempDir(), Timeout: 5 * time.Second,
+		RateRPS: 1000, RateBurst: 100, RetryAttempts: 1,
+		UnpaywallEmail: "me@example.org",
+	}
+	c := New(staticMirrors{}, cfg, WithDOIOrgBaseURL(resolver.URL))
+	if item := c.FetchCSL(context.Background(), "10.5061/dryad.8515"); item == nil {
+		t.Fatal("no record came back through the redirect")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if !strings.Contains(resolverUA, "mailto:me@example.org") {
+		t.Errorf("resolver User-Agent = %q, want the contact address", resolverUA)
+	}
+	if strings.Contains(agencyUA, "mailto:") || !strings.HasPrefix(agencyUA, "libgen-mcp/") {
+		t.Errorf("agency User-Agent = %q, want the product without the contact address", agencyUA)
 	}
 }
 

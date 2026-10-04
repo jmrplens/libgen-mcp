@@ -450,6 +450,78 @@ func TestCheckRedirectLogsWithoutTheURL(t *testing.T) {
 	}
 }
 
+// TestCheckRedirectStripsTheUserAgentContactOffOrigin pins where the
+// operator's contact address may travel: to the origin it was set for, and no
+// further. doi.org forwards a negotiated request to the agency that registered
+// the DOI, Airiti over plain http, and the address was given to the services
+// that ask for it, not to whichever host a redirect names. The product and
+// version stay on the header, so the next host still sees who is asking.
+func TestCheckRedirectStripsTheUserAgentContactOffOrigin(t *testing.T) {
+	const ua = "libgen-mcp/2.2.0 (+https://github.com/jmrplens/libgen-mcp) (mailto:me@example.org)"
+	const bare = "libgen-mcp/2.2.0 (+https://github.com/jmrplens/libgen-mcp)"
+	tests := []struct {
+		name     string
+		from, to string
+		want     string
+	}{
+		{"same origin keeps it", "https://doi.org/10.1/x", "https://doi.org/10.1/y", ua},
+		{"another agency loses it", "https://doi.org/10.1/x", "https://data.crosscite.org/10.1/x", bare},
+		{"a downgrade loses it", "https://doi.org/10.6220/x", "http://data-doi.airiti.com/10.6220/x", bare},
+		{"a downgrade on one host loses it", "https://doi.org/10.1/x", "http://doi.org/10.1/x", bare},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &http.Request{URL: mustParse(t, tt.to), Header: http.Header{}}
+			req.Header.Set("User-Agent", ua)
+			if err := CheckRedirect(false)(req, []*http.Request{{URL: mustParse(t, tt.from)}}); err != nil {
+				t.Fatalf("CheckRedirect() error = %v", err)
+			}
+			if got := req.Header.Get("User-Agent"); got != tt.want {
+				t.Errorf("User-Agent = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestCheckRedirectJudgesTheChainFromItsFirstRequest is the case judging only
+// the last step gets wrong. net/http rebuilds every redirected request from
+// the original's headers, so after https://a then http://a, a further hop to
+// http://a/x is a same-origin step that would carry the original credential
+// and contact again, now in cleartext. Once the chain has left its origin,
+// nothing set for that origin may follow it.
+func TestCheckRedirectJudgesTheChainFromItsFirstRequest(t *testing.T) {
+	tests := []struct {
+		name  string
+		chain []string
+		next  string
+		keep  bool
+	}{
+		{"a chain that never left keeps them", []string{"https://a.invalid/1", "https://a.invalid/2"}, "https://a.invalid/3", true},
+		{"a same-origin step after a downgrade drops them", []string{"https://a.invalid/1", "http://a.invalid/2"}, "http://a.invalid/3", false},
+		{"coming back to the origin does not restore them", []string{"https://a.invalid/1", "https://b.invalid/2"}, "https://a.invalid/3", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			via := make([]*http.Request, 0, len(tt.chain))
+			for _, raw := range tt.chain {
+				via = append(via, &http.Request{URL: mustParse(t, raw)})
+			}
+			req := &http.Request{URL: mustParse(t, tt.next), Header: http.Header{}}
+			req.Header.Set("Authorization", "Bearer s3cret")
+			req.Header.Set("User-Agent", "libgen-mcp/2.2.0 (mailto:me@example.org)")
+			if err := CheckRedirect(false)(req, via); err != nil {
+				t.Fatalf("CheckRedirect() error = %v", err)
+			}
+			if got := req.Header.Get("Authorization") != ""; got != tt.keep {
+				t.Errorf("Authorization present = %v, want %v", got, tt.keep)
+			}
+			if got := strings.Contains(req.Header.Get("User-Agent"), "mailto:"); got != tt.keep {
+				t.Errorf("contact present = %v, want %v", got, tt.keep)
+			}
+		})
+	}
+}
+
 // TestCheckRedirectLogLevelFollowsWhatWasStripped pins the two levels. A
 // Referer alone, which net/http adds to every redirect by itself, is DEBUG, so
 // a doi.org resolution does not log once per hop. A credential that a source
@@ -462,6 +534,11 @@ func TestCheckRedirectLogLevelFollowsWhatWasStripped(t *testing.T) {
 		want    string
 	}{
 		{name: "referer only", headers: map[string]string{"Referer": "https://doi.org/10.1/x"}, want: `"level":"DEBUG"`},
+		{
+			name:    "a contact address",
+			headers: map[string]string{"User-Agent": "libgen-mcp/2.2.0 (mailto:me@example.org)"},
+			want:    `"level":"DEBUG"`,
+		},
 		{name: "a credential", headers: map[string]string{"Authorization": "Bearer k"}, want: `"level":"INFO"`},
 		{
 			name:    "a credential beside a referer",

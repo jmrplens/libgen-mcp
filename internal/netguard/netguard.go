@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"regexp"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -249,7 +250,16 @@ func Transport(allowPrivate bool) *http.Transport {
 
 // CheckRedirect returns the http.Client redirect policy that complements the
 // dialer: it bounds the chain, refuses a hop whose target is a literal private
-// address, and strips credentials when the host changes.
+// address, and strips credentials and the User-Agent contact address once the
+// chain leaves the origin it started on, a downgrade from https to http
+// included.
+//
+// A downgrade is followed rather than refused. Some DOI registration agencies
+// answer doi.org's redirect only over http (Airiti, measured 2026-10-04), and
+// this policy serves every outbound client, file downloads from mirrors among
+// them, so refusing it would lose answers a source can still give. What it may
+// not do is carry anything set for the https
+// origin, and since a change of scheme is a change of origin, it does not.
 //
 // The address check is deliberately belt-and-braces — a redirect to a private
 // host is dialed through the same guarded Transport, so the Control hook would
@@ -280,11 +290,57 @@ func checkRedirectFor(allowPrivate bool, policy *Policy) func(req *http.Request,
 		if err := redirectAddressAllowed(req, allowPrivate, policy); err != nil {
 			return err
 		}
-		if len(via) > 0 && !sameOrigin(via[len(via)-1].URL, req.URL) {
+		if len(via) > 0 && leftOrigin(via, req.URL) {
 			stripSensitiveHeaders(req, via[len(via)-1].URL)
 		}
 		return nil
 	}
+}
+
+// leftOrigin reports whether a redirect chain has been anywhere but the origin
+// of the request that started it, counting the hop about to be made.
+//
+// The comparison is with the first request, never only the previous hop,
+// because that is where the headers come from: net/http rebuilds every
+// redirected request from the original's headers, so a chain that goes
+// https://a, then http://a, then http://a/x would hand the original
+// Authorization and contact to the third hop again, over cleartext, if only
+// the last step were judged and the last step stayed on one origin. Once a
+// chain has left its origin, nothing set for that origin follows it further.
+func leftOrigin(via []*http.Request, next *url.URL) bool {
+	origin := via[0].URL
+	for _, hop := range via[1:] {
+		if !sameOrigin(origin, hop.URL) {
+			return true
+		}
+	}
+	return !sameOrigin(origin, next)
+}
+
+// userAgentContact matches the contact address this server's clients append to
+// a User-Agent, " (mailto:address)", the form the polite pools of Crossref,
+// OpenLibrary and the DOI registration agencies ask for.
+var userAgentContact = regexp.MustCompile(`\s*\(mailto:[^)]*\)`)
+
+// contactHeader is how a dropped User-Agent contact is named in the log. It is
+// not a header of its own: the header stays, and only the address comes off it.
+const contactHeader = "User-Agent contact"
+
+// stripUserAgentContact removes the contact address from the request's
+// User-Agent and reports whether there was one.
+//
+// The address is the operator's, given to one service that asked for it. A
+// redirect hands the request to whatever host the first one names, and doi.org
+// in particular forwards to the agency that registered a DOI, some of them over
+// plain http. The rest of the User-Agent, the product and its version, stays.
+func stripUserAgentContact(req *http.Request) bool {
+	ua := req.Header.Get("User-Agent")
+	stripped := userAgentContact.ReplaceAllString(ua, "")
+	if stripped == ua {
+		return false
+	}
+	req.Header.Set("User-Agent", stripped)
+	return true
 }
 
 // redirectAddressAllowed applies the dialer's two tiers to a hop whose target is
@@ -325,12 +381,15 @@ func redirectAddressAllowed(req *http.Request, allowPrivate bool, policy *Policy
 // stripSensitiveHeaders removes the headers that must not follow a redirect off
 // the origin they were set for, and logs which ones were actually dropped.
 func stripSensitiveHeaders(req *http.Request, previous *url.URL) {
-	dropped := make([]string, 0, len(sensitiveHeaders))
+	var dropped []string
 	for _, h := range sensitiveHeaders {
 		if req.Header.Get(h) != "" {
 			dropped = append(dropped, h)
 		}
 		req.Header.Del(h)
+	}
+	if stripUserAgentContact(req) {
+		dropped = append(dropped, contactHeader)
 	}
 	if len(dropped) == 0 {
 		return
@@ -362,11 +421,13 @@ func stripSensitiveHeaders(req *http.Request, previous *url.URL) {
 // get_details citation lookup. That said nothing an operator can act on, and it
 // buried the drop that does mean something: an Authorization, a cookie or a
 // proxy credential that a source sent, which an off-origin redirect then tried
-// to carry away. The strip itself is unconditional either way. Only the log
-// level depends on what was stripped.
+// to carry away. The User-Agent contact is DEBUG for the same reason as
+// Referer: every DOI that doi.org forwards to its registration agency drops it,
+// on a deployment that set a contact address at all. The strip itself is
+// unconditional either way. Only the log level depends on what was stripped.
 func strippedHeadersLevel(dropped []string) slog.Level {
 	for _, h := range dropped {
-		if h != "Referer" {
+		if h != "Referer" && h != contactHeader {
 			return slog.LevelInfo
 		}
 	}
