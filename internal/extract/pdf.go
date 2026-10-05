@@ -36,22 +36,31 @@ func invalidPDFReason(err error) string {
 	return fmt.Sprintf("not a valid PDF: %v", err)
 }
 
-// encryptedPDFReason is the diagnosis for a PDF the reader will not open, or
-// would decrypt into other bytes, because of how it is encrypted.
+// encryptedPDFReason is the diagnosis for a PDF whose encryption keeps every
+// read mode out: AES-256 (V=5), a certificate-based handler, and a file whose
+// text partlyEncryptedPDFReason refuses when its outline could not be read
+// either, because it sits in a compressed object stream. Such a file is
+// valid, so calling it invalid would send the caller looking for a better copy
+// of a file that is fine. Shared so every read mode words it the same way. One
+// literal rather than a concatenation, like lockedPDFReason, for the reason
+// noPDFOutlineReason gives.
+const encryptedPDFReason = "cannot read PDF: it is encrypted in a way this reader cannot decrypt, so neither its text nor its table of contents can be read"
+
+// partlyEncryptedPDFReason is the diagnosis the text modes give for a PDF whose
+// text the reader cannot decrypt and whose outline the outline walk can.
 // ledongthuc/pdf implements part of the standard security handler: RC4
 // without crypt filters (V=1 and V=2), correctly only for a key of
-// minRC4KeyBits or more, and an AES-128 crypt filter (V=4 with AESV2) whose
-// /Length gives the key in bytes. It refuses AES-256 (V=5), RC4 under crypt
-// filters (V=4 with V2), AES-128 whose crypt filter gives the length in bits,
-// as pdfcpu writes it, and a certificate-based handler, and openPDF refuses
-// the shorter RC4 keys. The reason says what the reader decrypts rather than
-// naming what the file uses, because the reader's error does not always say:
-// a refused V=4 file can be any of three of those. Such a file is valid, so
-// calling it invalid would send the caller looking for a better copy of a file
-// that is fine. Shared so every read mode words it the same way. One literal
-// rather than a concatenation, like lockedPDFReason, for the reason
-// noPDFOutlineReason gives.
-const encryptedPDFReason = "cannot read PDF: it is encrypted in a way this reader cannot decrypt (it decrypts only RC4 with a key of 88 bits or more and AES-128 whose crypt filter gives the key length in bytes), so neither its text nor its table of contents can be read"
+// minRC4KeyBits or more, and an AES-128 crypt filter (V=4 with AESV2), whose
+// /Length openReader shows it in bytes when pdfcpu wrote it in bits, in a file
+// that encrypts its metadata. It refuses RC4 under a crypt filter (V=4 with
+// V2), takes a file that leaves its metadata unencrypted for one that needs a
+// password, and openPDF refuses the shorter RC4 keys, which the reader would
+// decrypt into other bytes. The outline walk decrypts the strings of all three
+// itself (selfDecrypting), so the caller is pointed at outline mode, which lists the
+// table of contents unless it is in a compressed object stream, whose stream
+// only the reader could decrypt. In outline mode, when the walk could not list
+// one, the reason is encryptedPDFReason.
+const partlyEncryptedPDFReason = "cannot read PDF text: it is encrypted in a way this reader cannot decrypt for its text, though outline mode may still list its table of contents"
 
 // minRC4KeyBits is the shortest RC4 file key ledongthuc/pdf decrypts
 // correctly. The key for one object is the MD5 of the file key, the object
@@ -60,7 +69,9 @@ const encryptedPDFReason = "cannot read PDF: it is encrypted in a way this reade
 // it, so its key and the file's agree only once n+5 reaches 16, an 11-byte
 // file key. Below that every string and stream decrypts into other bytes: the
 // titles of a 40-bit file came back as noise, and its pages as text-free,
-// which said "scanned" about a document that is not.
+// which said "scanned" about a document that is not. stringCrypt.objectKey
+// cuts the key as the standard does, which is how the outline walk reads
+// such a file's titles.
 const minRC4KeyBits = 88
 
 // rc4KeyTooShort reports whether r decrypts the file with an RC4 key shorter
@@ -159,10 +170,12 @@ var encryptionRefusalRE = regexp.MustCompile(
 // rest only in its error's words. Every refusal of an encryption it does not
 // implement opens with words encryptionRefusalRE knows, and a file that does
 // not even start as a PDF is "not a PDF file: invalid header"; anything else
-// opened as a PDF and broke. The fixtures pin the matching: an AES-256, an RC4
-// V=4 and a pdfcpu AES-128 file are held to encryptedPDFReason and a truncated
-// one to damagedPDFReason, so a release of the reader that words it
-// differently fails a test rather than changing a diagnosis in silence.
+// opened as a PDF and broke. The fixtures pin the matching: an AES-256 file is
+// held to encryptedPDFReason, an RC4 V=4 one, which openPDF tells apart
+// before asking, to partlyEncryptedPDFReason, one that needs a password to
+// lockedPDFReason, and a truncated one to damagedPDFReason, so a release of
+// the reader that words it differently fails a test rather than changing a
+// diagnosis in silence.
 func openPDFReason(err error) string {
 	msg := err.Error()
 	switch {
@@ -196,51 +209,101 @@ const (
 	versionAt    = int64(len("%PDF-"))
 )
 
-// headerView is a PDF 2.0 file as the reader is shown it: every byte as it
-// is, except the header's version, which reads as shownVersion.
-type headerView struct {
+// overwritten is a file as the reader is shown it: every byte as it is,
+// except the ones from at on, which read as with. A PDF 2.0 file's version
+// and the keys and numbers of an encryption dictionary the reader would
+// misread are shown to it that way, without a copy of the file.
+type overwritten struct {
 	io.ReaderAt
+	at   int64
+	with string
 }
 
 // ReadAt reads p from the file at off, and then writes over whatever part of
-// p holds the header's version.
-func (v headerView) ReadAt(p []byte, off int64) (int, error) {
+// p holds the bytes from at on.
+func (v overwritten) ReadAt(p []byte, off int64) (int, error) {
 	n, err := v.ReaderAt.ReadAt(p, off)
-	for at := max(off, versionAt); at < min(off+int64(n), versionAt+int64(len(shownVersion))); at++ {
-		p[at-off] = shownVersion[at-versionAt]
+	for i := max(off, v.at); i < min(off+int64(n), v.at+int64(len(v.with))); i++ {
+		p[i-off] = v.with[i-v.at]
 	}
 	return n, err
 }
 
-// pdfBytes returns what the PDF reader is given for d: a PDF 2.0 file through
-// headerView, and any other file as it is.
+// pdfBytes returns what the PDF reader is given for d: a PDF 2.0 file with
+// its version read as shownVersion, and any other file as it is.
 func pdfBytes(d document) io.ReaderAt {
 	head := make([]byte, len(pdf20Header))
 	n, _ := d.r.ReadAt(head, 0)
 	if string(head[:n]) == pdf20Header {
-		return headerView{d.r}
+		return overwritten{ReaderAt: d.r, at: versionAt, with: shownVersion}
 	}
 	return d.r
 }
 
-// openPDF opens d with the PDF reader every mode uses and checks what each
-// mode checks before it reads a page: that the reader opened the file, that
+// openReader opens d with the PDF reader, through pdfBytes. A crypt filter
+// the reader refuses is tried once more through aesLengthFixed, since pdfcpu
+// writes an AES-128 filter's /Length in bits where the reader takes bytes,
+// and the reader then decrypts the whole file, text and object streams
+// included. If it still refuses the file, the first refusal is returned.
+func openReader(d document) (*pdf.Reader, error) {
+	r, err := pdf.NewReader(pdfBytes(d), d.size)
+	if err == nil || !strings.HasPrefix(err.Error(), v4Refusal) {
+		return r, err
+	}
+	if fixed, fixedErr := pdf.NewReader(aesLengthFixed(d), d.size); fixedErr == nil {
+		return fixed, nil
+	}
+	return nil, err
+}
+
+// openPDF opens d with the PDF reader the text modes use and checks what each
+// of them checks before it reads a page: that the reader opened the file, that
 // it will decrypt the file into its own bytes, and that its page tree is safe
 // to hand to Reader.Page. It returns the reader, or nil and the diagnosis for
-// a file no mode can read. The reader can panic on malformed input, so a
-// caller runs it behind recover().
+// a file whose text cannot be read. A file encrypted in a way the reader
+// decrypts wrongly or refuses, and whose strings selfDecrypting decrypts, gets
+// partlyEncryptedPDFReason, which points at outline mode. The reader can
+// panic on malformed input, so a caller runs it behind recover().
 func openPDF(d document) (r *pdf.Reader, why string) {
-	r, err := pdf.NewReader(pdfBytes(d), d.size)
+	r, err := openReader(d)
 	if err != nil {
-		return nil, openPDFReason(err)
+		return nil, refusedPDFReason(d, err)
 	}
 	if rc4KeyTooShort(r) {
-		return nil, encryptedPDFReason
+		return nil, partlyEncryptedPDFReason
 	}
 	if cyclic := pageTreeReason(r); cyclic != "" {
 		return nil, cyclic
 	}
 	return r, ""
+}
+
+// refusedPDFReason is the diagnosis for d, a file the reader refused with
+// err: partlyEncryptedPDFReason when the refusal is one selfDecryptable names
+// and selfDecrypting then reads the file's strings, and openPDFReason's
+// otherwise.
+func refusedPDFReason(d document, err error) string {
+	if selfDecryptable(err) && selfDecrypts(d) {
+		return partlyEncryptedPDFReason
+	}
+	return openPDFReason(err)
+}
+
+// selfDecrypts reports whether selfDecrypting opens d.
+func selfDecrypts(d document) bool {
+	r, _ := selfDecrypting(d)
+	return r != nil
+}
+
+// selfDecryptable reports whether err, the reader's refusal of a file, is one
+// the standard security handler may still open with the empty password, so
+// that selfDecrypting is worth asking: a crypt filter (V=4) the reader does
+// not take, and a password it could not match. The second is what a file that
+// leaves its metadata unencrypted gives it, Acrobat's "encrypt all contents
+// except metadata", since the reader derives the key as if it did not; a file
+// that does need a password fails selfDecrypting's check as well.
+func selfDecryptable(err error) bool {
+	return errors.Is(err, pdf.ErrInvalidPassword) || strings.HasPrefix(err.Error(), v4Refusal)
 }
 
 // malformedPDFReason is the diagnosis for a PDF that made the reader panic —

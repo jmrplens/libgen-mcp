@@ -78,12 +78,13 @@ var pdfDocHigh = [33]rune{
 // except 0xAD, which the encoding leaves undefined. A control byte stays a
 // control, for the caller to deal with as it deals with any other.
 func pdfDocRune(c byte) rune {
-	switch {
-	case c >= 0x18 && c <= 0x1f:
-		return pdfDocAccents[c-0x18]
-	case c >= 0x80 && c <= 0xa0:
-		return pdfDocHigh[c-0x80]
-	case c == 0xad:
+	if c >= 0x18 && c <= 0x1f {
+		return pdfDocAccents[int(c)-0x18]
+	}
+	if c >= 0x80 && c <= 0xa0 {
+		return pdfDocHigh[int(c)-0x80]
+	}
+	if c == 0xad {
 		return utf8.RuneError
 	}
 	return rune(c)
@@ -101,14 +102,25 @@ const aesBlockSize = 16
 // not define turned every byte above 0x7F into U+FFFD. A string whose length
 // is not a whole number of blocks, or whose end is not a valid padding, was not
 // decrypted that way, as a string inside an object stream is not, and is
-// returned as it is. A last byte of zero counts no padding and removes none.
+// returned as it is.
 func unpadAES(s string) string {
+	if unpadded, ok := pkcs5Unpad(s); ok {
+		return unpadded
+	}
+	return s
+}
+
+// pkcs5Unpad removes the PKCS#5 padding from s, a whole number of AES blocks
+// decrypted, and reports whether s ended in a valid padding: one to sixteen
+// bytes, each holding their count. A last byte of zero counts no padding,
+// which no encryption writes.
+func pkcs5Unpad(s string) (string, bool) {
 	if s == "" || len(s)%aesBlockSize != 0 {
-		return s
+		return "", false
 	}
 	pad := s[len(s)-1]
-	if pad > aesBlockSize || !strings.HasSuffix(s, strings.Repeat(s[len(s)-1:], int(pad))) {
-		return s
+	if pad == 0 || pad > aesBlockSize || !strings.HasSuffix(s, strings.Repeat(s[len(s)-1:], int(pad))) {
+		return "", false
 	}
-	return s[:len(s)-int(pad)]
+	return s[:len(s)-int(pad)], true
 }

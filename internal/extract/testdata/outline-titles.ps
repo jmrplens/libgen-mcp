@@ -7,6 +7,21 @@
 % on its own:
 %   qpdf --object-streams=disable --encrypt --user-password= --owner-password=owner --bits=128 --use-aes=y -- outline-titles.pdf encrypted-aes128-titles.pdf
 % The committed copy was written by libqpdf 12.4.2, through pikepdf 10.16.0.
+% Its other encrypted copies were written by qpdf 12.2.0, every one with
+% --allow-weak-crypto --encrypt --user-password= --owner-password=owner and
+% --object-streams=disable unless said, then:
+%   --bits=40 -- outline-titles.pdf encrypted-rc4-40-titles.pdf
+%   --bits=128 --use-aes=n -- outline-titles.pdf encrypted-rc4-titles.pdf
+%   --bits=128 --use-aes=n --force-V4 -- outline-titles.pdf encrypted-rc4-v4-titles.pdf
+%   --bits=128 --use-aes=y --cleartext-metadata -- outline-titles.pdf encrypted-aes128-clear-metadata-titles.pdf
+%   --bits=256 -- outline-titles.pdf encrypted-aes256-titles.pdf
+% and, with --object-streams=generate instead, so that every title is in a
+% compressed object stream:
+%   --bits=128 --use-aes=y -- outline-titles.pdf encrypted-aes128-objstm-titles.pdf
+% encrypted-aes128-user-password.pdf is the AES-128 one with
+% --user-password=user. The AES-128 copy whose crypt filter gives the key
+% length in bits is pdfcpu 0.16.0's:
+%   pdfcpu encrypt --mode aes --key 128 --opw owner outline-titles.pdf encrypted-aes128-cf-bits-titles.pdf
 % Ghostscript copies a pdfmark title byte for byte, so each title below is in
 % the file in the encoding it is written in: PDFDocEncoding with bytes above
 % 0x7F and an accent below 0x20, UTF-16BE with a character outside the Basic

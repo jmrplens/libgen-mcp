@@ -663,40 +663,61 @@ func TestReadModes_DamageThatQuotesTheWordEncryption(t *testing.T) {
 	}
 }
 
-// TestOutline_PDFEncrypted reads the sections fixture encrypted with an empty
-// user password, the shape of a PDF that only restricts printing or copying:
-// four ways by qpdf 12.2.0, three by Ghostscript 10.00.0 and once by pdfcpu
-// 0.16.0. The reader decrypts RC4 (V=2) with a 128-bit key and with an 88-bit
-// one, the shortest it decrypts correctly, and AES-128 (V=4 with AESV2), and
-// those read exactly as the plain file does. A 40-bit (R=2) and an 80-bit key
-// are refused, since the reader would decrypt them into noise, and so are what
-// it does not decrypt at all: AES-256 (V=5), RC4 under crypt filters (V=4 with
-// V2), and the AES-128 pdfcpu writes, whose crypt filter gives the key length
-// in bits. Those are reported as encrypted, in the same words by every mode,
-// rather than as an invalid file, a scan, or one without a table of contents.
+// TestOutline_PDFEncrypted reads the sections and the titles fixtures
+// encrypted with an empty user password, the shape of a PDF that only
+// restricts printing or copying, every way a producer here writes one: by
+// qpdf 12.2.0, by Ghostscript 10.00.0, and the AES-128 pdfcpu 0.16.0 writes,
+// whose crypt filter gives the key length in bits. Every outline pdfcpu read
+// must read the same, titles in every encoding and pages included.
+//
+// The reader decrypts RC4 (V=2) with a key of 88 bits or more and AES-128
+// whose crypt filter gives the length in bytes, and those read in every mode,
+// one with its titles in a compressed object stream too. pdfcpu's AES-128,
+// which it refuses, reads in every mode once the filter's length is shown to
+// it in bytes, object streams included. A shorter RC4 key, which the reader
+// decrypts into other bytes, RC4 under a crypt filter (V=4 with V2), which it
+// refuses, and AES-128 that leaves the metadata unencrypted, which it takes
+// for a file that needs a password, have their outline read by the walk's own
+// decryption, and the text modes refuse them with a reason that points at
+// outline mode. A short key whose outline is in a compressed object stream,
+// which only the reader could decrypt, and AES-256 (V=5), are refused by
+// outline mode as well, and called encrypted rather than an invalid file, a
+// scan, or one without a table of contents. A file that does need a password
+// says so in every mode.
 func TestOutline_PDFEncrypted(t *testing.T) {
-	plain := entryLines(outlineOf(t, mustRead(t, sectionsPDF)).Entries)
+	sections := entryLines(outlineOf(t, mustRead(t, sectionsPDF)).Entries)
+	titles := entryLines(outlineOf(t, mustRead(t, "testdata/outline-titles.pdf")).Entries)
 	for _, tc := range []struct {
-		name     string
-		readable bool
+		name    string
+		outline string
+		refusal string
+		text    string
 	}{
-		{"encrypted-rc4.pdf", true},
-		{"encrypted-rc4-88.pdf", true},
-		{"encrypted-aes128.pdf", true},
-		{"encrypted-rc4-80.pdf", false},
-		{"encrypted-rc4-40.pdf", false},
-		{"encrypted-aes256.pdf", false},
-		{"encrypted-rc4-v4.pdf", false},
-		{"encrypted-aes128-cf-bits.pdf", false},
+		{"encrypted-rc4.pdf", sections, "", ""},
+		{"encrypted-rc4-88.pdf", sections, "", ""},
+		{"encrypted-aes128.pdf", sections, "", ""},
+		{"encrypted-rc4-titles.pdf", titles, "", ""},
+		{"encrypted-aes128-titles.pdf", titles, "", ""},
+		{"encrypted-aes128-objstm-titles.pdf", titles, "", ""},
+		{"encrypted-rc4-80.pdf", sections, "", partlyEncryptedPDFReason},
+		{"encrypted-rc4-40.pdf", sections, "", partlyEncryptedPDFReason},
+		{"encrypted-rc4-v4.pdf", sections, "", partlyEncryptedPDFReason},
+		{"encrypted-aes128-cf-bits.pdf", sections, "", ""},
+		{"encrypted-aes128-cf-bits-titles.pdf", titles, "", ""},
+		{"encrypted-aes128-cf-bits-objstm.pdf", sections, "", ""},
+		{"encrypted-rc4-40-titles.pdf", titles, "", partlyEncryptedPDFReason},
+		{"encrypted-rc4-v4-titles.pdf", titles, "", partlyEncryptedPDFReason},
+		{"encrypted-aes128-clear-metadata-titles.pdf", titles, "", partlyEncryptedPDFReason},
+		{"encrypted-rc4-40-objstm.pdf", "", encryptedPDFReason, partlyEncryptedPDFReason},
+		{"encrypted-aes256.pdf", "", encryptedPDFReason, encryptedPDFReason},
+		{"encrypted-aes256-titles.pdf", "", encryptedPDFReason, encryptedPDFReason},
+		{"encrypted-aes128-user-password.pdf", "", lockedPDFReason, lockedPDFReason},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join("testdata", tc.name)
 			res := outlineOf(t, mustRead(t, path))
-			if tc.readable {
-				if got := entryLines(res.Entries); got != plain || !res.Extractable {
-					t.Errorf("outline:\n%s\nwant the plain file's:\n%s", got, plain)
-				}
-				return
+			if got := entryLines(res.Entries); got != tc.outline || res.Extractable != (tc.outline != "") || res.Reason != tc.refusal {
+				t.Errorf("outline:\n%s(%q)\nwant:\n%s(%q)", got, res.Reason, tc.outline, tc.refusal)
 			}
 			chunk, err := Extract(context.Background(), openFile(t, path), Req{})
 			if err != nil {
@@ -706,12 +727,8 @@ func TestOutline_PDFEncrypted(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if res.Extractable || res.Reason != encryptedPDFReason {
-				t.Errorf("want a not-extractable result with the encrypted reason, got %+v", res)
-			}
-			if chunk.Reason != res.Reason || found.Reason != res.Reason {
-				t.Errorf("one cause must get one answer:\n outline: %q\n text:    %q\n find:    %q",
-					res.Reason, chunk.Reason, found.Reason)
+			if chunk.Reason != tc.text || found.Reason != tc.text || chunk.Extractable != (tc.text == "") {
+				t.Errorf("one cause must get one answer, %q:\n text: %q\n find: %q", tc.text, chunk.Reason, found.Reason)
 			}
 		})
 	}
@@ -825,14 +842,106 @@ func TestOutlineWalk_Bounds(t *testing.T) {
 		{"a budget of every item", chain, 0, 3, "0 0 One\n0 0 Two\n0 0 Three\n", outlineWhole},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			root := readerFor(t, tc.data).Trailer().Key("Root")
-			w := newOutlineWalk(root, false)
+			w := newOutlineWalk(readerFor(t, tc.data).Trailer(), readerStrings(false))
 			w.items.left = tc.items
-			w.walk(context.Background(), root.Key("Outlines").Key("First"), tc.level)
+			outlines := child(&w.root, "Outlines")
+			w.walk(context.Background(), child(&outlines, "First"), tc.level)
 			if got := entryLines(w.entries); got != tc.want || w.state != tc.wantState {
 				t.Errorf("outline:\n%s(state %d)\nwant:\n%s(state %d)", got, w.state, tc.want, tc.wantState)
 			}
 		})
+	}
+}
+
+// TestOutline_PDFAnAESFilterItsLengthDoesNotOpen reads pdfcpu's AES-128
+// titles fixture with its crypt filter opened on another event than the
+// document's, which the reader refuses whatever the length says. Its outline
+// is read by the walk's own decryption, as the other refused filters' are,
+// and the text modes point at outline mode.
+func TestOutline_PDFAnAESFilterItsLengthDoesNotOpen(t *testing.T) {
+	data := bytes.Replace(mustRead(t, "testdata/encrypted-aes128-cf-bits-titles.pdf"), []byte("/AuthEvent/DocOpen"), []byte("/AuthEvent/EFOpen "), 1)
+	want := entryLines(outlineOf(t, mustRead(t, "testdata/outline-titles.pdf")).Entries)
+	if got := entryLines(outlineOf(t, data).Entries); got != want {
+		t.Errorf("outline:\n%s\nwant:\n%s", got, want)
+	}
+	chunk, err := Extract(context.Background(), openFile(t, writeBytes(t, t.TempDir(), "efopen.pdf", data)), Req{})
+	if err != nil || chunk.Reason != partlyEncryptedPDFReason {
+		t.Errorf("text: %q (%v), want %q", chunk.Reason, err, partlyEncryptedPDFReason)
+	}
+}
+
+// TestOutlineReader opens for the walk a plain file, one the reader decrypts
+// and two it decrypts wrongly or refuses, and nothing, without panicking, for
+// an AES-256 file, one that needs a password, one that is not a PDF, and one
+// whose page tree is unsafe to walk.
+func TestOutlineReader(t *testing.T) {
+	cyclic := buildPDF([]string{"<</Type/Catalog/Pages 2 0 R>>", "<</Type/Pages/Kids[2 0 R]/Count 1>>"})
+	for _, tc := range []struct {
+		name string
+		d    document
+		ok   bool
+	}{
+		{"plain", docFor(t, sectionsPDF), true},
+		{"AES-128", docFor(t, "testdata/encrypted-aes128.pdf"), true},
+		{"40-bit RC4", docFor(t, "testdata/encrypted-rc4-40.pdf"), true},
+		{"pdfcpu's AES-128", docFor(t, "testdata/encrypted-aes128-cf-bits.pdf"), true},
+		{"AES-256", docFor(t, "testdata/encrypted-aes256.pdf"), false},
+		{"a password", docFor(t, "testdata/encrypted-aes128-user-password.pdf"), false},
+		{"not a PDF", document{r: strings.NewReader("not a PDF"), size: 9}, false},
+		{"a cyclic page tree", document{r: bytes.NewReader(cyclic), size: int64(len(cyclic))}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, strs := outlineReader(tc.d)
+			if (r != nil) != tc.ok || (strs != nil) != tc.ok {
+				t.Errorf("outlineReader = %v, %v, want a reader: %v", r, strs != nil, tc.ok)
+			}
+		})
+	}
+}
+
+// TestOutlineWalk_AStringThatDoesNotDecode walks an outline whose strings
+// its decoder cannot decode, an AES string that does not decrypt to a padded
+// whole. That is damage, and the title is not listed.
+func TestOutlineWalk_AStringThatDoesNotDecode(t *testing.T) {
+	fails := func(string, objRef) (string, bool) { return "", false }
+	w := newOutlineWalk(readerFor(t, outlinePDF("", "<</Title(A)>>")).Trailer(), fails)
+	outlines := child(&w.root, "Outlines")
+	w.walk(context.Background(), child(&outlines, "First"), 0)
+	if len(w.entries) != 0 || w.state != outlineDamaged {
+		t.Errorf("entries %v, state %d, want none and outlineDamaged", w.entries, w.state)
+	}
+}
+
+// TestChildAndElement holds a value reached through a reference to the
+// object it refers to, and a value written in place to the object of the
+// value that holds it, in a dictionary and in an array, which is the object
+// whose key encrypts its strings.
+func TestChildAndElement(t *testing.T) {
+	r := readerFor(t, buildPDF([]string{"<</Type/Catalog/T<</Ref 2 0 R/Here(s)/Arr[2 0 R(s)]>>>>", "(in two)"}))
+	catalog := child(&node{v: r.Trailer()}, "Root")
+	tree := child(&catalog, "T")
+	arr := child(&tree, "Arr")
+	refs := arrayRefs(arr.v)
+	for _, tc := range []struct {
+		name string
+		got  node
+		want objRef
+	}{
+		{"the catalog", catalog, objRef{id: 1}},
+		{"a dictionary in place", tree, objRef{id: 1}},
+		{"a reference", child(&tree, "Ref"), objRef{id: 2}},
+		{"a string in place", child(&tree, "Here"), objRef{id: 1}},
+		{"an element reference", element(arr, refs, 0), objRef{id: 2}},
+		{"an element in place", element(arr, refs, 1), objRef{id: 1}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.got.in != tc.want {
+				t.Errorf("in = %+v, want %+v", tc.got.in, tc.want)
+			}
+		})
+	}
+	if s := child(&tree, "Ref").v.RawString(); s != "in two" {
+		t.Errorf("the reference reads %q, want %q", s, "in two")
 	}
 }
 
@@ -945,10 +1054,10 @@ func TestCollectNameTree(t *testing.T) {
 		{"AES padding in another file", padded, false, 0, maxNameTreeVisits, "a" + strings.Repeat("\x0f", 15) + "=1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			node := readerFor(t, tc.data).Trailer().Key("Root").Key("T")
-			w := &outlineWalk{aes: tc.aes, dests: map[string]nameEntry{}}
+			tree := node{v: readerFor(t, tc.data).Trailer().Key("Root").Key("T")}
+			w := &outlineWalk{strs: readerStrings(tc.aes), dests: map[string]nameEntry{}}
 			visits := walkBudget{left: tc.visits}
-			w.collectNameTree(context.Background(), node, tc.depth, &visits)
+			w.collectNameTree(context.Background(), tree, tc.depth, &visits)
 			if got := nameTreeLines(w.dests); got != tc.want {
 				t.Errorf("names = %q, want %q", got, tc.want)
 			}
@@ -1103,7 +1212,8 @@ func FuzzPDFOutline(f *testing.F) {
 		outlineTargetsPDF, sectionsPDF, "testdata/bookmarked.pdf",
 		"testdata/encrypted-rc4.pdf", "testdata/encrypted-aes128.pdf",
 		"testdata/outline-titles.pdf", "testdata/encrypted-aes128-titles.pdf",
-		"testdata/sections-pdf20.pdf",
+		"testdata/sections-pdf20.pdf", "testdata/encrypted-rc4-40-titles.pdf",
+		"testdata/encrypted-aes128-cf-bits-titles.pdf", "testdata/encrypted-rc4-40-objstm.pdf",
 	} {
 		f.Add(mustRead(f, path))
 	}

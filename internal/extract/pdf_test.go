@@ -354,15 +354,15 @@ func TestEncryptionOf(t *testing.T) {
 	}
 }
 
-// TestHeaderView reads every window of a PDF 2.0 file's first bytes through
-// the view, and each must read as the same window of the file with a 1.7
-// header: the version is replaced whichever part of it a read covers, and
-// nothing around it moves.
-func TestHeaderView(t *testing.T) {
+// TestOverwritten reads every window of a PDF 2.0 file's first bytes through
+// the view pdfBytes gives it, and each must read as the same window of the
+// file with a 1.7 header: the version is replaced whichever part of it a read
+// covers, and nothing around it moves.
+func TestOverwritten(t *testing.T) {
 	const rest = "\n%\xe2\xe3\n1 0 obj"
 	file := []byte("%PDF-2.0" + rest)
 	shown := "%PDF-1.7" + rest
-	v := headerView{bytes.NewReader(file)}
+	v := overwritten{ReaderAt: bytes.NewReader(file), at: versionAt, with: shownVersion}
 	for off := range file {
 		for size := 1; off+size <= len(file); size++ {
 			t.Run(fmt.Sprintf("%d+%d", off, size), func(t *testing.T) {
@@ -376,11 +376,11 @@ func TestHeaderView(t *testing.T) {
 	}
 }
 
-// TestHeaderView_AShortRead passes on what the file returns past its end, and
-// replaces only the bytes that were read.
-func TestHeaderView_AShortRead(t *testing.T) {
+// TestOverwritten_AShortRead passes on what the file returns past its end,
+// and replaces only the bytes that were read.
+func TestOverwritten_AShortRead(t *testing.T) {
 	p := []byte("xxxxxxxxxx")
-	n, err := headerView{strings.NewReader("%PDF-2")}.ReadAt(p, 0)
+	n, err := overwritten{ReaderAt: strings.NewReader("%PDF-2"), at: versionAt, with: shownVersion}.ReadAt(p, 0)
 	if n != 6 || !errors.Is(err, io.EOF) || string(p) != "%PDF-1xxxx" {
 		t.Errorf("ReadAt = %d %v %q, want 6 EOF %q", n, err, p, "%PDF-1xxxx")
 	}
@@ -401,7 +401,7 @@ func TestPDFBytes(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			src := strings.NewReader(tc.head)
-			_, view := pdfBytes(document{r: src, size: int64(len(tc.head))}).(headerView)
+			_, view := pdfBytes(document{r: src, size: int64(len(tc.head))}).(overwritten)
 			if view != tc.view {
 				t.Errorf("read through the view = %v, want %v", view, tc.view)
 			}

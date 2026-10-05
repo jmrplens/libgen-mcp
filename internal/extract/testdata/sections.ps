@@ -11,6 +11,12 @@
 % and its AES-128 copy whose crypt filter gives the key length in bits is
 % pdfcpu 0.16.0's:
 %   pdfcpu encrypt --mode aes --key 128 --opw owner sections.pdf encrypted-aes128-cf-bits.pdf
+% and encrypted-aes128-cf-bits-objstm.pdf is the same command run on a copy
+% with object streams, written by qpdf 12.2.0's
+%   qpdf --object-streams=generate sections.pdf sections-objstm.pdf
+% Its 40-bit copy with every object it can compress in an object stream,
+% encrypted-rc4-40-objstm.pdf, is qpdf 12.2.0's:
+%   qpdf --object-streams=generate --allow-weak-crypto --encrypt --user-password= --owner-password=owner --bits=40 -- sections.pdf encrypted-rc4-40-objstm.pdf
 % Eight pages, and an outline two levels deep whose entries share a page twice
 % (Chapter 2 and Sampling on page five, Analysis and the second Summary on page
 % six) and repeat a title (Summary), which is what the section tests read.

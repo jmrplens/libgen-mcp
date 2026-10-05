@@ -122,19 +122,63 @@ func pdfBookmarkEntries(ctx context.Context, d document) (entries []OutlineEntry
 			entries, outline, err = nil, outlineDamaged, nil
 		}
 	}()
-	r, why := openPDF(d)
-	if why != "" {
+	r, strs := outlineReader(d)
+	if r == nil {
 		return nil, outlineWhole, nil
 	}
-	root := r.Trailer().Key("Root")
-	// The reader opens a crypt filter (V=4) only when it is AESV2, so V=4 is
-	// AES here.
-	w := newOutlineWalk(root, encryptionOf(r).version == 4)
-	w.walk(ctx, w.link(w.link(root, "Outlines"), "First"), 0)
+	w := newOutlineWalk(r.Trailer(), strs)
+	outlines := w.link(&w.root, "Outlines")
+	w.walk(ctx, w.link(&outlines, "First"), 0)
 	if w.state != outlineWhole {
 		return nil, w.state, w.items.err
 	}
 	return w.entries, outlineWhole, w.items.err
+}
+
+// stringDecoder returns the bytes of raw, a string the reader handed over
+// that the file wrote in the object in, or false when they cannot be told.
+type stringDecoder func(raw string, in objRef) (string, bool)
+
+// readerStrings decodes the strings of a file the reader decrypts itself: as
+// they come, or, when the file is encrypted with AES, without the padding the
+// reader leaves on them.
+func readerStrings(aesPadded bool) stringDecoder {
+	return func(raw string, _ objRef) (string, bool) {
+		if aesPadded {
+			return unpadAES(raw), true
+		}
+		return raw, true
+	}
+}
+
+// outlineReader opens d for the outline walk and says how the walk reads its
+// strings. A file the reader opens and decrypts correctly is walked as the
+// reader hands it over; the reader opens a crypt filter (V=4) only when it is
+// AES-128, so V=4 there is AES. One encrypted with an RC4 key the reader
+// decrypts into other bytes, or refused in a way selfDecryptable names, is
+// walked with its encryption hidden from the reader and its strings decrypted
+// by selfDecrypting, which reads them as the text path cannot: only the
+// strings, and only of objects outside a compressed object stream, which the
+// reader would have to decrypt. Anything else, or a page tree unsafe to walk,
+// yields a nil reader, and the text-layer probe that follows gives the reason.
+func outlineReader(d document) (*pdf.Reader, stringDecoder) {
+	r, err := openReader(d)
+	if err == nil && !rc4KeyTooShort(r) {
+		return walkable(r, readerStrings(encryptionOf(r).version == 4))
+	}
+	if err == nil || selfDecryptable(err) {
+		return walkable(selfDecrypting(d))
+	}
+	return nil, nil
+}
+
+// walkable returns r and strs, or nothing when there is no reader or its page
+// tree is unsafe to walk.
+func walkable(r *pdf.Reader, strs stringDecoder) (*pdf.Reader, stringDecoder) {
+	if r == nil || pageTreeReason(r) != "" {
+		return nil, nil
+	}
+	return r, strs
 }
 
 // pdfNoOutlineResult decides what to report for a PDF that yielded no outline
@@ -142,11 +186,16 @@ func pdfBookmarkEntries(ctx context.Context, d document) (entries []OutlineEntry
 // a text layer? A readable one is extractable with no entries, saying whether
 // the outline is absent, damaged or too large to list; a text-free one is
 // reported as scanned; an unreadable one carries the reader's own diagnosis,
-// which for an encrypted file names the encryption.
+// which for an encrypted file says it is encrypted. The text path's answer
+// for a file whose outline the walk decrypts points at outline mode, which is
+// where this is, and which listed nothing, so it is encryptedPDFReason here.
 func pdfNoOutlineResult(ctx context.Context, d document, outline outlineState) (OutlineResult, error) {
 	state, reason, err := probePDFTextLayer(ctx, d)
 	if err != nil {
 		return OutlineResult{}, err
+	}
+	if reason == partlyEncryptedPDFReason {
+		reason = encryptedPDFReason
 	}
 	switch state {
 	case pdfTextAbsent:
@@ -185,14 +234,24 @@ func (b *walkBudget) spend(ctx context.Context) bool {
 	return true
 }
 
+// node is a value the outline walk reads and the object its strings are
+// written in, whose key encrypts them in an encrypted file: the object the
+// value is, when it was reached through a reference, and otherwise the object
+// of the value that holds it. refs is dictRefs(v), read in by child on first
+// use, since an item is asked for four or five of its keys.
+type node struct {
+	v    pdf.Value
+	in   objRef
+	refs map[string]objRef
+}
+
 // outlineWalk is the state of one outline read.
 type outlineWalk struct {
 	// root is the document catalog, where pages and named destinations are
 	// looked up.
-	root pdf.Value
-	// aes is set when the file is encrypted with AES, whose padding the
-	// reader leaves on every string it decrypts.
-	aes bool
+	root node
+	// strs decodes the strings the reader hands over.
+	strs stringDecoder
 	// items bounds the outline items read.
 	items walkBudget
 	// seen holds a digest of each item read, to stop at a cycle.
@@ -222,24 +281,51 @@ type nameEntry struct {
 	at    int
 }
 
-// newOutlineWalk starts an outline read of the document whose catalog is
-// root, encrypted with AES when aes is set.
-func newOutlineWalk(root pdf.Value, aes bool) *outlineWalk {
+// newOutlineWalk starts an outline read of the document whose trailer is
+// trailer, whose strings strs decodes.
+func newOutlineWalk(trailer pdf.Value, strs stringDecoder) *outlineWalk {
+	t := node{v: trailer}
 	return &outlineWalk{
-		root:  root,
-		aes:   aes,
+		root:  child(&t, "Root"),
+		strs:  strs,
 		items: walkBudget{left: maxOutlineItems},
 		seen:  map[[sha256.Size]byte]bool{},
 	}
 }
 
-// str returns the bytes of the string v, without the padding AES left on it
-// when the file is encrypted with AES.
-func (w *outlineWalk) str(v pdf.Value) string {
-	if w.aes {
-		return unpadAES(v.RawString())
+// child returns what the dictionary from holds under key, and the object its
+// strings are written in: the object key refers to, or, for a value written
+// in place, from's.
+func child(from *node, key string) node {
+	if from.refs == nil {
+		from.refs = dictRefs(from.v)
 	}
-	return v.RawString()
+	in, ok := from.refs[key]
+	if !ok {
+		in = from.in
+	}
+	return node{v: from.v.Key(key), in: in}
+}
+
+// element returns the array arr's element i, and the object its strings are
+// written in, which refs, arr's arrayRefs, says as child does.
+func element(arr node, refs map[int]objRef, i int) node {
+	in, ok := refs[i]
+	if !ok {
+		in = arr.in
+	}
+	return node{v: arr.v.Index(i), in: in}
+}
+
+// str returns the bytes of the string n, decoded as the walk's strings are.
+// A string that cannot be decoded, an AES one that does not decrypt to a
+// padded whole, is damage, and reads as empty.
+func (w *outlineWalk) str(n node) string {
+	s, ok := w.strs(n.v.RawString(), n.in)
+	if !ok {
+		w.state = outlineDamaged
+	}
+	return s
 }
 
 // walk appends item and its following siblings at level, each followed by its
@@ -248,20 +334,20 @@ func (w *outlineWalk) str(v pdf.Value) string {
 // the item budget, which it records as outlineTooLarge. The budget is also
 // spent once ctx has ended, and then the walk's error is what its caller
 // returns.
-func (w *outlineWalk) walk(ctx context.Context, item pdf.Value, level int) {
-	for item.Kind() == pdf.Dict {
+func (w *outlineWalk) walk(ctx context.Context, item node, level int) {
+	for item.v.Kind() == pdf.Dict {
 		if level >= maxOutlineDepth || !w.items.spend(ctx) {
 			w.state = outlineTooLarge
 			return
 		}
-		if !w.firstVisit(item) {
+		if !w.firstVisit(item.v) {
 			return
 		}
-		if title := outlineTitle(textString(w.str(item.Key("Title")))); title != "" {
-			w.entries = append(w.entries, OutlineEntry{Title: title, Level: level, Page: w.destPage(ctx, item)})
+		if title := outlineTitle(textString(w.str(child(&item, "Title")))); title != "" {
+			w.entries = append(w.entries, OutlineEntry{Title: title, Level: level, Page: w.destPage(ctx, &item)})
 		}
-		w.walk(ctx, w.link(item, "First"), level+1)
-		item = w.link(item, "Next")
+		w.walk(ctx, w.link(&item, "First"), level+1)
+		item = w.link(&item, "Next")
 	}
 }
 
@@ -272,9 +358,9 @@ func (w *outlineWalk) walk(ctx context.Context, item pdf.Value, level int) {
 // not the whole. ISO 32000 has each of these keys be a reference to a
 // dictionary, so an explicit null is damage too. A key from does not state is
 // the end of its chain.
-func (w *outlineWalk) link(from pdf.Value, key string) pdf.Value {
-	to := from.Key(key)
-	if to.Kind() != pdf.Dict && slices.Contains(from.Keys(), key) {
+func (w *outlineWalk) link(from *node, key string) node {
+	to := child(from, key)
+	if to.v.Kind() != pdf.Dict && slices.Contains(from.v.Keys(), key) {
 		w.state = outlineDamaged
 	}
 	return to
@@ -316,25 +402,25 @@ func outlineTitle(text string) string {
 // destPage resolves an outline item's /Dest, or the /D of its GoTo action, to
 // a 1-based page number, and returns 0 when it does not lead to a page of this
 // document.
-func (w *outlineWalk) destPage(ctx context.Context, item pdf.Value) int {
-	dest := item.Key("Dest")
-	if dest.IsNull() {
-		action := item.Key("A")
-		if action.Key("S").Name() != "GoTo" {
+func (w *outlineWalk) destPage(ctx context.Context, item *node) int {
+	dest := child(item, "Dest")
+	if dest.v.IsNull() {
+		action := child(item, "A")
+		if action.v.Key("S").Name() != "GoTo" {
 			return 0
 		}
-		dest = action.Key("D")
+		dest = child(&action, "D")
 	}
-	dest = w.explicit(ctx, dest)
-	if dest.Kind() != pdf.Array {
+	explicit := w.explicit(ctx, dest)
+	if explicit.Kind() != pdf.Array {
 		return 0
 	}
-	m := leadingReferenceRE.FindStringSubmatch(dest.String())
+	m := leadingReferenceRE.FindStringSubmatch(explicit.String())
 	if m == nil {
 		return 0
 	}
 	if w.pages == nil {
-		w.pages = pageRefIndex(w.root.Key("Pages"))
+		w.pages = pageRefIndex(w.root.v.Key("Pages"))
 	}
 	return w.pages[m[1]+" "+m[2]]
 }
@@ -342,17 +428,18 @@ func (w *outlineWalk) destPage(ctx context.Context, item pdf.Value) int {
 // explicit turns a named destination into the explicit one it names, and
 // returns an explicit destination as it is. A name is looked up as a name and
 // a string as a string, and a destination stored as a dictionary is its /D.
-func (w *outlineWalk) explicit(ctx context.Context, dest pdf.Value) pdf.Value {
-	switch dest.Kind() {
+func (w *outlineWalk) explicit(ctx context.Context, dest node) pdf.Value {
+	d := dest.v
+	switch d.Kind() {
 	case pdf.Name:
-		dest = w.named(ctx, dest.Name())
+		d = w.named(ctx, d.Name())
 	case pdf.String:
-		dest = w.named(ctx, w.str(dest))
+		d = w.named(ctx, w.str(dest))
 	}
-	if dest.Kind() == pdf.Dict {
-		return dest.Key("D")
+	if d.Kind() == pdf.Dict {
+		return d.Key("D")
 	}
-	return dest
+	return d
 }
 
 // named looks a destination name up in the PDF 1.1 /Dests dictionary, and
@@ -360,7 +447,7 @@ func (w *outlineWalk) explicit(ctx context.Context, dest pdf.Value) pdf.Value {
 // tree under ctx.
 func (w *outlineWalk) named(ctx context.Context, name string) pdf.Value {
 	if w.legacyDests == nil {
-		d := w.root.Key("Dests")
+		d := w.root.v.Key("Dests")
 		w.legacyDests = &d
 	}
 	if dest := w.legacyDests.Key(name); !dest.IsNull() {
@@ -369,7 +456,8 @@ func (w *outlineWalk) named(ctx context.Context, name string) pdf.Value {
 	if w.dests == nil {
 		w.dests = map[string]nameEntry{}
 		visits := walkBudget{left: maxNameTreeVisits}
-		w.collectNameTree(ctx, w.root.Key("Names").Key("Dests"), 0, &visits)
+		names := child(&w.root, "Names")
+		w.collectNameTree(ctx, child(&names, "Dests"), 0, &visits)
 	}
 	e, ok := w.dests[name]
 	if !ok {
@@ -378,29 +466,31 @@ func (w *outlineWalk) named(ctx context.Context, name string) pdf.Value {
 	return e.names.Index(e.at)
 }
 
-// collectNameTree records in w.dests where the name tree rooted at node holds
+// collectNameTree records in w.dests where the name tree rooted at tree holds
 // each name, a later leaf's entry replacing an earlier one's. A name is a
 // string, read as str reads one, so it matches the name an outline item gives
-// whether or not AES padded either. It stops at the depth bound and when
-// visits is spent or ctx has ended, so a /Kids array that leads back to an
-// ancestor ends the read rather than repeating it.
-func (w *outlineWalk) collectNameTree(ctx context.Context, node pdf.Value, depth int, visits *walkBudget) {
-	if node.Kind() != pdf.Dict || depth >= maxNameTreeDepth {
+// however the file is encrypted. It stops at the depth bound and when visits
+// is spent or ctx has ended, so a /Kids array that leads back to an ancestor
+// ends the read rather than repeating it.
+func (w *outlineWalk) collectNameTree(ctx context.Context, tree node, depth int, visits *walkBudget) {
+	if tree.v.Kind() != pdf.Dict || depth >= maxNameTreeDepth {
 		return
 	}
-	names := node.Key("Names")
-	for i := 0; i+1 < names.Len(); i += 2 {
+	names := child(&tree, "Names")
+	nameRefs := arrayRefs(names.v)
+	for i := 0; i+1 < names.v.Len(); i += 2 {
 		if !visits.spend(ctx) {
 			return
 		}
-		w.dests[w.str(names.Index(i))] = nameEntry{names: names, at: i + 1}
+		w.dests[w.str(element(names, nameRefs, i))] = nameEntry{names: names.v, at: i + 1}
 	}
-	kids := node.Key("Kids")
-	for i := range kids.Len() {
+	kids := child(&tree, "Kids")
+	kidRefs := arrayRefs(kids.v)
+	for i := range kids.v.Len() {
 		if !visits.spend(ctx) {
 			return
 		}
-		w.collectNameTree(ctx, kids.Index(i), depth+1, visits)
+		w.collectNameTree(ctx, element(kids, kidRefs, i), depth+1, visits)
 	}
 }
 
