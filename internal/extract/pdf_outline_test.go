@@ -553,6 +553,40 @@ func TestOutline_PDFTruncatedFile(t *testing.T) {
 	}
 }
 
+// TestReadModes_DamageThatQuotesTheWordEncryption points a file's startxref at
+// an ordinary object whose text says "encryption", which is what a stale
+// startxref in a book about cryptography looks like. The reader quotes that
+// object in its error, and every mode must still call the file damaged rather
+// than encrypted, since another copy of a damaged file may read and no copy of
+// an encryption the reader lacks will.
+func TestReadModes_DamageThatQuotesTheWordEncryption(t *testing.T) {
+	data := outlinePDF("", "<</Title(Public-key encryption)/Subject(A primer on public-key encryption)>>")
+	at := bytes.Index(data, []byte("9 0 obj"))
+	end := bytes.LastIndex(data, []byte("startxref\n")) + len("startxref\n")
+	data = fmt.Appendf(slices.Clone(data[:end]), "%d\n%%%%EOF", at)
+	path := writeBytes(t, t.TempDir(), "stale.pdf", data)
+
+	res, err := Outline(context.Background(), openFile(t, path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	chunk, err := Extract(context.Background(), openFile(t, path), Req{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found, err := Search(context.Background(), openFile(t, path), "primer", SearchOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for mode, reason := range map[string]string{"outline": res.Reason, "text": chunk.Reason, "find": found.Reason} {
+		t.Run(mode, func(t *testing.T) {
+			if !strings.HasPrefix(reason, "cannot read PDF: the file is damaged (") || !strings.Contains(reason, "encryption") {
+				t.Errorf("want the damaged-file reason quoting the object, got %q", reason)
+			}
+		})
+	}
+}
+
 // TestOutline_PDFEncrypted reads the sections fixture encrypted four ways by
 // qpdf 12.2.0 with an empty user password, the shape of a PDF that only
 // restricts printing or copying. The reader decrypts RC4 (V=2) and AES-128
@@ -807,9 +841,16 @@ func TestPageIndex(t *testing.T) {
 }
 
 // TestOpenPDFReason pins how a refusal to open becomes a diagnosis: the
-// password sentinel, wrapped or not, an encryption the reader names, a file
-// that is not a PDF at all, and a PDF that broke.
+// password sentinel, wrapped or not, each way the reader begins a refusal of an
+// encryption, a file that is not a PDF at all, and a PDF that broke, including
+// one whose error quotes file bytes that say "encryption" somewhere past its
+// start, which is damage and not encryption.
 func TestOpenPDFReason(t *testing.T) {
+	damaged := func(detail string) string {
+		return "cannot read PDF: the file is damaged (" + detail + "), and this reader does not repair one, " +
+			"so neither its text nor its table of contents can be read; another copy of the file may be intact"
+	}
+	quoted := "malformed PDF: cross-reference table not found: {11 0 obj}<</Subject(A primer on public-key encryption)>>"
 	for _, tc := range []struct {
 		name string
 		err  error
@@ -819,12 +860,15 @@ func TestOpenPDFReason(t *testing.T) {
 		{"password, wrapped", fmt.Errorf("opening: %w", pdf.ErrInvalidPassword), lockedPDFReason},
 		{"AES-256", errors.New("malformed PDF: 256-bit encryption key"), encryptedPDFReason},
 		{"RC4 V=4", errors.New("unsupported PDF: encryption version V=4; <<...>>"), encryptedPDFReason},
+		{"a certificate handler", errors.New("unsupported PDF: encryption filter /Adobe.PubSec"), encryptedPDFReason},
+		{"revision 6", errors.New("unsupported PDF: encryption revision R=6"), encryptedPDFReason},
+		{"revision 1", errors.New("malformed PDF: encryption revision R=1"), encryptedPDFReason},
+		{"no O or U", errors.New("malformed PDF: missing O= or U= encryption parameters"), encryptedPDFReason},
+		{"the word in quoted bytes", errors.New(quoted), damaged(pdfErrorDetail(errors.New(quoted)))},
+		{"a key length followed by more", errors.New("malformed PDF: 40-bit encryption key (0 0 obj)"), damaged("malformed PDF: 40-bit encryption key (0 0 obj)")},
+		{"no O or U, followed by more", errors.New("malformed PDF: missing O= or U= encryption parameters here"), damaged("malformed PDF: missing O= or U= encryption parameters here")},
 		{"not a PDF", errors.New("not a PDF file: invalid header"), "not a valid PDF: not a PDF file: invalid header"},
-		{
-			"truncated", errors.New("not a PDF file: missing %%EOF"),
-			"cannot read PDF: the file is damaged (not a PDF file: missing %%EOF), and this reader does not repair one, " +
-				"so neither its text nor its table of contents can be read; another copy of the file may be intact",
-		},
+		{"truncated", errors.New("not a PDF file: missing %%EOF"), damaged("not a PDF file: missing %%EOF")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := openPDFReason(tc.err); got != tc.want {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -82,29 +83,55 @@ func pdfErrorDetail(err error) string {
 	return string([]rune(detail)[:maxPDFErrorDetail]) + "..."
 }
 
+// encryptionRefusalRE matches the start of every error ledongthuc/pdf returns
+// when it will not decrypt a file: an encryption filter, version or revision
+// it does not implement, a key length outside 40 to 128 bits, and an
+// encryption dictionary without its O and U entries. It is anchored at the
+// start, and the two messages that end with their words at the end, because
+// the reader's other errors quote the bytes it could not parse, and a damaged
+// file whose stray bytes say "encryption" is still a damaged file.
+var encryptionRefusalRE = regexp.MustCompile(
+	`^(unsupported PDF: encryption |malformed PDF: (-?\d+-bit encryption key$|encryption revision |missing O= or U= encryption parameters$))`,
+)
+
 // openPDFReason is the diagnosis for a file the PDF reader would not open.
 //
 // The reader reports a password it could not match with a sentinel, and the
 // rest only in its error's words. Every refusal of an encryption it does not
-// implement names the encryption ("unsupported PDF: encryption version V=5",
-// "256-bit encryption key" and the rest), and a file that does not even start
-// as a PDF is "not a PDF file: invalid header"; anything else opened as a PDF
-// and broke. The fixtures pin the matching: an AES-256 and an RC4 V=4 file are
-// held to encryptedPDFReason and a truncated one to damagedPDFReason, so a
-// release of the reader that words it differently fails a test rather than
-// changing a diagnosis in silence.
+// implement opens with words encryptionRefusalRE knows, and a file that does
+// not even start as a PDF is "not a PDF file: invalid header"; anything else
+// opened as a PDF and broke. The fixtures pin the matching: an AES-256 and an
+// RC4 V=4 file are held to encryptedPDFReason and a truncated one to
+// damagedPDFReason, so a release of the reader that words it differently fails
+// a test rather than changing a diagnosis in silence.
 func openPDFReason(err error) string {
 	msg := err.Error()
 	switch {
 	case errors.Is(err, pdf.ErrInvalidPassword):
 		return lockedPDFReason
-	case strings.Contains(msg, "encryption"):
+	case encryptionRefusalRE.MatchString(msg):
 		return encryptedPDFReason
 	case strings.HasPrefix(msg, "not a PDF file: invalid header"):
 		return invalidPDFReason(err)
 	default:
 		return damagedPDFReason(err)
 	}
+}
+
+// openPDF opens d with the PDF reader every mode uses and checks what each
+// mode checks before it reads a page: that the reader opened the file, and
+// that its page tree is safe to hand to Reader.Page. It returns the reader, or
+// nil and the diagnosis for a file no mode can read. The reader can panic on
+// malformed input, so a caller runs it behind recover().
+func openPDF(d document) (r *pdf.Reader, why string) {
+	r, err := pdf.NewReader(d.r, d.size)
+	if err != nil {
+		return nil, openPDFReason(err)
+	}
+	if cyclic := pageTreeReason(r); cyclic != "" {
+		return nil, cyclic
+	}
+	return r, ""
 }
 
 // malformedPDFReason is the diagnosis for a PDF that made the reader panic —
@@ -128,13 +155,9 @@ func probePDFTextLayer(ctx context.Context, d document) (state pdfTextState, rea
 			state, reason, err = pdfTextUnreadable, malformedPDFReason(rec), nil
 		}
 	}()
-	r, oerr := pdf.NewReader(d.r, d.size)
-	if oerr != nil {
-		return pdfTextUnreadable, openPDFReason(oerr), nil
-	}
-
-	if cyclic := pageTreeReason(r); cyclic != "" {
-		return pdfTextUnreadable, cyclic, nil
+	r, why := openPDF(d)
+	if why != "" {
+		return pdfTextUnreadable, why, nil
 	}
 
 	for _, n := range probePageNumbers(r.NumPage(), textProbePages) {
@@ -228,13 +251,9 @@ func readPDFRange(ctx context.Context, d document, pr pdfRange) (chunk Chunk, er
 // readPDFPages parses the PDF, scans the requested page range and assembles the
 // final Chunk, including no-text-layer detection.
 func readPDFPages(ctx context.Context, d document, pr pdfRange) (Chunk, error) {
-	r, err := pdf.NewReader(d.r, d.size)
-	if err != nil {
-		return Chunk{Format: "pdf", Reason: openPDFReason(err)}, nil
-	}
-
-	if cyclic := pageTreeReason(r); cyclic != "" {
-		return Chunk{Format: "pdf", Reason: cyclic}, nil
+	r, why := openPDF(d)
+	if why != "" {
+		return Chunk{Format: "pdf", Reason: why}, nil
 	}
 
 	total := r.NumPage()

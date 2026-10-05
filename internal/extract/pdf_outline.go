@@ -97,8 +97,8 @@ func pdfBookmarkEntries(ctx context.Context, d document) (entries []OutlineEntry
 			entries, damaged, err = nil, true, nil
 		}
 	}()
-	r, oerr := pdf.NewReader(d.r, d.size)
-	if oerr != nil || pageTreeReason(r) != "" {
+	r, why := openPDF(d)
+	if why != "" {
 		return nil, false, nil
 	}
 	root := r.Trailer().Key("Root")

@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"unicode"
-
-	"github.com/ledongthuc/pdf"
 )
 
 // Match is a single query hit within a document. Page is the 1-based PDF page
@@ -142,13 +140,9 @@ func searchPDF(ctx context.Context, d document, query string, o SearchOpts) (res
 // (recording each hit's page and in-page rune offset), and windows the result.
 // If no page yields any text, it reports the scanned/no-text-layer condition.
 func scanPDFMatches(ctx context.Context, d document, query string, o SearchOpts) (SearchResult, error) {
-	r, err := pdf.NewReader(d.r, d.size)
-	if err != nil {
-		return SearchResult{Format: "pdf", Reason: openPDFReason(err)}, nil
-	}
-
-	if cyclic := pageTreeReason(r); cyclic != "" {
-		return SearchResult{Format: "pdf", Reason: cyclic}, nil
+	r, why := openPDF(d)
+	if why != "" {
+		return SearchResult{Format: "pdf", Reason: why}, nil
 	}
 
 	var all []Match
