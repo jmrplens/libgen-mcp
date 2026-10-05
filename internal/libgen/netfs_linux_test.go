@@ -161,10 +161,13 @@ func TestNetworkFilesystem(t *testing.T) {
 // line for another device, and answers errMountUnknown whenever the table
 // does not say: a table that cannot be read, a directory that is not there,
 // and, as errMountUnlisted too, a device the table does not list. The first
-// case reads the kernel's own table, where /proc is a proc mount on every
-// Linux system.
+// case reads the kernel's own table, where /proc is a proc mount, and is
+// skipped where there is no table to read, as in a chroot without /proc.
 func TestMountType(t *testing.T) {
 	t.Run("the kernel's own table", func(t *testing.T) {
+		if _, err := os.Stat(mountInfoPath); err != nil {
+			t.Skipf("no mount table to read here (a chroot without /proc): %v", err)
+		}
 		if got, err := mountType("/proc"); got != "proc" || err != nil {
 			t.Errorf("mountType(/proc) = %q, %v, want proc, nil", got, err)
 		}
