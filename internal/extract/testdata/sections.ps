@@ -2,6 +2,14 @@
 %%Title: sections fixture
 % The source of sections.pdf. Regenerate it with:
 %   gs -q -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -dCompatibilityLevel=1.7 -sOutputFile=sections.pdf sections.ps
+% Its RC4 copies, with an empty user password, add to that command
+% (Ghostscript 10.00.0):
+%   -sOwnerPassword=owner -dEncryptionR=2 -dKeyLength=40 -dPermissions=-64 -sOutputFile=encrypted-rc4-40.pdf
+%   -sOwnerPassword=owner -dEncryptionR=3 -dKeyLength=80 -dPermissions=-3904 -sOutputFile=encrypted-rc4-80.pdf
+%   -sOwnerPassword=owner -dEncryptionR=3 -dKeyLength=88 -dPermissions=-3904 -sOutputFile=encrypted-rc4-88.pdf
+% and its AES-128 copy whose crypt filter gives the key length in bits is
+% pdfcpu 0.16.0's:
+%   pdfcpu encrypt --mode aes --key 128 --opw owner sections.pdf encrypted-aes128-cf-bits.pdf
 % Eight pages, and an outline two levels deep whose entries share a page twice
 % (Chapter 2 and Sampling on page five, Analysis and the second Summary on page
 % six) and repeat a title (Summary), which is what the section tests read.

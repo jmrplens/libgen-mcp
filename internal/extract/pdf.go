@@ -35,16 +35,45 @@ func invalidPDFReason(err error) string {
 	return fmt.Sprintf("not a valid PDF: %v", err)
 }
 
-// encryptedPDFReason is the diagnosis for a PDF the reader will not open
-// because of how it is encrypted. ledongthuc/pdf decrypts the standard security
-// handler's RC4 (V=1 and V=2) and its AES-128 crypt filter (V=4 with AESV2), and
-// nothing else: not AES-256 (V=5), not RC4 under crypt filters (V=4 with V2),
-// and not a certificate-based handler. Such a file is valid, so calling it
-// invalid would send the caller looking for a better copy of a file that is
-// fine. Shared so every read mode words it the same way. One literal rather
-// than a concatenation, like lockedPDFReason, for the reason
+// encryptedPDFReason is the diagnosis for a PDF the reader will not open, or
+// would decrypt into other bytes, because of how it is encrypted.
+// ledongthuc/pdf implements part of the standard security handler: RC4
+// without crypt filters (V=1 and V=2), correctly only for a key of
+// minRC4KeyBits or more, and an AES-128 crypt filter (V=4 with AESV2) whose
+// /Length gives the key in bytes. It refuses AES-256 (V=5), RC4 under crypt
+// filters (V=4 with V2), AES-128 whose crypt filter gives the length in bits,
+// as pdfcpu writes it, and a certificate-based handler, and openPDF refuses
+// the shorter RC4 keys. The reason says what the reader decrypts rather than
+// naming what the file uses, because the reader's error does not always say:
+// a refused V=4 file can be any of three of those. Such a file is valid, so
+// calling it invalid would send the caller looking for a better copy of a file
+// that is fine. Shared so every read mode words it the same way. One literal
+// rather than a concatenation, like lockedPDFReason, for the reason
 // noPDFOutlineReason gives.
-const encryptedPDFReason = "cannot read PDF: it is encrypted in a way this reader cannot decrypt (AES-256, RC4 under crypt filters, or a certificate-based security handler), so neither its text nor its table of contents can be read"
+const encryptedPDFReason = "cannot read PDF: it is encrypted in a way this reader cannot decrypt (it decrypts only RC4 with a key of 88 bits or more and AES-128 whose crypt filter gives the key length in bytes), so neither its text nor its table of contents can be read"
+
+// minRC4KeyBits is the shortest RC4 file key ledongthuc/pdf decrypts
+// correctly. The key for one object is the MD5 of the file key, the object
+// number and the generation, cut to n+5 bytes for an n-byte file key and to
+// no more than 16 (ISO 32000-1, 7.6.2, Algorithm 1). The reader never cuts
+// it, so its key and the file's agree only once n+5 reaches 16, an 11-byte
+// file key. Below that every string and stream decrypts into other bytes: the
+// titles of a 40-bit file came back as noise, and its pages as text-free,
+// which said "scanned" about a document that is not.
+const minRC4KeyBits = 88
+
+// rc4KeyTooShort reports whether r decrypts the file with an RC4 key shorter
+// than minRC4KeyBits. Revision 2 always takes a 40-bit key, whatever /Length
+// says, and so does the reader. From revision 3 the key is /Length bits long,
+// 40 when /Length is absent, which reads here as 0 and is short as well. An
+// AES crypt filter (V=4) is not RC4, and the AES-128 key it takes is whole.
+func rc4KeyTooShort(r *pdf.Reader) bool {
+	enc := r.Trailer().Key("Encrypt")
+	if enc.Kind() != pdf.Dict || enc.Key("V").Int64() == 4 {
+		return false
+	}
+	return enc.Key("R").Int64() == 2 || enc.Key("Length").Int64() < minRC4KeyBits
+}
 
 // lockedPDFReason is the diagnosis for a PDF that needs a password to open.
 // The read tool takes none, so this is final for the file as it is. Shared so
@@ -100,10 +129,10 @@ var encryptionRefusalRE = regexp.MustCompile(
 // rest only in its error's words. Every refusal of an encryption it does not
 // implement opens with words encryptionRefusalRE knows, and a file that does
 // not even start as a PDF is "not a PDF file: invalid header"; anything else
-// opened as a PDF and broke. The fixtures pin the matching: an AES-256 and an
-// RC4 V=4 file are held to encryptedPDFReason and a truncated one to
-// damagedPDFReason, so a release of the reader that words it differently fails
-// a test rather than changing a diagnosis in silence.
+// opened as a PDF and broke. The fixtures pin the matching: an AES-256, an RC4
+// V=4 and a pdfcpu AES-128 file are held to encryptedPDFReason and a truncated
+// one to damagedPDFReason, so a release of the reader that words it
+// differently fails a test rather than changing a diagnosis in silence.
 func openPDFReason(err error) string {
 	msg := err.Error()
 	switch {
@@ -119,14 +148,18 @@ func openPDFReason(err error) string {
 }
 
 // openPDF opens d with the PDF reader every mode uses and checks what each
-// mode checks before it reads a page: that the reader opened the file, and
-// that its page tree is safe to hand to Reader.Page. It returns the reader, or
-// nil and the diagnosis for a file no mode can read. The reader can panic on
-// malformed input, so a caller runs it behind recover().
+// mode checks before it reads a page: that the reader opened the file, that
+// it will decrypt the file into its own bytes, and that its page tree is safe
+// to hand to Reader.Page. It returns the reader, or nil and the diagnosis for
+// a file no mode can read. The reader can panic on malformed input, so a
+// caller runs it behind recover().
 func openPDF(d document) (r *pdf.Reader, why string) {
 	r, err := pdf.NewReader(d.r, d.size)
 	if err != nil {
 		return nil, openPDFReason(err)
+	}
+	if rc4KeyTooShort(r) {
+		return nil, encryptedPDFReason
 	}
 	if cyclic := pageTreeReason(r); cyclic != "" {
 		return nil, cyclic

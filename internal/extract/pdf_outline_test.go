@@ -587,13 +587,17 @@ func TestReadModes_DamageThatQuotesTheWordEncryption(t *testing.T) {
 	}
 }
 
-// TestOutline_PDFEncrypted reads the sections fixture encrypted four ways by
-// qpdf 12.2.0 with an empty user password, the shape of a PDF that only
-// restricts printing or copying. The reader decrypts RC4 (V=2) and AES-128
-// (V=4 with AESV2), and those read exactly as the plain file does. It does not
-// decrypt AES-256 (V=5) or RC4 under crypt filters (V=4 with V2), and those are
-// reported as encrypted, in the same words by every mode, rather than as an
-// invalid file or as one without a table of contents.
+// TestOutline_PDFEncrypted reads the sections fixture encrypted with an empty
+// user password, the shape of a PDF that only restricts printing or copying:
+// four ways by qpdf 12.2.0, three by Ghostscript 10.00.0 and once by pdfcpu
+// 0.16.0. The reader decrypts RC4 (V=2) with a 128-bit key and with an 88-bit
+// one, the shortest it decrypts correctly, and AES-128 (V=4 with AESV2), and
+// those read exactly as the plain file does. A 40-bit (R=2) and an 80-bit key
+// are refused, since the reader would decrypt them into noise, and so are what
+// it does not decrypt at all: AES-256 (V=5), RC4 under crypt filters (V=4 with
+// V2), and the AES-128 pdfcpu writes, whose crypt filter gives the key length
+// in bits. Those are reported as encrypted, in the same words by every mode,
+// rather than as an invalid file, a scan, or one without a table of contents.
 func TestOutline_PDFEncrypted(t *testing.T) {
 	plain := entryLines(outlineOf(t, mustRead(t, sectionsPDF)).Entries)
 	for _, tc := range []struct {
@@ -601,9 +605,13 @@ func TestOutline_PDFEncrypted(t *testing.T) {
 		readable bool
 	}{
 		{"encrypted-rc4.pdf", true},
+		{"encrypted-rc4-88.pdf", true},
 		{"encrypted-aes128.pdf", true},
+		{"encrypted-rc4-80.pdf", false},
+		{"encrypted-rc4-40.pdf", false},
 		{"encrypted-aes256.pdf", false},
 		{"encrypted-rc4-v4.pdf", false},
+		{"encrypted-aes128-cf-bits.pdf", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join("testdata", tc.name)
