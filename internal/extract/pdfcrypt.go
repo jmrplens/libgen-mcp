@@ -20,11 +20,11 @@ import (
 	"github.com/ledongthuc/pdf"
 )
 
-// passwordPad is the 32 bytes the standard security handler pads a password
-// with, and the whole of the empty one (ISO 32000-1, 7.6.3.3, Algorithm 2).
-// One literal rather than a concatenation, for the reason noPDFOutlineReason
-// gives.
-const passwordPad = "\x28\xbf\x4e\x5e\x4e\x75\x8a\x41\x64\x00\x4e\x56\xff\xfa\x01\x08\x2e\x2e\x00\xb6\xd0\x68\x3e\x80\x2f\x0c\xa9\xfe\x64\x53\x69\x7a" //nolint:gosec // G101: the padding the standard defines for every password, not a credential.
+// paddingString is the 32-byte padding string of the standard security
+// handler (ISO 32000-1, 7.6.3.3, Algorithm 2), which pads a password to 32
+// bytes and is the whole of the empty one. One literal rather than a
+// concatenation, for the reason noPDFOutlineReason gives.
+const paddingString = "\x28\xbf\x4e\x5e\x4e\x75\x8a\x41\x64\x00\x4e\x56\xff\xfa\x01\x08\x2e\x2e\x00\xb6\xd0\x68\x3e\x80\x2f\x0c\xa9\xfe\x64\x53\x69\x7a"
 
 // stringCrypt decrypts the strings of a file encrypted by the standard
 // security handler that opens with an empty user password, which is every
@@ -53,7 +53,7 @@ const (
 func standardCrypt(enc pdf.Value, id string) (stringCrypt, bool) {
 	revision := enc.Key("R").Int64()
 	o, u := enc.Key("O").RawString(), enc.Key("U").RawString()
-	if enc.Key("Filter").Name() != "Standard" || revision < 2 || revision > 4 || len(o) != len(passwordPad) || len(u) != len(passwordPad) {
+	if enc.Key("Filter").Name() != "Standard" || revision < 2 || revision > 4 || len(o) != len(paddingString) || len(u) != len(paddingString) {
 		return stringCrypt{}, false
 	}
 	useAES, n, ok := stringCipher(enc, revision)
@@ -108,7 +108,7 @@ func rc4KeyBytes(revision, bits int64) (int, bool) {
 // revision 4, a file that leaves its metadata unencrypted says so in the key.
 func fileKey(o string, p int64, id string, revision int64, n int, encryptMetadata bool) []byte {
 	h := md5.New() //nolint:gosec // Algorithm 2 is defined with MD5.
-	h.Write([]byte(passwordPad + o))
+	h.Write([]byte(paddingString + o))
 	h.Write(binary.LittleEndian.AppendUint32(nil, uint32(p))) //nolint:gosec // G115: P is 32 bits, and its low four bytes are what is hashed.
 	h.Write([]byte(id))
 	if revision >= 4 && !encryptMetadata {
@@ -129,9 +129,9 @@ func fileKey(o string, p int64, id string, revision int64, n int, encryptMetadat
 // revision 2 (Algorithm 4), the first 16 from revision 3 (Algorithm 5).
 func userKeyMatches(key []byte, u, id string, revision int64) bool {
 	if revision == 2 {
-		return string(rc4XOR(key, []byte(passwordPad))) == u
+		return string(rc4XOR(key, []byte(paddingString))) == u
 	}
-	sum := md5.Sum([]byte(passwordPad + id)) //nolint:gosec // Algorithm 5 is defined with MD5.
+	sum := md5.Sum([]byte(paddingString + id)) //nolint:gosec // Algorithm 5 is defined with MD5.
 	got := sum[:]
 	for i := range 20 {
 		k := bytes.Clone(key)
@@ -186,7 +186,10 @@ func (c stringCrypt) decrypt(s string, in objRef) (string, bool) {
 	}
 	block, _ := aes.NewCipher(key)
 	plain := []byte(s[aes.BlockSize:])
-	cipher.NewCBCDecrypter(block, []byte(s[:aes.BlockSize])).CryptBlocks(plain, plain)
+	// NOSONAR: S5542 asks for an authenticated mode. ISO 32000-1 encrypts a
+	// string with AES-128 in CBC mode and PKCS#5 padding, and this reads what
+	// a file holds rather than protecting anything.
+	cipher.NewCBCDecrypter(block, []byte(s[:aes.BlockSize])).CryptBlocks(plain, plain) // NOSONAR
 	return pkcs5Unpad(string(plain))
 }
 

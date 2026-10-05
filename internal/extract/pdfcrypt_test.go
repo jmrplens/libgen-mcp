@@ -470,13 +470,13 @@ func TestAESLengthFixed(t *testing.T) {
 	}
 	pdfcpu := mustRead(t, "testdata/encrypted-aes128-cf-bits.pdf")
 	shown := viewBytes(t, aesLengthFixed(docOf(pdfcpu)), int64(len(pdfcpu)))
-	if want := strings.Replace(string(pdfcpu), "/AESV2/Length 128>>", "/AESV2/Length 16 >>", 1); shown != want {
+	if shown != strings.Replace(string(pdfcpu), "/AESV2/Length 128>>", "/AESV2/Length 16 >>", 1) {
 		t.Error("pdfcpu's filter does not read as /Length 16")
 	}
 	for _, path := range []string{sectionsPDF, "testdata/encrypted-rc4-v4.pdf", "testdata/encrypted-aes128.pdf"} {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			data := mustRead(t, path)
-			if got := viewBytes(t, aesLengthFixed(docOf(data)), int64(len(data))); got != string(data) {
+			if viewBytes(t, aesLengthFixed(docOf(data)), int64(len(data))) != string(data) {
 				t.Error("the file reads otherwise than it is")
 			}
 		})
