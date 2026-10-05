@@ -53,6 +53,13 @@ curl -s http://127.0.0.1:8080/health   # "version", "commit" and "build" fields
 
 ## Release by release
 
+### 2.2.1
+
+- The files `read` fetches no longer pile up in the temporary directory. Each server keeps them under one `libgen-mcp-read-*` directory that a clean exit removes, and the next server's first `read` that fetches a file removes what a killed one left. Where the temporary directory cannot hold a lock every server would see (NFS, SMB, FUSE, 9p and other network filesystems), the files sit loose: a clean exit still removes them, and a killed server's stay until deleted by hand. See [Configuration](/libgen-mcp/configuration/#libgen_mcp_read_cache_bytes-and-libgen_mcp_read_cache_ttl).
+- The release images on ghcr.io and Docker Hub carry a signed OpenVEX statement that GO-2026-5932 does not affect them, because none of the `golang.org/x/crypto/openpgp` packages it names is linked, and the release attaches the same statement as `libgen-mcp.openvex.json`. Every pull request and every release checks that it stays true. See [Security](/libgen-mcp/security/#what-a-scanner-reports-and-the-vex-statement).
+- pdfcpu moves to v0.16.1, which fixes GHSA-6524-w46v-6399, and OpenTelemetry to v1.47.0.
+- **Upgrade note:** the `libgen-read-*` directories that earlier versions left in the temporary directory are never removed automatically. Delete them by hand once no server of those versions is running.
+
 ### 2.2.0
 
 - `search` also asks OpenAlex and Europe PMC, ten providers beyond the catalog in all, and both mark open access only where the paper really is free to read. Without a key, OpenAlex allows each address 1000 credits a day and a search costs ten. `LIBGEN_MCP_OPENALEX_KEY` raises the allowance, and the Claude Desktop extension has a setting for it. See [How search works](/libgen-mcp/how-search-works/).

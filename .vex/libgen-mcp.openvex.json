@@ -2,8 +2,8 @@
   "@context": "https://openvex.dev/ns/v0.2.0",
   "@id": "https://github.com/jmrplens/libgen-mcp/blob/main/.vex/libgen-mcp.openvex.json",
   "author": "José M. Requena Plens",
-  "timestamp": "2026-10-04T19:19:44Z",
-  "version": 1,
+  "timestamp": "2026-10-05T23:00:30Z",
+  "version": 2,
   "tooling": "https://github.com/jmrplens/libgen-mcp/tree/main/cmd/audit_binary_vulns",
   "statements": [
     {
@@ -13,7 +13,7 @@
       },
       "products": [
         {
-          "@id": "pkg:golang/github.com/jmrplens/libgen-mcp/v2@2.2.0",
+          "@id": "pkg:golang/github.com/jmrplens/libgen-mcp/v2@2.2.1",
           "subcomponents": [
             {
               "@id": "pkg:golang/golang.org/x/crypto"
@@ -21,7 +21,7 @@
           ]
         },
         {
-          "@id": "pkg:golang/github.com/jmrplens/libgen-mcp/v2@v2.2.0",
+          "@id": "pkg:golang/github.com/jmrplens/libgen-mcp/v2@v2.2.1",
           "subcomponents": [
             {
               "@id": "pkg:golang/golang.org/x/crypto"
@@ -29,7 +29,7 @@
           ]
         },
         {
-          "@id": "pkg:docker/jmrplens/libgen-mcp@2.2.0",
+          "@id": "pkg:docker/jmrplens/libgen-mcp@2.2.1",
           "subcomponents": [
             {
               "@id": "pkg:golang/golang.org/x/crypto"
@@ -37,7 +37,7 @@
           ]
         },
         {
-          "@id": "pkg:docker/jmrplens/libgen-mcp@2.2.0?repository_url=ghcr.io",
+          "@id": "pkg:docker/jmrplens/libgen-mcp@2.2.1?repository_url=ghcr.io",
           "subcomponents": [
             {
               "@id": "pkg:golang/golang.org/x/crypto"

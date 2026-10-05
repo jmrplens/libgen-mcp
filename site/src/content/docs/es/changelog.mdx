@@ -53,6 +53,13 @@ curl -s http://127.0.0.1:8080/health   # campos "version", "commit" y "build"
 
 ## Release a release
 
+### 2.2.1
+
+- Los archivos que descarga `read` ya no se acumulan en el directorio temporal. Cada servidor los guarda bajo un único directorio `libgen-mcp-read-*` que una salida limpia borra, y el primer `read` que descarga un archivo en el siguiente servidor borra lo que dejó uno que murió de golpe. Donde el directorio temporal no admite un candado que vean todos los servidores (NFS, SMB, FUSE, 9p y otros sistemas de archivos de red), los archivos quedan sueltos: una salida limpia los sigue borrando, y los de un servidor que muere de golpe se quedan hasta que alguien los borra a mano. Consulta [Configuración](/libgen-mcp/es/configuration/#libgen_mcp_read_cache_bytes-y-libgen_mcp_read_cache_ttl).
+- Las imágenes de la release en ghcr.io y Docker Hub llevan una declaración OpenVEX firmada de que GO-2026-5932 no les afecta, porque no se enlaza ninguno de los paquetes `golang.org/x/crypto/openpgp` que nombra, y la release adjunta la misma declaración como `libgen-mcp.openvex.json`. Cada pull request y cada release comprueban que siga siendo cierta. Consulta [Seguridad](/libgen-mcp/es/security/#lo-que-informa-un-escáner-y-la-declaración-vex).
+- pdfcpu pasa a la v0.16.1, que corrige GHSA-6524-w46v-6399, y OpenTelemetry a la v1.47.0.
+- **Upgrade note:** los directorios `libgen-read-*` que las versiones anteriores dejaron en el directorio temporal no se borran nunca de forma automática. Bórralos a mano cuando ya no corra ningún servidor de esas versiones.
+
 ### 2.2.0
 
 - `search` consulta también OpenAlex y Europe PMC, diez proveedores además del catálogo en total, y los dos marcan el acceso abierto solo cuando el artículo se puede leer gratis de verdad. Sin clave, OpenAlex da a cada dirección 1000 créditos al día y una búsqueda cuesta diez. `LIBGEN_MCP_OPENALEX_KEY` amplía ese margen, y la extensión de Claude Desktop tiene un ajuste para ella. Consulta [Cómo funciona la búsqueda](/libgen-mcp/es/how-search-works/).

@@ -15,7 +15,7 @@ Both receive the same image index on every release, with the same digest, under 
 
 | Tag         | Moves                       |
 | ----------- | --------------------------- |
-| `<version>` | Never. `2.2.0`, with no `v` |
+| `<version>` | Never. `2.2.1`, with no `v` |
 | `latest`    | To each new release         |
 
 There is no `2` or `2.1` tag: pin the full version, or a digest.
@@ -109,19 +109,19 @@ Run under another UID, the process has no home directory in the image (`HOME` is
 **The signature.** The image index and both platform manifests are signed keylessly with cosign. Verify with a **cosign 3.x** client: a 2.x client reports "no signatures found" on an image a 3.x client verifies.
 
 ```bash
-cosign verify ghcr.io/jmrplens/libgen-mcp:2.2.0 \
+cosign verify ghcr.io/jmrplens/libgen-mcp:2.2.1 \
   --certificate-identity-regexp '^https://github.com/jmrplens/libgen-mcp/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-The same command verifies `docker.io/jmrplens/libgen-mcp:2.2.0`.
+The same command verifies `docker.io/jmrplens/libgen-mcp:2.2.1`.
 
 **The provenance**, which answers which commit and which workflow run produced it:
 
 ```bash
-gh attestation verify oci://ghcr.io/jmrplens/libgen-mcp:2.2.0 -R jmrplens/libgen-mcp \
+gh attestation verify oci://ghcr.io/jmrplens/libgen-mcp:2.2.1 -R jmrplens/libgen-mcp \
   --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml \
-  --source-ref refs/tags/v2.2.0
+  --source-ref refs/tags/v2.2.1
 ```
 
 The image also carries an SBOM and the BuildKit provenance attached at build time. What `--signer-workflow` and `--source-ref` add is explained on the [installation overview](overview.md#verifying-what-you-install).
@@ -174,7 +174,7 @@ docker pull ghcr.io/jmrplens/libgen-mcp:latest
 Name the version tag, or the digest for bytes that can never change under you:
 
 ```bash
-docker run -i --rm ghcr.io/jmrplens/libgen-mcp:2.2.0
+docker run -i --rm ghcr.io/jmrplens/libgen-mcp:2.2.1
 docker run -i --rm ghcr.io/jmrplens/libgen-mcp@sha256:<digest>
 ```
 

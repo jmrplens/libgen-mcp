@@ -46,7 +46,7 @@ After a global install the command is `libgen-mcp`:
 
 ```bash
 libgen-mcp --version
-# libgen-mcp 2.2.0 (commit <commit>)
+# libgen-mcp 2.2.1 (commit <commit>)
 ```
 
 ## Verify what you installed
@@ -114,11 +114,11 @@ A client that already has the server running keeps the old process until it rest
 Name the version wherever the package is named:
 
 ```bash
-npx -y @jmrp.io/libgen-mcp@2.2.0
-npm install -g @jmrp.io/libgen-mcp@2.2.0
+npx -y @jmrp.io/libgen-mcp@2.2.1
+npm install -g @jmrp.io/libgen-mcp@2.2.1
 ```
 
-In a client's configuration that is `"args": ["-y", "@jmrp.io/libgen-mcp@2.2.0"]`. A pinned `npx` entry never moves until you edit it, which is what you want when a team should run the same server.
+In a client's configuration that is `"args": ["-y", "@jmrp.io/libgen-mcp@2.2.1"]`. A pinned `npx` entry never moves until you edit it, which is what you want when a team should run the same server.
 
 ## Uninstall
 
