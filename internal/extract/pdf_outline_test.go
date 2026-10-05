@@ -655,23 +655,25 @@ func TestOutlineTitle(t *testing.T) {
 func TestWalkBudget(t *testing.T) {
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
+	underContext := map[bool]context.Context{false: context.Background(), true: canceled}
 	for _, tc := range []struct {
 		name    string
 		budget  walkBudget
+		ended   bool
 		spends  []bool
 		wantErr error
 	}{
-		{"one step", walkBudget{ctx: context.Background(), left: 1}, []bool{true, false}, nil},
-		{"two steps", walkBudget{ctx: context.Background(), left: 2}, []bool{true, true, false}, nil},
-		{"no steps", walkBudget{ctx: context.Background(), left: 0}, []bool{false}, nil},
-		{"context ended", walkBudget{ctx: canceled, left: 5}, []bool{false, false}, context.Canceled},
-		{"error kept", walkBudget{ctx: context.Background(), left: 5, err: context.DeadlineExceeded}, []bool{false}, context.DeadlineExceeded},
+		{"one step", walkBudget{left: 1}, false, []bool{true, false}, nil},
+		{"two steps", walkBudget{left: 2}, false, []bool{true, true, false}, nil},
+		{"no steps", walkBudget{left: 0}, false, []bool{false}, nil},
+		{"context ended", walkBudget{left: 5}, true, []bool{false, false}, context.Canceled},
+		{"error kept", walkBudget{left: 5, err: context.DeadlineExceeded}, false, []bool{false}, context.DeadlineExceeded},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			b := tc.budget
 			got := make([]bool, len(tc.spends))
 			for i := range got {
-				got[i] = b.spend()
+				got[i] = b.spend(underContext[tc.ended])
 			}
 			if !slices.Equal(got, tc.spends) || !errors.Is(b.err, tc.wantErr) {
 				t.Errorf("spends = %v err = %v, want %v err = %v", got, b.err, tc.spends, tc.wantErr)
@@ -700,9 +702,9 @@ func TestOutlineWalk_Bounds(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := readerFor(t, tc.data).Trailer().Key("Root")
-			w := newOutlineWalk(context.Background(), root)
+			w := newOutlineWalk(root)
 			w.items.left = tc.items
-			w.walk(root.Key("Outlines").Key("First"), tc.level)
+			w.walk(context.Background(), root.Key("Outlines").Key("First"), tc.level)
 			if got := entryLines(w.entries); got != tc.want {
 				t.Errorf("outline:\n%s\nwant:\n%s", got, tc.want)
 			}
@@ -747,8 +749,8 @@ func TestCollectNameTree(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			node := readerFor(t, tc.data).Trailer().Key("Root").Key("T")
 			into := map[string]nameEntry{}
-			visits := walkBudget{ctx: context.Background(), left: tc.visits}
-			collectNameTree(node, tc.depth, &visits, into)
+			visits := walkBudget{left: tc.visits}
+			collectNameTree(context.Background(), node, tc.depth, &visits, into)
 			if got := nameTreeLines(into); got != tc.want {
 				t.Errorf("names = %q, want %q", got, tc.want)
 			}

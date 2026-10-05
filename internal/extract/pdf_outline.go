@@ -102,8 +102,8 @@ func pdfBookmarkEntries(ctx context.Context, d document) (entries []OutlineEntry
 		return nil, false, nil
 	}
 	root := r.Trailer().Key("Root")
-	w := newOutlineWalk(ctx, root)
-	w.walk(root.Key("Outlines").Key("First"), 0)
+	w := newOutlineWalk(root)
+	w.walk(ctx, root.Key("Outlines").Key("First"), 0)
 	return w.entries, false, w.items.err
 }
 
@@ -131,21 +131,20 @@ func pdfNoOutlineResult(ctx context.Context, d document, damaged bool) (OutlineR
 }
 
 // walkBudget bounds one walk over a structure the file controls: it allows a
-// fixed number of steps, and none once ctx has ended, keeping the context's
-// error for the walk to return.
+// fixed number of steps, and none once the walk's context has ended, keeping
+// the context's error for the walk to return.
 type walkBudget struct {
-	ctx  context.Context
 	left int
 	err  error
 }
 
-// spend takes one step from the budget and reports whether the walk may take
-// it.
-func (b *walkBudget) spend() bool {
+// spend takes one step from the budget and reports whether the walk, running
+// under ctx, may take it.
+func (b *walkBudget) spend(ctx context.Context) bool {
 	if b.left <= 0 || b.err != nil {
 		return false
 	}
-	if err := b.ctx.Err(); err != nil {
+	if err := ctx.Err(); err != nil {
 		b.err = err
 		return false
 	}
@@ -181,29 +180,29 @@ type nameEntry struct {
 }
 
 // newOutlineWalk starts an outline read of the document whose catalog is root.
-func newOutlineWalk(ctx context.Context, root pdf.Value) *outlineWalk {
+func newOutlineWalk(root pdf.Value) *outlineWalk {
 	return &outlineWalk{
 		root:  root,
-		items: walkBudget{ctx: ctx, left: maxOutlineItems},
+		items: walkBudget{left: maxOutlineItems},
 		seen:  map[[sha256.Size]byte]bool{},
 	}
 }
 
 // walk appends item and its following siblings at level, each followed by its
 // own children one level down. It stops at the depth bound, when the item
-// budget is spent, and at an item it has read before.
-func (w *outlineWalk) walk(item pdf.Value, level int) {
+// budget is spent or ctx has ended, and at an item it has read before.
+func (w *outlineWalk) walk(ctx context.Context, item pdf.Value, level int) {
 	if level >= maxOutlineDepth {
 		return
 	}
 	for ; item.Kind() == pdf.Dict; item = item.Key("Next") {
-		if !w.items.spend() || !w.firstVisit(item) {
+		if !w.items.spend(ctx) || !w.firstVisit(item) {
 			return
 		}
 		if title := outlineTitle(item.Key("Title").Text()); title != "" {
-			w.entries = append(w.entries, OutlineEntry{Title: title, Level: level, Page: w.destPage(item)})
+			w.entries = append(w.entries, OutlineEntry{Title: title, Level: level, Page: w.destPage(ctx, item)})
 		}
-		w.walk(item.Key("First"), level+1)
+		w.walk(ctx, item.Key("First"), level+1)
 	}
 }
 
@@ -244,7 +243,7 @@ func outlineTitle(text string) string {
 // destPage resolves an outline item's /Dest, or the /D of its GoTo action, to
 // a 1-based page number, and returns 0 when it does not lead to a page of this
 // document.
-func (w *outlineWalk) destPage(item pdf.Value) int {
+func (w *outlineWalk) destPage(ctx context.Context, item pdf.Value) int {
 	dest := item.Key("Dest")
 	if dest.IsNull() {
 		action := item.Key("A")
@@ -253,7 +252,7 @@ func (w *outlineWalk) destPage(item pdf.Value) int {
 		}
 		dest = action.Key("D")
 	}
-	dest = w.explicit(dest)
+	dest = w.explicit(ctx, dest)
 	if dest.Kind() != pdf.Array {
 		return 0
 	}
@@ -270,12 +269,12 @@ func (w *outlineWalk) destPage(item pdf.Value) int {
 // explicit turns a named destination into the explicit one it names, and
 // returns an explicit destination as it is. A name is looked up as a name and
 // a string as a string, and a destination stored as a dictionary is its /D.
-func (w *outlineWalk) explicit(dest pdf.Value) pdf.Value {
+func (w *outlineWalk) explicit(ctx context.Context, dest pdf.Value) pdf.Value {
 	switch dest.Kind() {
 	case pdf.Name:
-		dest = w.named(dest.Name())
+		dest = w.named(ctx, dest.Name())
 	case pdf.String:
-		dest = w.named(dest.RawString())
+		dest = w.named(ctx, dest.RawString())
 	}
 	if dest.Kind() == pdf.Dict {
 		return dest.Key("D")
@@ -284,15 +283,16 @@ func (w *outlineWalk) explicit(dest pdf.Value) pdf.Value {
 }
 
 // named looks a destination name up in the PDF 1.1 /Dests dictionary, and
-// then in the /Names /Dests name tree, which is read in on first use.
-func (w *outlineWalk) named(name string) pdf.Value {
+// then in the /Names /Dests name tree, which is read in on first use, under
+// ctx.
+func (w *outlineWalk) named(ctx context.Context, name string) pdf.Value {
 	if dest := w.root.Key("Dests").Key(name); !dest.IsNull() {
 		return dest
 	}
 	if w.dests == nil {
 		w.dests = map[string]nameEntry{}
-		visits := walkBudget{ctx: w.items.ctx, left: maxNameTreeVisits}
-		collectNameTree(w.root.Key("Names").Key("Dests"), 0, &visits, w.dests)
+		visits := walkBudget{left: maxNameTreeVisits}
+		collectNameTree(ctx, w.root.Key("Names").Key("Dests"), 0, &visits, w.dests)
 	}
 	e, ok := w.dests[name]
 	if !ok {
@@ -303,25 +303,25 @@ func (w *outlineWalk) named(name string) pdf.Value {
 
 // collectNameTree records where the name tree rooted at node holds each name,
 // a later leaf's entry replacing an earlier one's. It stops at the depth bound
-// and when visits is spent, so a /Kids array that leads back to an ancestor
-// ends the read rather than repeating it.
-func collectNameTree(node pdf.Value, depth int, visits *walkBudget, into map[string]nameEntry) {
+// and when visits is spent or ctx has ended, so a /Kids array that leads back
+// to an ancestor ends the read rather than repeating it.
+func collectNameTree(ctx context.Context, node pdf.Value, depth int, visits *walkBudget, into map[string]nameEntry) {
 	if node.Kind() != pdf.Dict || depth >= maxNameTreeDepth {
 		return
 	}
 	names := node.Key("Names")
 	for i := 0; i+1 < names.Len(); i += 2 {
-		if !visits.spend() {
+		if !visits.spend(ctx) {
 			return
 		}
 		into[names.Index(i).RawString()] = nameEntry{names: names, at: i + 1}
 	}
 	kids := node.Key("Kids")
 	for i := range kids.Len() {
-		if !visits.spend() {
+		if !visits.spend(ctx) {
 			return
 		}
-		collectNameTree(kids.Index(i), depth+1, visits, into)
+		collectNameTree(ctx, kids.Index(i), depth+1, visits, into)
 	}
 }
 
