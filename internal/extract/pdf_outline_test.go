@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/aes"
+	"crypto/cipher"
 	"errors"
 	"fmt"
 	"io"
@@ -886,13 +887,13 @@ func TestOutline_PDFTitlesThatLookPadded(t *testing.T) {
 	}
 }
 
-// aesTitlesWithFirst returns the AES-128 titles fixture, which keeps no
-// object stream, with the title of its first item, object 8, a string of 48
-// bytes written as hexadecimal, replaced by title and padded with spaces to
+// aesTitlesWithFirst returns the AES-128 titles fixture at path, which keeps
+// no object stream, with the title of its first item, object 8, a string of
+// 48 bytes written as hexadecimal, replaced by title and padded with spaces to
 // the same length, so the cross-reference table still finds every object.
-func aesTitlesWithFirst(t *testing.T, title string) []byte {
+func aesTitlesWithFirst(t *testing.T, path, title string) []byte {
 	t.Helper()
-	data := mustRead(t, "testdata/encrypted-aes128-titles.pdf")
+	data := mustRead(t, path)
 	item := bytes.Index(data, []byte("\n8 0 obj\n"))
 	at := item + bytes.Index(data[item:], []byte("/Title <")) + len("/Title ")
 	if item < 0 || data[at+97] != '>' {
@@ -919,9 +920,85 @@ func TestOutline_PDFStringsTheReaderCannotDecrypt(t *testing.T) {
 		{"the initialization vector alone", "<" + strings.Repeat("05", aes.BlockSize) + ">"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			res := outlineOf(t, aesTitlesWithFirst(t, tc.title))
+			res := outlineOf(t, aesTitlesWithFirst(t, "testdata/encrypted-aes128-titles.pdf", tc.title))
 			if got := entryLines(res.Entries); got != rest || res.Reason != "" {
 				t.Errorf("outline:\n%s(%q)\nwant:\n%s", got, res.Reason, rest)
+			}
+		})
+	}
+}
+
+// TestOutline_PDFAnAESTitleWithoutPadding writes the first title of the
+// AES-128 titles fixtures as one block encrypted with no padding after it,
+// which pdfcpu and qpdf read as the block's sixteen bytes. The walk's own
+// decryption finds that damaged, and the file the reader decrypts is read as
+// the reader decrypts it. The one that leaves its metadata unencrypted, which
+// the reader refuses, was reported as damaged, and is read by the walk's own
+// decryption once more, leniently.
+func TestOutline_PDFAnAESTitleWithoutPadding(t *testing.T) {
+	entries := outlineOf(t, mustRead(t, "testdata/outline-titles.pdf")).Entries
+	entries[0].Title = "Sixteen bytes ok"
+	want := entryLines(entries)
+	for _, path := range []string{"testdata/encrypted-aes128-titles.pdf", "testdata/encrypted-aes128-clear-metadata-titles.pdf"} {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			trailer := hiddenTrailer(t, path)
+			c, ok := standardCrypt(trailer.Key(hiddenEncryptKey), trailer.Key("ID").Index(0).RawString())
+			if !ok {
+				t.Fatal("standardCrypt refused the fixture")
+			}
+			block, err := aes.NewCipher(c.objectKey(objRef{id: 8}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			iv, sealed := bytes.Repeat([]byte{5}, aes.BlockSize), []byte(entries[0].Title)
+			cipher.NewCBCEncrypter(block, iv).CryptBlocks(sealed, sealed)
+			res := outlineOf(t, aesTitlesWithFirst(t, path, fmt.Sprintf("<%x%x>", iv, sealed)))
+			if got := entryLines(res.Entries); got != want || res.Reason != "" {
+				t.Errorf("outline:\n%s(%q)\nwant:\n%s", got, res.Reason, want)
+			}
+		})
+	}
+}
+
+// TestWalkEach walks a file as each opener opens it, until one reads the
+// outline whole or finds it too large, and says what the walks found
+// otherwise: damaged when an earlier walk or any of these found it so,
+// whatever the walks after it found, and unread when none opened the file.
+func TestWalkEach(t *testing.T) {
+	whole := outlinePDF("", "<</Title(A)>>")
+	damaged := bytes.Replace(whole, []byte("/Outlines/First 9 0 R"), []byte("/Outlines/First 7 0 R"), 1)
+	items := make([]string, maxOutlineDepth+1)
+	for i := range items {
+		items[i] = fmt.Sprintf("<</Title(Level %d)/First %d 0 R>>", i, 10+i)
+	}
+	items[maxOutlineDepth] = "<</Title(Deepest)>>"
+	tooDeep := outlinePDF("", items...)
+	opener := func(data []byte) func() outlineSource {
+		return func() outlineSource { return outlineSource{r: readerFor(t, data), strs: readerStrings(false)} }
+	}
+	unread := func() outlineSource { return outlineSource{} }
+	for _, tc := range []struct {
+		name    string
+		openers []func() outlineSource
+		found   outlineState
+		want    outlineState
+		entries int
+	}{
+		{"none", nil, outlineUnread, outlineUnread, 0},
+		{"none after a damaged walk", nil, outlineDamaged, outlineDamaged, 0},
+		{"openers that open nothing", []func() outlineSource{unread, unread}, outlineUnread, outlineUnread, 0},
+		{"nothing after a damaged walk", []func() outlineSource{unread}, outlineDamaged, outlineDamaged, 0},
+		{"damaged, then nothing", []func() outlineSource{opener(damaged), unread}, outlineUnread, outlineDamaged, 0},
+		{"nothing, then damaged", []func() outlineSource{unread, opener(damaged)}, outlineUnread, outlineDamaged, 0},
+		{"damaged, then whole", []func() outlineSource{opener(damaged), opener(whole)}, outlineUnread, outlineWhole, 1},
+		{"whole after a damaged walk", []func() outlineSource{opener(whole)}, outlineDamaged, outlineWhole, 1},
+		{"whole first", []func() outlineSource{opener(whole), opener(damaged)}, outlineUnread, outlineWhole, 1},
+		{"too large, then whole", []func() outlineSource{opener(tooDeep), opener(whole)}, outlineUnread, outlineTooLarge, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			entries, state, err := walkEach(context.Background(), tc.openers, tc.found)
+			if state != tc.want || len(entries) != tc.entries || err != nil {
+				t.Errorf("walkEach = %d entries, state %d, %v, want %d entries, state %d", len(entries), state, err, tc.entries, tc.want)
 			}
 		})
 	}
@@ -946,8 +1023,9 @@ func sourceKind(src outlineSource) string {
 // order it tries them, by what each opens: a plain file as the reader hands
 // it over, one the reader decrypts correctly with the walk's own decryption
 // first and the reader's next, one it decrypts wrongly with the walk's own
-// alone, one that needs a password with an opener that opens nothing, and no
-// opener at all for an AES-256 file or one that is not a PDF.
+// alone, and an AES one last with the walk's own again, leniently, which for
+// RC4 opens nothing. One that needs a password has openers that open
+// nothing, and an AES-256 file or one that is not a PDF has none at all.
 func TestOutlineOpeners(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -955,12 +1033,12 @@ func TestOutlineOpeners(t *testing.T) {
 		want string
 	}{
 		{"plain", docFor(t, sectionsPDF), "plain"},
-		{"AES-128", docFor(t, "testdata/encrypted-aes128.pdf"), "self reader"},
-		{"128-bit RC4", docFor(t, "testdata/encrypted-rc4.pdf"), "self reader"},
-		{"40-bit RC4", docFor(t, "testdata/encrypted-rc4-40.pdf"), "self"},
-		{"pdfcpu's AES-128", docFor(t, "testdata/encrypted-aes128-cf-bits.pdf"), "self reader"},
-		{"metadata left unencrypted", docFor(t, "testdata/encrypted-aes128-clear-metadata-titles.pdf"), "self"},
-		{"a password", docFor(t, "testdata/encrypted-aes128-user-password.pdf"), "nothing"},
+		{"AES-128", docFor(t, "testdata/encrypted-aes128.pdf"), "self reader self"},
+		{"128-bit RC4", docFor(t, "testdata/encrypted-rc4.pdf"), "self reader nothing"},
+		{"40-bit RC4", docFor(t, "testdata/encrypted-rc4-40.pdf"), "self nothing"},
+		{"pdfcpu's AES-128", docFor(t, "testdata/encrypted-aes128-cf-bits.pdf"), "self reader self"},
+		{"metadata left unencrypted", docFor(t, "testdata/encrypted-aes128-clear-metadata-titles.pdf"), "self self"},
+		{"a password", docFor(t, "testdata/encrypted-aes128-user-password.pdf"), "nothing nothing"},
 		{"AES-256", docFor(t, "testdata/encrypted-aes256.pdf"), ""},
 		{"not a PDF", document{r: strings.NewReader("not a PDF"), size: 9}, ""},
 	} {

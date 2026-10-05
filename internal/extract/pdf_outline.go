@@ -115,15 +115,15 @@ const (
 // pdfBookmarkEntries reads the PDF's outline, flattened in document order, and
 // says what it found.
 //
-// The file is walked as walkOpened walks it. When that finds the outline
-// damaged and the file holds strings the reader's lexer refuses, it is walked
-// again with them rewritten (stringsFixed), and what that walk finds is the
-// answer, unless it could not open the file at all. A file no walk opens
-// yields no entries and no verdict of its own: the text-layer probe that
-// follows produces one, in the words the text path uses for the same file.
-// Only ctx ending yields an error.
+// The file is walked as each of outlineOpeners opens it (walkEach). When
+// that finds the outline damaged and the file holds strings the reader's
+// lexer refuses, it is walked again with them rewritten (stringsFixed), and
+// what that finds is the answer, unless it could not open the file at all. A
+// file no walk opens yields no entries and no verdict of its own: the
+// text-layer probe that follows produces one, in the words the text path uses
+// for the same file. Only ctx ending yields an error.
 func pdfBookmarkEntries(ctx context.Context, d document) ([]OutlineEntry, outlineState, error) {
-	entries, outline, err := walkOpened(ctx, d)
+	entries, outline, err := walkEach(ctx, outlineOpeners(d), outlineUnread)
 	if err != nil || outline != outlineDamaged {
 		return entries, outline, err
 	}
@@ -131,27 +131,29 @@ func pdfBookmarkEntries(ctx context.Context, d document) ([]OutlineEntry, outlin
 	if !ok {
 		return nil, outline, ctx.Err()
 	}
-	if fixedEntries, state, fixedErr := walkOpened(ctx, fixed); fixedErr != nil || state != outlineUnread {
-		return fixedEntries, state, fixedErr
-	}
-	return nil, outline, nil
+	return walkEach(ctx, outlineOpeners(fixed), outline)
 }
 
-// walkOpened walks d as each of outlineOpeners opens it in turn, the next
-// only when a walk could not open the file or found the outline damaged. A
-// walk that panics part-way, that meets a link to something that is not an
-// item, or that reaches a bound with items left drops whatever it had
-// collected and says which, because a table of contents cut short would be
-// read as the whole of one. Only ctx ending yields an error.
-func walkOpened(ctx context.Context, d document) (entries []OutlineEntry, outline outlineState, err error) {
-	outline = outlineUnread
-	for _, open := range outlineOpeners(d) {
-		entries, outline, err = walkOutline(ctx, open)
-		if err != nil || outline != outlineDamaged && outline != outlineUnread {
-			return entries, outline, err
+// walkEach walks a file as each of openers opens it in turn, the next only
+// when a walk could not open the file or found the outline damaged. A walk
+// that panics part-way, that meets a link to something that is not an item,
+// or that reaches a bound with items left drops whatever it had collected and
+// says which, because a table of contents cut short would be read as the
+// whole of one. When no walk reads the outline, the answer is outlineDamaged
+// if found, what earlier walks found, is, or if any of these walks finds the
+// outline damaged, since that says more than a walk that could not open the
+// file, and found otherwise. Only ctx ending yields an error.
+func walkEach(ctx context.Context, openers []func() outlineSource, found outlineState) ([]OutlineEntry, outlineState, error) {
+	for _, open := range openers {
+		entries, state, err := walkOutline(ctx, open)
+		if err != nil || state != outlineDamaged && state != outlineUnread {
+			return entries, state, err
+		}
+		if state == outlineDamaged {
+			found = outlineDamaged
 		}
 	}
-	return nil, outline, nil
+	return nil, found, nil
 }
 
 // outlineSource is a file opened for the outline walk: the reader, how the
@@ -173,8 +175,12 @@ type outlineSource struct {
 // metadata unencrypted, and panics on an empty string a file wrote
 // unencrypted, as MuPDF writes one. A file the reader does decrypt correctly
 // is walked as it decrypts it next (readerDecrypting), for one whose strings
-// the walk's own decryption finds damaged. A file the reader refuses in any
-// other way is not walked.
+// the walk's own decryption finds damaged. Last, an AES file is walked by
+// selfDecrypting leniently, which takes a string a producer wrote with no
+// padding as its whole blocks: the strict walk finds that damaged, which is
+// what sends a string the walk decrypted that was not encrypted, and is no
+// padded whole, to the reader's walk. A file the reader refuses in any other
+// way is not walked.
 func outlineOpeners(d document) []func() outlineSource {
 	r, err := openReader(d, nil)
 	if err == nil && encryptionOf(r).version == 0 {
@@ -183,11 +189,11 @@ func outlineOpeners(d document) []func() outlineSource {
 	if err != nil && !selfDecryptable(err) {
 		return nil
 	}
-	openers := []func() outlineSource{func() outlineSource { return selfDecrypting(d) }}
+	openers := []func() outlineSource{func() outlineSource { return selfDecrypting(d, false) }}
 	if err == nil && !rc4KeyTooShort(r) {
 		openers = append(openers, func() outlineSource { return readerDecrypting(d) })
 	}
-	return openers
+	return append(openers, func() outlineSource { return selfDecrypting(d, true) })
 }
 
 // readerDecrypting opens d for the outline walk as the reader decrypts it,

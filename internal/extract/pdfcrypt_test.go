@@ -214,8 +214,10 @@ func encryptAES(t *testing.T, key, iv []byte, plain string) string {
 // AES key: one shorter than a block and one a block long, and one in whole
 // blocks whose padding is not valid, are not decrypted; an empty string is
 // empty; and a string one block long, padded by a whole block, and a longer
-// one, come back as they were written. A string written in no object, as one
-// taken out of an object stream is, is not encrypted and comes as it is.
+// one, come back as they were written. Decrypted leniently, a string in whole
+// blocks comes back as its blocks decrypted, padded or not, and one that is
+// not whole blocks is still not decrypted. A string written in no object, as
+// one taken out of an object stream is, is not encrypted and comes as it is.
 func TestStringCrypt_DecryptAES(t *testing.T) {
 	c := stringCrypt{key: bytes.Repeat([]byte{3}, 16), aes: true}
 	in := objRef{id: 9}
@@ -239,6 +241,25 @@ func TestStringCrypt_DecryptAES(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got, ok := c.decrypt(tc.s, in); got != tc.want || ok != tc.ok {
+				t.Errorf("decrypt = %q %v, want %q %v", got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+	lenient := c
+	lenient.lenient = true
+	for _, tc := range []struct {
+		name string
+		s    string
+		want string
+		ok   bool
+	}{
+		{"leniently, shorter than a block", "short", "", false},
+		{"leniently, the vector alone", string(iv), "", true},
+		{"leniently, one block with no padding", sixteen[:len(sixteen)-aes.BlockSize], "Sixteen bytes ok", true},
+		{"leniently, one block padded by a whole block", sixteen, "Sixteen bytes ok", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got, ok := lenient.decrypt(tc.s, in); got != tc.want || ok != tc.ok {
 				t.Errorf("decrypt = %q %v, want %q %v", got, ok, tc.want, tc.ok)
 			}
 		})
@@ -588,25 +609,30 @@ func TestOutline_PDFStreamsUnderAnotherFilterName(t *testing.T) {
 // hidden, and one encrypted with AES-256. A file whose /StmF names another
 // crypt filter than its /StrF opens with a view that decrypts streams as that
 // filter says: not at all for /Identity, which leaves the view only counting
-// them, and with AES-128 for a second AESV2 filter.
+// them, and with AES-128 for a second AESV2 filter. Opened leniently, an AES
+// file opens as it does otherwise, and an RC4 one, whose strings decrypt the
+// same either way, does not open.
 func TestSelfDecrypting(t *testing.T) {
 	const notAPDF = "startxref 0\n/Encrypt 1 0 R\n%%EOF"
 	identity := bytes.Replace(mustRead(t, "testdata/encrypted-aes128-titles.pdf"), []byte("/StmF /StdCF"), []byte("/StmF /Ident"), 1)
 	for _, tc := range []struct {
 		name    string
 		d       document
+		lenient bool
 		ok      bool
 		streams bool
 	}{
-		{"40-bit RC4", docFor(t, "testdata/encrypted-rc4-40.pdf"), true, true},
-		{"streams under another filter", docOf(identity), true, false},
-		{"streams under another AES-128 filter", docOf(splitCryptFilters(t)), true, true},
-		{"not encrypted", docFor(t, sectionsPDF), false, false},
-		{"not a PDF", document{r: strings.NewReader(notAPDF), size: int64(len(notAPDF))}, false, false},
-		{"AES-256", docFor(t, "testdata/encrypted-aes256.pdf"), false, false},
+		{"40-bit RC4", docFor(t, "testdata/encrypted-rc4-40.pdf"), false, true, true},
+		{"40-bit RC4, leniently", docFor(t, "testdata/encrypted-rc4-40.pdf"), true, false, false},
+		{"AES-128, leniently", docFor(t, "testdata/encrypted-aes128.pdf"), true, true, true},
+		{"streams under another filter", docOf(identity), false, true, false},
+		{"streams under another AES-128 filter", docOf(splitCryptFilters(t)), false, true, true},
+		{"not encrypted", docFor(t, sectionsPDF), false, false, false},
+		{"not a PDF", document{r: strings.NewReader(notAPDF), size: int64(len(notAPDF))}, false, false, false},
+		{"AES-256", docFor(t, "testdata/encrypted-aes256.pdf"), false, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			src := selfDecrypting(tc.d)
+			src := selfDecrypting(tc.d, tc.lenient)
 			if (src.r != nil) != tc.ok || (src.strs != nil) != tc.ok || (src.view != nil && src.view.crypt != nil) != tc.streams {
 				t.Errorf("selfDecrypting = %v, %v, %+v, want a reader: %v, streams decrypted: %v", src.r, src.strs != nil, src.view, tc.ok, tc.streams)
 			}

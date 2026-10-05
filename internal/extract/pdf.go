@@ -298,7 +298,7 @@ func refusedPDFReason(d document, err error) string {
 
 // selfDecrypts reports whether selfDecrypting opens d.
 func selfDecrypts(d document) bool {
-	return selfDecrypting(d).r != nil
+	return selfDecrypting(d, false).r != nil
 }
 
 // selfDecryptable reports whether err, the reader's refusal of a file, is one

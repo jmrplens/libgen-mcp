@@ -30,11 +30,14 @@ const paddingString = "\x28\xbf\x4e\x5e\x4e\x75\x8a\x41\x64\x00\x4e\x56\xff\xfa\
 // the standard security handler that opens with an empty user password, which
 // is every file this server can read: key is the file key, aes says whether
 // strings are encrypted with AES-128 or with RC4, and stream is how streams
-// are decrypted (streamCrypt), nil when they are not.
+// are decrypted (streamCrypt), nil when they are not. lenient takes an AES
+// string whose last block ends in no padding as its whole blocks, which is
+// how pdfcpu and qpdf read one a producer wrote without padding.
 type stringCrypt struct {
-	key    []byte
-	aes    bool
-	stream *stringCrypt
+	key     []byte
+	aes     bool
+	stream  *stringCrypt
+	lenient bool
 }
 
 // Bounds the standard security handler sets on a file key, in bits, and how
@@ -198,8 +201,9 @@ func (c stringCrypt) objectKey(in objRef) []byte {
 // which is decrypted whole, is not encrypted and is returned as it is. An AES
 // string is its 16-byte initialization vector and whole blocks after it, the
 // last of them ending in its padding, and one that is not, the vector alone
-// among them, is reported as not decrypted. An empty string is empty either
-// way, which is how MuPDF writes one into an encrypted file.
+// among them, is reported as not decrypted, unless c is lenient and the
+// string is whole blocks: then it is those blocks decrypted. An empty string
+// is empty either way, which is how MuPDF writes one into an encrypted file.
 func (c stringCrypt) decrypt(s string, in objRef) (string, bool) {
 	if in == (objRef{}) {
 		return s, true
@@ -220,7 +224,10 @@ func (c stringCrypt) decrypt(s string, in objRef) (string, bool) {
 	// string with AES-128 in CBC mode and PKCS#5 padding, and this reads what
 	// a file holds rather than protecting anything.
 	cipher.NewCBCDecrypter(block, []byte(s[:aes.BlockSize])).CryptBlocks(plain, plain) // NOSONAR
-	return pkcs5Unpad(string(plain))
+	if unpadded, ok := pkcs5Unpad(string(plain)); ok || !c.lenient {
+		return unpadded, ok
+	}
+	return string(plain), true
 }
 
 // decryptStream returns data, a stream's data written in the object in,
@@ -390,20 +397,23 @@ func (h hiddenEncryption) dict() (enc pdf.Value, from int64) {
 }
 
 // selfDecrypting opens d for the outline walk with its encryption hidden from
-// the reader: the walk decrypts the strings it is handed, and the view shows
-// the reader each object stream decrypted, when streams are encrypted. It
-// returns no reader for a file hideEncryption does not open, or whose strings
-// standardCrypt does not decrypt.
-func selfDecrypting(d document) outlineSource {
+// the reader: the walk decrypts the strings it is handed, leniently when
+// lenient is set, and the view shows the reader each object stream decrypted,
+// when streams are encrypted. It returns no reader for a file hideEncryption
+// does not open, or whose strings standardCrypt does not decrypt, nor, when
+// lenient is set, for one whose strings are not AES, which decrypt the same
+// either way.
+func selfDecrypting(d document, lenient bool) outlineSource {
 	h, ok := hideEncryption(d)
 	if !ok {
 		return outlineSource{}
 	}
 	enc, _ := h.dict()
 	c, ok := standardCrypt(enc, h.r.Trailer().Key("ID").Index(0).RawString())
-	if !ok {
+	if !ok || lenient && !c.aes {
 		return outlineSource{}
 	}
+	c.lenient = lenient
 	h.view.crypt = c.stream
 	return outlineSource{r: h.r, strs: c.decrypt, view: h.view}
 }
