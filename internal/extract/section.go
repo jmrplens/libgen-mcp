@@ -123,10 +123,12 @@ func sectionChecked(ctx context.Context, d document, ref SectionRef, r Req) (Sec
 	} else {
 		sc, err = pdfSection(ctx, d, ol.Entries, i, r)
 	}
-	if err != nil || !sc.Extractable {
+	if err != nil {
 		return sc, err
 	}
-	sc.QualityNote = qualityNote(sc.Text)
+	if sc.Extractable {
+		sc.QualityNote = qualityNote(sc.Text)
+	}
 	return sc, nil
 }
 
@@ -235,9 +237,14 @@ func pdfSection(ctx context.Context, d document, entries []OutlineEntry, i int, 
 	}
 	span := spanOf(e)
 	span.PageStart = e.Page
+	// The section ends where the next entry starts, or with the document when no
+	// entry follows or the next one points past its end. A read that learned no
+	// page count leaves the outline's boundary as it is.
 	span.PageEnd = last
-	if last == 0 || (chunk.TotalPages > 0 && last > chunk.TotalPages) {
+	if last == 0 {
 		span.PageEnd = chunk.TotalPages
+	} else if chunk.TotalPages > 0 {
+		span.PageEnd = min(last, chunk.TotalPages)
 	}
 	return SectionChunk{Chunk: chunk, Span: span}, nil
 }

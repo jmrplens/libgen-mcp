@@ -163,13 +163,15 @@ func Extract(ctx context.Context, f *os.File, r Req) (Chunk, error) {
 
 // extractChecked is Extract's work: dispatch on format, then judge the quality
 // of whatever text came back. It is separate so the watchdog has a single
-// function to run.
+// function to run. Only an extractable chunk carries text to judge.
 func extractChecked(ctx context.Context, d document, r Req) (Chunk, error) {
 	chunk, err := extractByFormat(ctx, d, r)
-	if err != nil || !chunk.Extractable {
+	if err != nil {
 		return chunk, err
 	}
-	chunk.QualityNote = qualityNote(chunk.Text)
+	if chunk.Extractable {
+		chunk.QualityNote = qualityNote(chunk.Text)
+	}
 	return chunk, nil
 }
 

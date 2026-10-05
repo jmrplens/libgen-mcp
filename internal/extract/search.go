@@ -98,9 +98,7 @@ func searchChecked(ctx context.Context, d document, query string, o SearchOpts) 
 	if o.SnippetChars <= 0 {
 		o.SnippetChars = defaultSnippetChars
 	}
-	if o.StartMatch < 0 {
-		o.StartMatch = 0
-	}
+	o.StartMatch = max(o.StartMatch, 0)
 
 	ext := strings.ToLower(filepath.Ext(d.name))
 	switch ext {

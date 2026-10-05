@@ -157,13 +157,10 @@ func probePDFTextLayer(ctx context.Context, d document) (state pdfTextState, rea
 // sampled at an even stride from page 1, so a book that opens on a scanned cover
 // and plate section is not mistaken for a scan of itself.
 func probePageNumbers(total, budget int) []int {
-	if total <= 0 || budget <= 0 {
+	if total < 1 || budget < 1 {
 		return nil
 	}
-	stride := 1
-	if total > budget {
-		stride = total / budget
-	}
+	stride := max(1, total/budget)
 	pages := make([]int, 0, min(total, budget))
 	for i := 1; i <= total && len(pages) < budget; i += stride {
 		pages = append(pages, i)
@@ -248,9 +245,10 @@ func readPDFPages(ctx context.Context, d document, pr pdfRange) (Chunk, error) {
 			Reason:     fmt.Sprintf("start page %d is beyond the document's last page (%d pages)", pr.start, total),
 		}, nil
 	}
-	if pr.last <= 0 || pr.last > total {
+	if pr.last <= 0 {
 		pr.last = total
 	}
+	pr.last = min(pr.last, total)
 
 	scan, err := scanPDFPages(ctx, r, pr)
 	if err != nil {
@@ -284,7 +282,8 @@ func readPDFPages(ctx context.Context, d document, pr pdfRange) (Chunk, error) {
 // without ever splitting a page. It stops before a page when maxChars is
 // already reached (marking Truncated) or after maxPages pages have been read,
 // and checks ctx between pages. Nothing past pr.last counts as more: that is
-// where the caller's window ends, whether or not the document does.
+// where the caller's window ends, whether or not the document does. pr has its
+// defaults, so maxPages and maxChars are both positive.
 func scanPDFPages(ctx context.Context, r *pdf.Reader, pr pdfRange) (pdfScan, error) {
 	var sb strings.Builder
 	var s pdfScan
@@ -296,7 +295,7 @@ func scanPDFPages(ctx context.Context, r *pdf.Reader, pr pdfRange) (pdfScan, err
 		if e := ctx.Err(); e != nil {
 			return pdfScan{}, e
 		}
-		if maxChars > 0 && charCount >= maxChars {
+		if charCount >= maxChars {
 			s.hasMore = true
 			s.truncated = true
 			s.nextPage = i

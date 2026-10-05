@@ -228,6 +228,9 @@ func TestProbePageNumbers(t *testing.T) {
 		"shorter than budget": {total: 3, budget: 20, want: []int{1, 2, 3}},
 		"exactly the budget":  {total: 4, budget: 4, want: []int{1, 2, 3, 4}},
 		"strided":             {total: 20, budget: 4, want: []int{1, 6, 11, 16}},
+		"a stride left over":  {total: 10, budget: 3, want: []int{1, 4, 7}},
+		"one page":            {total: 1, budget: 20, want: []int{1}},
+		"a budget of one":     {total: 10, budget: 1, want: []int{1}},
 		"no pages":            {total: 0, budget: 20, want: nil},
 		"no budget":           {total: 10, budget: 0, want: nil},
 	}
