@@ -364,7 +364,8 @@ check-binary-vulns: ## Fail when a release binary carries an undeclared advisory
 # VERSION, generated from the table and never edited by hand. check-vex holds the
 # committed copy to the table and to VERSION in both directions (offline, no
 # build), so a declaration removed without its statement fails, a statement with
-# no declaration behind it fails, and a version bump fails until gen-vex has run.
+# no declaration behind it fails, and, while the document holds a statement, a
+# version bump fails until gen-vex has run.
 # vex-release writes the copy a release attaches to its image and publishes as an
 # asset, pinned to VEX_VERSION and the image index VEX_DIGEST: it runs the whole
 # binary-vuln gate on this tree first (the not-linked check included) and writes

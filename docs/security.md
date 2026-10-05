@@ -334,12 +334,13 @@ How to verify each channel, with the commands, is on
 
 The release gate (`make check-binary-vulns`) fails on any advisory against a
 module the build information of any of the six release targets names, unless a
-reviewed declaration accepts it, and from 2.2.1 the table holds none. A scanner
-that reads the server binary or its SBOM (Trivy, Grype, Docker Scout,
-osv-scanner, a registry's own scan) therefore finds no Go advisory against what
-the binary links when the release ships. Measured with Trivy 0.75 on the
-linux/amd64 build: no finding, where the same scan of the 2.2.0 build reports
-one.
+reviewed declaration accepts it, and from 2.2.1 the table holds none. That is
+the question a scanner asks of the server binary or its SBOM, asked of the Go
+vulnerability database. Measured with Trivy 0.75 on the linux/amd64 build: no
+finding, where the same scan of the 2.2.0 build reports one. Grype, Docker
+Scout, osv-scanner and a registry's own scan have not been measured on 2.2.1,
+and one that reads another advisory database can list an advisory the Go
+database does not hold.
 
 Releases up to 2.2.0 are reported for **GO-2026-5932** against
 `golang.org/x/crypto`. That advisory covers the module's `openpgp` packages,
