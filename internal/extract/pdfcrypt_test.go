@@ -243,10 +243,12 @@ func TestStringCrypt_DecryptAES(t *testing.T) {
 			}
 		})
 	}
-	for _, c := range []stringCrypt{c, {key: []byte{1, 2, 3, 4, 5}}} {
-		if got, ok := c.decrypt("ภาคผนวก", objRef{}); got != "ภาคผนวก" || !ok {
-			t.Errorf("decrypt in no object (AES %v) = %q %v, want it as it is", c.aes, got, ok)
-		}
+	for name, c := range map[string]stringCrypt{"AES in no object": c, "RC4 in no object": {key: []byte{1, 2, 3, 4, 5}}} {
+		t.Run(name, func(t *testing.T) {
+			if got, ok := c.decrypt("ภาคผนวก", objRef{}); got != "ภาคผนวก" || !ok {
+				t.Errorf("decrypt = %q %v, want it as it is", got, ok)
+			}
+		})
 	}
 }
 

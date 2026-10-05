@@ -161,6 +161,7 @@ func TestObjStmView_StreamsInOrder(t *testing.T) {
 	}
 	v := &objStmView{ReaderAt: strings.NewReader(file.String())}
 	p := make([]byte, 4)
+	// sequential: each read notices a stream the later ones find again
 	for _, i := range []int{2, 0, 1, 1, 0, 2} {
 		if _, err := v.ReadAt(p, starts[i]); err != nil {
 			t.Fatal(err)
