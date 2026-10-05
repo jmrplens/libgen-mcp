@@ -1722,6 +1722,69 @@ in the same change. Two things about it are easy to get wrong:
 
 ## Gotchas
 
+- **The files read fetches live under one root per process.** `FetchToTemp`
+  writes each file into a `fetch-*` directory inside `libgen-mcp-read-*` in the
+  OS temp directory, and that root holds a lock for the whole life of the
+  process: `flock` on the root directory itself on Unix, `LockFileEx` on a
+  `.lock` file inside it on Windows. `Client.Close` removes the root, `run`
+  defers the cleanup `newRegisteredServer` returns, and the next process's
+  first fetch (a `read` by `md5` or `doi`, never one of a local `path`) removes
+  every root that is a real directory this user owns, holds a `fetch-*`
+  directory or has gone a minute unmodified, and whose lock can be taken. A
+  root removed from under a running process is noticed when the next fetch
+  directory cannot be made in it, and replaced. Each of these fails silently if
+  undone:
+  - a fetch directory made anywhere but under the root outlives the process
+    again, which is how every restart left one behind up to 2.2.0, and a caller
+    of `newRegisteredServer` that drops the cleanup does the same on a clean
+    exit;
+  - a lock file inside the root on Unix is deleted by age-based temp cleaners
+    (systemd-tmpfiles before 254, tmpreaper, tmpwatch), after which another
+    process's sweep removes the live root;
+  - without the one-minute age rule a sweep can land between a root's creation
+    and its lock and remove it from its owner (measured: 11 in 9,600
+    processes). It binds only a root with no `fetch-*` directory, because the
+    owner makes the first one after it holds the lock, and the sweep must look
+    for one *before* it tries the lock. Applied to every root, it keeps what a
+    server killed seconds before a supervisor restarted it left for the whole
+    life of the new process, which sweeps once;
+  - only `EWOULDBLOCK` (Unix) and `ERROR_LOCK_VIOLATION` (Windows) mean held.
+    Any other lock error sends the process to loose `libgen-read-*` fetch
+    directories for its whole life, with one warning, and must never leave an
+    unlocked `libgen-mcp-read-*` root another process could sweep;
+  - the sweep `Lstat`s each candidate and opens the Unix lock
+    `O_DIRECTORY|O_NOFOLLOW|O_NOCTTY|O_NONBLOCK`, because `/tmp` is shared and
+    anything under the prefix may have been planted there.
+
+  The sweep relies on the lock being coherent across every process that shares
+  `TMPDIR`, and on Linux a *directory's* `flock` never is across hosts on NFS,
+  SMB, FUSE, 9p, AFS, Coda, OrangeFS or vboxsf, whatever the mount options:
+  their directory `file_operations` have no `.flock`, so `flock(2)` takes a
+  local VFS lock and succeeds (on NFS or SMB a regular file would have been
+  locked on the server). So
+  `holdReadRootLock` asks `networkFilesystem` (the temp directory's `statfs`
+  type, then its mount's type in `/proc/self/mountinfo`) before it locks, and
+  a root on one of those is `errLocksUnusable`, which sends the process to the
+  loose fallback; the sweep runs only after the process's own root is locked,
+  so such a host never sweeps either. Do not "simplify" that into trying the
+  lock and reading the error: there is none. Nor into `statfs` alone: a 9p
+  mount at 9P2000.L, the Linux default, reports the type of the server's
+  backing filesystem (`ext4` under a QEMU virtfs share), so only the mount
+  table names it. When that table does not describe the mount, because it
+  cannot be read or lists no mount of the directory's device (a chroot hides
+  mounts outside it), the answer is `errMountUnknown`, which also sends the
+  process to the fallback: refusing costs only the cleanup of a killed
+  server's files, accepting can cost another host its live ones. Keep it that
+  way round. The one exception is `subvolumeFilesystem`: Btrfs and bcachefs
+  subvolumes report a device number no table line carries, so an unlisted
+  directory there is the ordinary case, and refusing it would cost every such
+  host its sweep. GFS2 and OCFS2 mounted `localflocks` keep a directory's
+  flock on each node too, and are deliberately not refused: GFS2 sets that
+  option on every `lock_nolock` mount, which one host alone can mount, so the
+  configuration reference warns instead. Other platforms do not check at all.
+  The loose prefix, `libgen-read-*`, is deliberately never swept: nothing marks
+  which process made one, and a server of those versions, or one whose temp
+  directory cannot lock, may still be using it.
 - **Root binaries.** `go build ./cmd/<x>` drops the binary in the repo root
   (e.g. `./gen_eval_pages`). These are gitignored, but **never** `git add -A` —
   stage files explicitly so a stray binary or `.env` is never committed. Prefer

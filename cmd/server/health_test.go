@@ -392,10 +392,11 @@ func TestConfigDigestMovesExactlyWhenTheServedToolsDo(t *testing.T) {
 			t.Fatalf("config.Load() error = %v", err)
 		}
 		cfg.Sources, cfg.CoreKey, cfg.UnpaywallEmail = k.sources, k.coreKey, k.email
-		server, err := newRegisteredServer(cfg, "127.0.0.1:0", nil, inflightFlag{}, identityChoice{})
+		server, closeServer, err := newRegisteredServer(cfg, "127.0.0.1:0", nil, inflightFlag{}, identityChoice{})
 		if err != nil {
 			t.Fatalf("newRegisteredServer() error = %v", err)
 		}
+		t.Cleanup(closeServer)
 		st, ct := mcp.NewInMemoryTransports()
 		serverSession, err := server.Connect(t.Context(), st, nil)
 		if err != nil {

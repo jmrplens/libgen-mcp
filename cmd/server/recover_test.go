@@ -205,10 +205,11 @@ func TestAPanickingToolKeepsWithRecoverysResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.Load(): %v", err)
 	}
-	server, err := newRegisteredServer(cfg, "", nil, inflightFlag{}, identityChoice{})
+	server, closeServer, err := newRegisteredServer(cfg, "", nil, inflightFlag{}, identityChoice{})
 	if err != nil {
 		t.Fatalf("newRegisteredServer(): %v", err)
 	}
+	t.Cleanup(closeServer)
 
 	st, ct := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(t.Context(), st, nil)

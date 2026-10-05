@@ -1,7 +1,9 @@
 package libgen
 
 import (
+	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -70,8 +72,8 @@ func TestTempCache_ReleaseAllowsEviction(t *testing.T) {
 	if _, ok := tc.get("md5-a"); !ok { // refs=2
 		t.Fatal("get should hit")
 	}
-	tc.release("md5-a") // refs=1
-	tc.release("md5-a") // refs=0
+	tc.release("md5-a", path) // refs=1
+	tc.release("md5-a", path) // refs=0
 
 	tc.evict(t.Context())
 
@@ -91,7 +93,7 @@ func TestTempCache_ReleaseAllowsSizeEviction(t *testing.T) {
 	tc := newTempCache(size-1, time.Hour) // maxBytes below the entry size
 
 	tc.put(t.Context(), "md5-a", path, size) // refs=1
-	tc.release("md5-a")                      // refs=0
+	tc.release("md5-a", path)                // refs=0
 
 	tc.evict(t.Context())
 
@@ -183,8 +185,8 @@ func TestTempCache_ReleaseDoesNotUnderflow(t *testing.T) {
 	tc := newTempCache(1<<30, time.Hour)
 
 	tc.put(t.Context(), "k", path, size) // refs=1
-	tc.release("k")                      // refs=0
-	tc.release("k")                      // one release too many
+	tc.release("k", path)                // refs=0
+	tc.release("k", path)                // one release too many
 
 	if got := tc.entries["k"].refs; got != 0 {
 		t.Fatalf("refs after an extra release = %d, want 0", got)
@@ -206,7 +208,7 @@ func TestTempCache_PutOverwritesUnreferencedFile(t *testing.T) {
 	path2, size2 := writeTempFile(t, "second backing file")
 
 	tc.put(t.Context(), "k", path1, size1) // refs=1
-	tc.release("k")                        // refs=0, now overwritable
+	tc.release("k", path1)                 // refs=0, now overwritable
 	tc.put(t.Context(), "k", path2, size2) // prev unreferenced with a different path → path1 removed
 
 	if _, statErr := os.Stat(path1); !os.IsNotExist(statErr) {
@@ -241,7 +243,7 @@ func TestTempCache_GetOrPutHitReturnsExisting(t *testing.T) {
 // never stored (it must not panic).
 func TestTempCache_ReleaseUnknownKey(t *testing.T) {
 	tc := newTempCache(1<<30, time.Minute)
-	tc.release("never-stored") // must not panic
+	tc.release("never-stored", "") // must not panic
 }
 
 // TestRemoveTempFile_EmptyPath verifies removeTempFile ignores an empty path (the
@@ -267,5 +269,242 @@ func TestTempCache_RefcountBlocksEviction(t *testing.T) {
 	got, ok := tc.get("md5-a")
 	if !ok || got != path {
 		t.Errorf("held entry should still hit: got=%q ok=%v", got, ok)
+	}
+}
+
+// TestTempCache_PurgeRemovesEverythingEvenReferenced is the end-of-process
+// pass: unlike eviction it does not spare an entry a read still references,
+// because no read is left to answer once the process is ending.
+func TestTempCache_PurgeRemovesEverythingEvenReferenced(t *testing.T) {
+	tc := newTempCache(1<<30, time.Hour)
+	held, heldSize := writeTempFile(t, "held")
+	idle, idleSize := writeTempFile(t, "idle")
+	tc.put(t.Context(), "held", held, heldSize) // put leaves refs=1
+	tc.put(t.Context(), "idle", idle, idleSize)
+	tc.release("idle", idle)
+
+	if got := tc.purge(); got != 2 {
+		t.Errorf("purge = %d, want 2", got)
+	}
+	for _, path := range []string{held, idle} {
+		t.Run(path, func(t *testing.T) {
+			if _, err := os.Stat(path); !os.IsNotExist(err) {
+				t.Errorf("%q is still on disk (stat err %v)", path, err)
+			}
+		})
+	}
+	if _, ok := tc.get("held"); ok {
+		t.Error("the purged cache still answers for a key")
+	}
+	if got := tc.purge(); got != 0 {
+		t.Errorf("a second purge = %d, want 0", got)
+	}
+}
+
+// TestTempCache_EveryHitHoldsItsEntryAgainstEviction pins that a hit takes a
+// reference of its own, on both lookups. Each case leaves exactly one of the
+// two references outstanding, so the entry must survive an eviction pass that
+// would otherwise take it; a hit that took none would leave none, and the file
+// a read is still using would go.
+func TestTempCache_EveryHitHoldsItsEntryAgainstEviction(t *testing.T) {
+	cases := []struct {
+		name string
+		hit  func(tc *tempCache, path string, size int64) bool
+	}{
+		{"get", func(tc *tempCache, _ string, _ int64) bool {
+			_, ok := tc.get("k")
+			return ok
+		}},
+		{"getOrPut", func(tc *tempCache, path string, size int64) bool {
+			_, isNew := tc.getOrPut(context.Background(), "k", path, size)
+			return !isNew
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path, size := writeTempFile(t, "read by two calls at once")
+			cache := newTempCache(1<<30, 0) // ttl=0: unreferenced means evicted
+			cache.put(t.Context(), "k", path, size)
+			if !tc.hit(cache, path, size) {
+				t.Fatal("the second lookup missed")
+			}
+			cache.release("k", path)
+
+			cache.evict(t.Context())
+			if _, ok := cache.entries["k"]; !ok {
+				t.Fatal("the entry was evicted while the hit's reference was outstanding")
+			}
+			if _, err := os.Stat(path); err != nil {
+				t.Errorf("the file a read still holds was removed: %v", err)
+			}
+		})
+	}
+}
+
+// TestTempCache_ExpiresExactlyAtTheTTL lands the clock on the boundary: an
+// unreferenced entry idle for exactly the TTL is expired, and one a nanosecond
+// short of it is not.
+func TestTempCache_ExpiresExactlyAtTheTTL(t *testing.T) {
+	const ttl = 10 * time.Minute
+	cases := []struct {
+		name string
+		idle time.Duration
+		want bool
+	}{
+		{"one nanosecond short of the TTL", ttl - time.Nanosecond, false},
+		{"exactly the TTL", ttl, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path, size := writeTempFile(t, "idle")
+			cache := newTempCache(1<<30, ttl)
+			start := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
+			cache.now = func() time.Time { return start }
+			cache.put(t.Context(), "k", path, size)
+			cache.release("k", path)
+
+			cache.now = func() time.Time { return start.Add(tc.idle) }
+			cache.evict(t.Context())
+			if _, kept := cache.entries["k"]; kept == tc.want {
+				t.Errorf("after %v idle the entry was kept=%v, want evicted=%v", tc.idle, kept, tc.want)
+			}
+		})
+	}
+}
+
+// TestTempCache_AtTheCapIsWithinIt pins the size boundary: a cache holding
+// exactly its cap is full, not over, so nothing is evicted for size.
+func TestTempCache_AtTheCapIsWithinIt(t *testing.T) {
+	path, size := writeTempFile(t, "exactly the cap")
+	tc := newTempCache(size, time.Hour)
+	tc.put(t.Context(), "k", path, size)
+	tc.release("k", path)
+
+	tc.evict(t.Context())
+	if _, ok := tc.entries["k"]; !ok {
+		t.Error("an entry exactly at the cap was evicted for size")
+	}
+}
+
+// TestTempCache_RemovingAFileRemovesItsFetchDirectory checks both ways an
+// entry leaves the cache take its per-fetch directory with it, which is what
+// keeps eviction and the end-of-process purge from leaving one empty directory
+// behind per file.
+func TestTempCache_RemovingAFileRemovesItsFetchDirectory(t *testing.T) {
+	fetched := func(t *testing.T) (string, string) {
+		t.Helper()
+		dir := filepath.Join(t.TempDir(), "fetch-1")
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(dir, "book.pdf")
+		if err := os.WriteFile(path, []byte("%PDF"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return dir, path
+	}
+	cases := []struct {
+		name   string
+		remove func(tc *tempCache)
+	}{
+		{"evict", func(tc *tempCache) { tc.evict(context.Background()) }},
+		{"purge", func(tc *tempCache) { tc.purge() }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir, path := fetched(t)
+			cache := newTempCache(1<<30, 0)
+			cache.put(t.Context(), "k", path, 4)
+			cache.release("k", path)
+
+			tc.remove(cache)
+			if _, err := os.Stat(dir); !os.IsNotExist(err) {
+				t.Errorf("the fetch directory %q is still there (stat err %v)", dir, err)
+			}
+		})
+	}
+}
+
+// TestTempCache_AnEntryWhoseFileIsGoneIsAMiss covers a read root removed from
+// under the process: the cache still lists the file, the disk no longer has
+// it. Handing the path out would make every read of it fail until the entry
+// aged out, so both lookups treat it as a miss and forget it.
+func TestTempCache_AnEntryWhoseFileIsGoneIsAMiss(t *testing.T) {
+	t.Run("get", func(t *testing.T) {
+		tc := newTempCache(1<<30, time.Hour)
+		path, size := writeTempFile(t, "removed from under the cache")
+		tc.put(t.Context(), "k", path, size)
+		if err := os.Remove(path); err != nil {
+			t.Fatal(err)
+		}
+		if got, ok := tc.get("k"); ok {
+			t.Fatalf("get handed out %q, whose file is gone", got)
+		}
+		if _, ok := tc.entries["k"]; ok {
+			t.Error("the entry for a vanished file was kept")
+		}
+	})
+	t.Run("getOrPut", func(t *testing.T) {
+		tc := newTempCache(1<<30, time.Hour)
+		gone, goneSize := writeTempFile(t, "removed from under the cache")
+		fresh, freshSize := writeTempFile(t, "fetched again")
+		tc.put(t.Context(), "k", gone, goneSize)
+		if err := os.Remove(gone); err != nil {
+			t.Fatal(err)
+		}
+		stored, isNew := tc.getOrPut(t.Context(), "k", fresh, freshSize)
+		if !isNew || stored != fresh {
+			t.Errorf("getOrPut = (%q, %v), want the fresh download (%q, true)", stored, isNew, fresh)
+		}
+	})
+}
+
+// TestTempCache_ReleaseReachesOnlyTheEntryItWasTakenOn pins why release takes
+// the path: a read still holding a forgotten entry must not spend a reference
+// the new entry under the same key is counting on, or the file a later read is
+// using becomes evictable while it reads.
+func TestTempCache_ReleaseReachesOnlyTheEntryItWasTakenOn(t *testing.T) {
+	tc := newTempCache(1<<30, time.Hour)
+	old, oldSize := writeTempFile(t, "held by a read when its root vanished")
+	fresh, freshSize := writeTempFile(t, "the next read's copy")
+	tc.put(t.Context(), "k", old, oldSize) // the old reader's reference
+	if err := os.Remove(old); err != nil {
+		t.Fatal(err)
+	}
+	if _, isNew := tc.getOrPut(t.Context(), "k", fresh, freshSize); !isNew {
+		t.Fatal("the vanished entry was not replaced")
+	}
+
+	tc.release("k", old)
+	if got := tc.entries["k"].refs; got != 1 {
+		t.Fatalf("the old reader's release changed the new entry's refs to %d, want 1", got)
+	}
+	tc.release("k", fresh)
+	if got := tc.entries["k"].refs; got != 0 {
+		t.Errorf("the new reader's release left refs at %d, want 0", got)
+	}
+}
+
+// TestTempCache_DropUnderForgetsOnlyThatRoot drops exactly the entries whose
+// files lived under the root that was lost, referenced or not, and keeps one
+// under a directory whose name merely starts with the same characters.
+func TestTempCache_DropUnderForgetsOnlyThatRoot(t *testing.T) {
+	tc := newTempCache(1<<30, time.Hour)
+	root := filepath.Join(t.TempDir(), readRootPrefix+"1")
+	tc.entries["held"] = &tempEntry{path: filepath.Join(root, "fetch-1", "a.pdf"), refs: 1}
+	tc.entries["idle"] = &tempEntry{path: filepath.Join(root, "fetch-2", "b.pdf")}
+	tc.entries["sibling"] = &tempEntry{path: filepath.Join(root+"0", "fetch-3", "c.pdf")}
+
+	tc.dropUnder(root)
+
+	for _, key := range []string{"held", "idle"} {
+		t.Run("dropped "+key, func(t *testing.T) {
+			if _, ok := tc.entries[key]; ok {
+				t.Errorf("%q survived the loss of its root", key)
+			}
+		})
+	}
+	if _, ok := tc.entries["sibling"]; !ok {
+		t.Error("an entry under another root was dropped")
 	}
 }

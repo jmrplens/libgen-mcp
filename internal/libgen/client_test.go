@@ -860,13 +860,13 @@ func TestReadCacheEvictionsCarryTheReasonThatCausedThem(t *testing.T) {
 		// TTL pass can be what removes it.
 		lapsing := newTempCache(1<<30, 0)
 		lapsing.put(t.Context(), "idle", underCap, size)
-		lapsing.release("idle")
+		lapsing.release("idle", underCap)
 		lapsing.evict(t.Context())
 
 		// The mirror image: an hour of TTL, and a cap the single entry is over.
 		full := newTempCache(overSize-1, time.Hour)
 		full.put(t.Context(), "big", overCap, overSize)
-		full.release("big")
+		full.release("big", overCap)
 		full.evict(t.Context())
 	})
 

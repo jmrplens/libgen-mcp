@@ -44,8 +44,10 @@ func adsCountingServer(t *testing.T, payload []byte, adsHits *atomic.Int32) *htt
 }
 
 // newFetchTempClient builds a test client wired to a single mirror with a small
-// temp cache, keeping the fast, network-free defaults used elsewhere.
-func newFetchTempClient(m MirrorLister) *Client {
+// temp cache, keeping the fast, network-free defaults used elsewhere. Close is
+// registered as cleanup, so a test leaves no read root in the temp directory.
+func newFetchTempClient(t *testing.T, m MirrorLister) *Client {
+	t.Helper()
 	cfg := &config.Config{
 		Timeout:                5_000_000_000,
 		RateRPS:                1000,
@@ -54,6 +56,7 @@ func newFetchTempClient(m MirrorLister) *Client {
 		MaxConcurrentDownloads: 2,
 	}
 	c := New(m, cfg)
+	t.Cleanup(c.Close)
 	c.backoffBase = 1_000_000
 	c.sources = []DownloadSource{libgenSource{c: c}}
 	return c
@@ -69,7 +72,7 @@ func TestFetchToTemp_DownloadsThenReusesCache(t *testing.T) {
 	var adsHits atomic.Int32
 	srv := adsCountingServer(t, payload, &adsHits)
 	defer srv.Close()
-	c := newFetchTempClient(staticMirrors{srv.URL})
+	c := newFetchTempClient(t, staticMirrors{srv.URL})
 
 	path1, release1, err := c.FetchToTemp(context.Background(), Item{MD5: want})
 	if err != nil {
@@ -104,7 +107,7 @@ func TestFetchToTemp_DownloadsThenReusesCache(t *testing.T) {
 // TestFetchToTemp_NoIdentifier verifies that an item with neither md5 nor doi
 // returns an error and a non-nil no-op release.
 func TestFetchToTemp_NoIdentifier(t *testing.T) {
-	c := newFetchTempClient(staticMirrors{})
+	c := newFetchTempClient(t, staticMirrors{})
 	path, release, err := c.FetchToTemp(context.Background(), Item{})
 	if err == nil {
 		t.Fatal("FetchToTemp with no identifier should error")
@@ -123,7 +126,7 @@ func TestFetchToTemp_NoIdentifier(t *testing.T) {
 // chain) surfaces the download error with an empty path and a safe no-op release,
 // and leaves no per-fetch temp dir behind.
 func TestFetchToTemp_DownloadError(t *testing.T) {
-	c := newFetchTempClient(staticMirrors{}) // libgen source only; does not support DOIs
+	c := newFetchTempClient(t, staticMirrors{}) // libgen source only; does not support DOIs
 	path, release, err := c.FetchToTemp(context.Background(), Item{DOI: "10.1/x"})
 	if err == nil {
 		t.Fatal("FetchToTemp for an unservable identifier should error")
@@ -147,7 +150,7 @@ func TestFetchToTemp_ConcurrentLoserDiscardsDownload(t *testing.T) {
 	want := md5Hex(payload)
 	b := newBlockingCDN(t, payload)
 	defer b.srv.Close()
-	c := newFetchTempClient(staticMirrors{b.srv.URL})
+	c := newFetchTempClient(t, staticMirrors{b.srv.URL})
 
 	type out struct {
 		path    string
@@ -186,8 +189,8 @@ func TestFetchToTemp_ConcurrentLoserDiscardsDownload(t *testing.T) {
 	}
 }
 
-// TestFetchToTemp_TempDirCreateError verifies that when the per-fetch temp
-// directory cannot be created (an unwritable TMPDIR), FetchToTemp surfaces the
+// TestFetchToTemp_TempDirCreateError verifies that when the process's read root
+// cannot be created (an unwritable TMPDIR), FetchToTemp surfaces the
 // os.MkdirTemp error and returns a non-nil no-op release, rather than panicking
 // or proceeding without a directory. The identifier is a cache miss so the fast
 // path does not short-circuit before the MkdirTemp call.
@@ -197,7 +200,7 @@ func TestFetchToTemp_TempDirCreateError(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "no", "such", "dir")
 	isolateTempDir(t, missing)
 
-	c := newFetchTempClient(staticMirrors{})
+	c := newFetchTempClient(t, staticMirrors{})
 	path, release, err := c.FetchToTemp(context.Background(), Item{MD5: "0123456789abcdef0123456789abcdef"})
 	// Assert it is specifically the temp-dir creation failure (os.MkdirTemp fails to
 	// stat the missing TMPDIR base), so a future download/cache error occurring
@@ -251,5 +254,191 @@ func isolateTempDir(t *testing.T, dir string) {
 	if got, want := filepath.Clean(os.TempDir()), filepath.Clean(dir); got != want {
 		t.Fatalf("os.TempDir() = %q after isolating it to %q; this platform reads a variable %v does not cover",
 			got, want, tempDirVars)
+	}
+}
+
+// TestFetchToTemp_LivesUnderTheReadRootAndCloseRemovesIt is the leak this root
+// fixes: a fetched file used to sit loose in the temp directory and outlive
+// the process, because only eviction removed it. Now it lives under the
+// process's read root, Close removes the root with whatever the cache held,
+// and a read after Close fetches again into a new root.
+func TestFetchToTemp_LivesUnderTheReadRootAndCloseRemovesIt(t *testing.T) {
+	tmp := t.TempDir()
+	isolateTempDir(t, tmp)
+	payload := []byte("%PDF-1.4 read root payload " + string(make([]byte, 64)))
+	want := md5Hex(payload)
+	var adsHits atomic.Int32
+	srv := adsCountingServer(t, payload, &adsHits)
+	defer srv.Close()
+	c := newFetchTempClient(t, staticMirrors{srv.URL})
+
+	path, release, err := c.FetchToTemp(context.Background(), Item{MD5: want})
+	if err != nil {
+		t.Fatalf("FetchToTemp: %v", err)
+	}
+	// Held, not released: a read caught mid-page when the process ends must
+	// not keep its file on disk either.
+	defer release()
+	root := filepath.Dir(filepath.Dir(path))
+	if filepath.Dir(root) != tmp || !strings.HasPrefix(filepath.Base(root), readRootPrefix) {
+		t.Fatalf("fetched file %q is not in a per-fetch directory under a read root in %q", path, tmp)
+	}
+
+	c.Close()
+	entries, err := os.ReadDir(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("Close left %d entries in the temp directory, first %q", len(entries), entries[0].Name())
+	}
+
+	again, releaseAgain, err := c.FetchToTemp(context.Background(), Item{MD5: want})
+	if err != nil {
+		t.Fatalf("FetchToTemp after Close: %v", err)
+	}
+	defer releaseAgain()
+	if got := adsHits.Load(); got != 2 {
+		t.Errorf("ads.php hits = %d, want 2: the file Close removed must be fetched again", got)
+	}
+	if filepath.Dir(filepath.Dir(again)) == root {
+		t.Errorf("the fetch after Close reused the removed root %q", root)
+	}
+}
+
+// TestFetchToTemp_WithoutWorkingLocksFetchesLooseAndCloseStillRemovesIt is the
+// fallback for a temp directory whose locks fail outright: the file goes into
+// a loose directory under the prefix no sweep matches, as up to 2.2.0, and a
+// clean exit still removes it, because the cache does.
+func TestFetchToTemp_WithoutWorkingLocksFetchesLooseAndCloseStillRemovesIt(t *testing.T) {
+	tmp := t.TempDir()
+	isolateTempDir(t, tmp)
+	lockAnswers(t, errors.New("no locks on this mount"))
+	payload := []byte("%PDF-1.4 unlocked payload " + string(make([]byte, 64)))
+	want := md5Hex(payload)
+	var adsHits atomic.Int32
+	srv := adsCountingServer(t, payload, &adsHits)
+	defer srv.Close()
+	c := newFetchTempClient(t, staticMirrors{srv.URL})
+
+	path, release, err := c.FetchToTemp(context.Background(), Item{MD5: want})
+	if err != nil {
+		t.Fatalf("FetchToTemp: %v", err)
+	}
+	defer release()
+	dir := filepath.Dir(path)
+	if filepath.Dir(dir) != tmp || !strings.HasPrefix(filepath.Base(dir), legacyFetchPrefix) {
+		t.Fatalf("fetched file %q is not in a loose %s* directory in %q", path, legacyFetchPrefix, tmp)
+	}
+
+	c.Close()
+	entries, err := os.ReadDir(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("Close left %d entries in the temp directory, first %q", len(entries), entries[0].Name())
+	}
+}
+
+// TestFetchToTemp_RecoversFromARemovedRoot covers the root removed from under
+// a running process, by an operator clearing the temp directory or a cleaner
+// aging it out. The cached file went with it, so the next read of the same
+// book fetches it again into a new root instead of being handed the old path,
+// the cache forgets every other file that lived there, and the read after that
+// finds the new copy cached.
+func TestFetchToTemp_RecoversFromARemovedRoot(t *testing.T) {
+	isolateTempDir(t, t.TempDir())
+	payload := []byte("%PDF-1.4 removed root payload " + string(make([]byte, 64)))
+	want := md5Hex(payload)
+	var adsHits atomic.Int32
+	srv := adsCountingServer(t, payload, &adsHits)
+	defer srv.Close()
+	c := newFetchTempClient(t, staticMirrors{srv.URL})
+
+	first, release, err := c.FetchToTemp(context.Background(), Item{MD5: want})
+	if err != nil {
+		t.Fatalf("FetchToTemp: %v", err)
+	}
+	release()
+	lost := removeRootFromUnder(t, &c.readRoot)
+	// Another book's file in the lost root, which nothing asks for again: only
+	// the loss of the root can tell the cache it is gone.
+	c.tempCache.entries["other"] = &tempEntry{path: filepath.Join(lost, "fetch-0", "other.pdf"), size: 1}
+
+	again, releaseAgain, err := c.FetchToTemp(context.Background(), Item{MD5: want})
+	if err != nil {
+		t.Fatalf("FetchToTemp after the root was removed: %v", err)
+	}
+	defer releaseAgain()
+	if got := adsHits.Load(); got != 2 {
+		t.Errorf("ads.php hits = %d, want 2: the removed file must be fetched again", got)
+	}
+	if again == first || filepath.Dir(filepath.Dir(again)) == lost || !exists(again) {
+		t.Errorf("the fetch after the removal returned %q, want a file in a new root in place of %q", again, lost)
+	}
+	if _, ok := c.tempCache.entries["other"]; ok {
+		t.Error("the cache kept an entry for a file in the removed root")
+	}
+
+	cached, releaseCached, err := c.FetchToTemp(context.Background(), Item{MD5: want})
+	if err != nil {
+		t.Fatalf("FetchToTemp from the new root: %v", err)
+	}
+	defer releaseCached()
+	if cached != again || adsHits.Load() != 2 {
+		t.Errorf("the next read got %q after %d fetches, want the cached %q after 2", cached, adsHits.Load(), again)
+	}
+}
+
+// TestFetchToTemp_FetchDirCreateError covers a root removed from under the
+// process together with the temp directory it lived in, so no new root can be
+// made. The error is the caller's, as when the first root cannot be made, and
+// the read after the temp directory comes back recovers.
+func TestFetchToTemp_FetchDirCreateError(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "tmp")
+	if err := os.Mkdir(tmp, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	isolateTempDir(t, tmp)
+	payload := []byte("%PDF-1.4 fetch dir error payload " + string(make([]byte, 64)))
+	want := md5Hex(payload)
+	var adsHits atomic.Int32
+	srv := adsCountingServer(t, payload, &adsHits)
+	defer srv.Close()
+	c := newFetchTempClient(t, staticMirrors{srv.URL})
+	_, release, err := c.FetchToTemp(context.Background(), Item{MD5: want})
+	if err != nil {
+		t.Fatalf("FetchToTemp: %v", err)
+	}
+	release()
+	removeRootFromUnder(t, &c.readRoot)
+	if rmErr := os.Remove(tmp); rmErr != nil {
+		t.Fatal(rmErr)
+	}
+
+	path, release, err := c.FetchToTemp(context.Background(), Item{MD5: want})
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) || !strings.HasPrefix(pathErr.Path, tmp) {
+		t.Fatalf("want an *os.PathError from MkdirTemp in %q, got %v", tmp, err)
+	}
+	if path != "" {
+		t.Errorf("path = %q, want empty on error", path)
+	}
+	if release == nil {
+		t.Fatal("release must be non-nil even on error")
+	}
+	release()
+
+	if mkErr := os.Mkdir(tmp, 0o700); mkErr != nil {
+		t.Fatal(mkErr)
+	}
+	path, release, err = c.FetchToTemp(context.Background(), Item{MD5: want})
+	if err != nil {
+		t.Fatalf("FetchToTemp once the temp directory is back: %v", err)
+	}
+	defer release()
+	if !strings.HasPrefix(path, tmp) || !exists(path) {
+		t.Errorf("the read after the failure returned %q, want a file under %q", path, tmp)
 	}
 }

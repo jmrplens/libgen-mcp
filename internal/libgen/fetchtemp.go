@@ -47,13 +47,17 @@ func (c *Client) FetchToTemp(ctx context.Context, item Item, progress ...Progres
 	// Fast path: a recent fetch of the same identifier is still cached. get holds a
 	// reference for us, so the file cannot be evicted until we release it.
 	if cached, ok := c.tempCache.get(key); ok {
-		return cached, c.releaseOnce(key), nil
+		return cached, c.releaseOnce(key, cached), nil
 	}
 
 	// Miss: download into a dedicated per-fetch temp dir so eviction can drop the
 	// whole directory. An empty filename lets DownloadItem auto-name the file with
-	// its correct extension.
-	tempDir, err := os.MkdirTemp("", "libgen-read-*")
+	// its correct extension. The directory lives under this process's read root
+	// rather than loose in the temp directory, which is what lets Close and the
+	// next start remove whatever the cache still held when the process ended. A
+	// root that was removed from under the process is replaced, and the cache
+	// forgets the files that went with it.
+	tempDir, err := c.readRoot.fetchDir(c.tempCache.dropUnder)
 	if err != nil {
 		return "", noopRelease, err
 	}
@@ -74,13 +78,21 @@ func (c *Client) FetchToTemp(ctx context.Context, item Item, progress ...Progres
 	if !isNew {
 		_ = os.RemoveAll(tempDir)
 	}
-	return stored, c.releaseOnce(key), nil
+	return stored, c.releaseOnce(key, stored), nil
+}
+
+// Close removes every file FetchToTemp put on disk: what the cache still holds
+// and the read root those files live under. It is for the end of the process;
+// a read after it fetches again into a new root. Safe to call more than once.
+func (c *Client) Close() {
+	c.tempCache.purge()
+	c.readRoot.close()
 }
 
 // releaseOnce returns a release closure that drops exactly one cache reference for
-// key on its first call and is a no-op on any subsequent call, so callers can
-// defer it and also release early without double-decrementing.
-func (c *Client) releaseOnce(key string) func() {
+// key's entry at path on its first call and is a no-op on any subsequent call, so
+// callers can defer it and also release early without double-decrementing.
+func (c *Client) releaseOnce(key, path string) func() {
 	var once sync.Once
-	return func() { once.Do(func() { c.tempCache.release(key) }) }
+	return func() { once.Do(func() { c.tempCache.release(key, path) }) }
 }
