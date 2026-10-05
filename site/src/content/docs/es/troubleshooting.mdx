@@ -1069,13 +1069,13 @@ Valen para un servidor arrancado con `--http`. Todo rechazo en el propio endpoin
 		`read` devuelve `extractable: false` con un motivo: `no extractable text layer (likely a scanned or image-only PDF); OCR is not supported`, `unsupported format .djvu: text extraction is not available (comic/scanned/proprietary container)`, `unsupported file extension .env and its bytes match no supported format (unrecognized)`, `cannot read PDF: it is encrypted in a way this reader cannot decrypt (…)`, `cannot read PDF: the file is damaged (…)`, o `cannot read the file: the reader did not finish within the time limit (the document is damaged or pathologically structured)`.
 	</Fact>
 	<Fact kind="meaning">
-		`read` extrae texto de PDF, EPUB y texto plano. Un escaneo no tiene texto que extraer y aquí no se hace OCR; DjVu, los archivos de cómic y los contenedores propietarios de ebooks no se leen en absoluto; un PDF cifrado con AES-256 o con RC4 bajo filtros de cifrado, o uno que pide contraseña, no se puede descifrar, y un PDF dañado no se repara; a un documento que tarda demasiado se le da un tiempo límite en lugar de un hilo para siempre.
+		`read` extrae texto de PDF, EPUB y texto plano. Un escaneo no tiene texto que extraer y aquí no se hace OCR; DjVu, los archivos de cómic y los contenedores propietarios de ebooks no se leen en absoluto; un PDF cifrado con AES-256, con RC4 bajo filtros de cifrado, con RC4 bajo una clave de menos de 88 bits o con AES-128 tal como lo escribe pdfcpu, o uno que pide contraseña, no se puede descifrar, y un PDF dañado no se repara; a un documento que tarda demasiado se le da un tiempo límite en lugar de un hilo para siempre.
 	</Fact>
 	<Fact kind="fixes">
 
-    - Descarga otra edición de la misma obra: el catálogo suele tener un PDF con texto o un EPUB junto a un escaneo, y la copia de otro mirror de un PDF cifrado o dañado suele estar sin cifrar y entera.
+    - Descarga otra edición de la misma obra: el catálogo suele tener un PDF con texto o un EPUB junto a un escaneo. Una copia del mismo md5 desde otro mirror es el mismo archivo, cifrado o dañado igual, porque `download` comprueba el md5. Para un artículo, otra fuente puede tener un archivo distinto.
     - Abre el archivo en local con un lector que haga OCR, o que descifre o repare el PDF.
-    - Un índice que vuelve vacío no es un fallo: muchos PDF no llevan tabla de contenidos, el `reason` dice si no tiene ninguno o lo tiene dañado, y `find` sigue buscando en el texto.
+    - Un índice que vuelve vacío no es un fallo: muchos PDF no llevan tabla de contenidos, el `reason` dice si no tiene ninguno, lo tiene dañado o es demasiado grande para listarlo, y `find` sigue buscando en el texto.
 
     </Fact>
     <Fact label="Cómo funciona">
@@ -1095,6 +1095,7 @@ Valen para un servidor arrancado con `--http`. Todo rechazo en el propio endpoin
     - `no outline entry matches "…": read the outline and pass an entry number`
     - `section 40 does not exist: the outline has 12 entries, numbered from 1`
     - `this document has no table of contents, so section cannot address part of it: read by page with start_page (PDF) or by character with offset (EPUB/TXT), or search it with find`
+    - `this document's table of contents could not be read (it is damaged, or larger than this reader lists), so section cannot address part of it: read by page with start_page, or search it with find`
     - `section cannot be combined with outline: …`, lo mismo con `find`, o `section fixes where reading starts, so omit start_page and offset: continue a long section with the cursor`
     - `entry 7 "…" points to no page, so it cannot be read as a section: …`
 
@@ -1107,7 +1108,7 @@ Valen para un servidor arrancado con `--http`. Todo rechazo en el propio endpoin
     <Fact kind="fixes">
 
     - Llama a `read` con `outline: true` y pasa el número de la entrada, el `[n]` que lleva delante.
-    - Para un documento sin índice, lee por página o por desplazamiento, o búscalo con `find`.
+    - Para un documento sin índice, o uno cuyo índice no se pudo leer, lee por página o por desplazamiento, o búscalo con `find`.
     - Quita el argumento que nombra el rechazo. Una sección larga continúa con su `cursor`.
     - Para una entrada que no apunta a ninguna página, elige una entrada vecina o lee por página.
 

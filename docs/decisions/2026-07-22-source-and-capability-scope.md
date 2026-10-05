@@ -789,13 +789,25 @@ answered with an error now yields the entry before the cycle. The 1,928-entry ou
 1.6 s instead of 10.3 s. The release binaries link 43 modules instead of 50, the linux/amd64 one
 is 4.5 MB smaller, and Trivy 0.75 reports nothing on it where it reported GO-2026-5932 before.
 
-**What it costs.** ledongthuc/pdf decrypts RC4 and AES-128 and nothing else, and does not repair
-a damaged file, where pdfcpu did both. A PDF encrypted with AES-256 (V=5) or with RC4 under crypt
-filters (V=4), or one whose cross-reference table needs rebuilding, loses its outline. Those
-files already had no text and no `find`, so `read` now gives every mode one honest reason, that
-the file is encrypted in a way the reader cannot decrypt or is damaged, instead of an outline
-beside a text path that called the file "not a valid PDF". An outline that is present but does
-not parse is reported as damaged rather than as missing, which pdfcpu could not tell apart.
+**What it costs.** ledongthuc/pdf decrypts less than pdfcpu did, and does not repair a damaged
+file, where pdfcpu did both. It decrypts RC4 correctly only from an 88-bit key up, because it
+never cuts each object's key to the n+5 bytes the standard takes, and AES-128 only when the
+crypt filter gives the key length in bytes. A PDF encrypted with AES-256 (V=5), with RC4 under
+crypt filters (V=4), with RC4 under a shorter key (every 40-bit file among them), or with
+AES-128 as pdfcpu writes it, or one whose cross-reference table needs rebuilding, loses its
+outline. Those files already had no usable text: the text and `find` modes called most of them
+"not a valid PDF", and read a 40-bit file's pages as text-free, which called it a scan. So
+`read` now gives every mode one honest reason, that the file is encrypted in a way the reader
+cannot decrypt or is damaged, and refuses a short RC4 key before reading it rather than
+returning what it decrypts into. An outline that is present but does not parse, or whose links
+lead to no item, is reported as damaged rather than as missing or as the items before the
+break, and one past the item or depth bound as too large to list.
+
+The reader's other gaps are closed rather than accepted. It refuses a PDF 2.0 header, so it is
+shown a 1.7 one and reads the rest of the file as it is. It takes a UTF-8 title for
+PDFDocEncoding and leaves AES padding on every string it decrypts, so titles are decoded from
+their bytes as pdfcpu decoded them. It keeps no object it has read, so a PDF 1.1 `/Dests`
+dictionary is read once per walk rather than once per item.
 
 **Rejected, with the reason.** Keeping pdfcpu behind a `replace` to a fork without the signature
 code: `go install …@latest` refuses a module whose `go.mod` has a `replace`. Stripping or

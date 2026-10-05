@@ -1154,18 +1154,21 @@ damaged or pathologically structured)`.
 
 **Meaning.** `read` extracts text from PDF, EPUB and plain text. A scan has no text to
 extract and no OCR runs here; DjVu, comic archives and proprietary e-book containers are not
-read at all; a PDF encrypted with AES-256 or RC4 under crypt filters, or one that needs a
-password, cannot be decrypted, and a damaged PDF is not repaired; a document that takes too
-long is given a time limit rather than a thread forever.
+read at all; a PDF encrypted with AES-256, with RC4 under crypt filters, with RC4 under a key
+shorter than 88 bits or with AES-128 as pdfcpu writes it, or one that needs a password, cannot
+be decrypted, and a damaged PDF is not repaired; a document that takes too long is given a
+time limit rather than a thread forever.
 
 **Fixes.**
 
 - Download another edition of the same work: the catalog often has a text PDF or an EPUB
-  beside a scan, and another mirror's copy of an encrypted or damaged PDF is often a plain,
-  whole one.
+  beside a scan. A copy of the same md5 from another mirror is the same file, encrypted or
+  damaged alike, since `download` checks the md5. For an article, another source may hold a
+  different file.
 - Open the file locally in a reader that does OCR, or that decrypts or repairs the PDF.
 - An outline that comes back empty is not a failure: many PDFs carry no table of contents,
-  the `reason` says whether it has none or a damaged one, and `find` still searches the text.
+  the `reason` says whether it has none, a damaged one or one too large to list, and `find`
+  still searches the text.
 
 **How it works.** [Tools](tools.md#not-extractable).
 
@@ -1178,6 +1181,9 @@ long is given a time limit rather than a thread forever.
 - `section 40 does not exist: the outline has 12 entries, numbered from 1`
 - `this document has no table of contents, so section cannot address part of it: read by page
   with start_page (PDF) or by character with offset (EPUB/TXT), or search it with find`
+- `this document's table of contents could not be read (it is damaged, or larger than this
+  reader lists), so section cannot address part of it: read by page with start_page, or search
+  it with find`
 - `section cannot be combined with outline: …`, the same with `find`, or `section fixes where
   reading starts, so omit start_page and offset: continue a long section with the cursor`
 - `entry 7 "…" points to no page, so it cannot be read as a section: …`
@@ -1190,7 +1196,8 @@ is refused with their numbers rather than read as the first one.
 **Fixes.**
 
 - Call `read` with `outline: true` and pass the entry's number, the `[n]` in front of it.
-- For a document with no outline, read by page or offset, or search it with `find`.
+- For a document with no outline, or one whose outline could not be read, read by page or
+  offset, or search it with `find`.
 - Drop the argument the refusal names. A long section continues with its `cursor`.
 - For an entry that points to no page, pick a neighboring entry or read by page.
 

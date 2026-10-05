@@ -30,17 +30,19 @@ as unsupported, with the same reason in all three read modes (sequential text, `
 `outline`), so a failure in one mode is not an invitation to retry in another. See
 [Tools → Not extractable](tools.md#not-extractable).
 
-**Some encrypted and damaged PDFs cannot be read at all.** A PDF encrypted with RC4 or
-AES-128 that needs no password to open, which is how a file that only restricts printing or
-copying is usually encrypted, reads like any other. One encrypted with AES-256 or with RC4
-under crypt filters, one that needs a password to open, and one that is damaged (a truncated
-download, a cross-reference table that does not lead to its objects) give neither text nor a
-table of contents, and every mode says which of these it is. Up to 2.2.0 a second PDF library
-read the table of contents of the encrypted and damaged ones; it was removed in 2.2.1 because
-it carried a module scanners flag, with no fix, into every binary, as the
+**Some encrypted and damaged PDFs cannot be read at all.** A PDF that needs no password to
+open, which is how a file that only restricts printing or copying is usually encrypted, reads
+like any other when it is encrypted with 128-bit RC4 or with AES-128 as qpdf and pypdf write
+it. One encrypted with AES-256, with RC4 under crypt filters, with RC4 under a key shorter than
+88 bits (the 40-bit "no copy" files older Acrobat settings write) or with AES-128 as pdfcpu
+writes it, one that needs a password to open, and one that is damaged (a truncated download, a
+cross-reference table that does not lead to its objects) give neither text nor a table of
+contents, and every mode says which of these it is. Up to 2.2.0 a second PDF library read the
+table of contents of the encrypted and damaged ones; it was removed in 2.2.1 because it carried
+a module scanners flag, with no fix, into every binary, as the
 [source-and-capability-scope ADR](decisions/2026-07-22-source-and-capability-scope.md)
-records. Another copy of the file is the way forward. See
-[Tools → Not extractable](tools.md#not-extractable).
+records. Another edition of the work, or for an article another source, is the way forward.
+See [Tools → Not extractable](tools.md#not-extractable).
 
 **TXT and EPUB text is capped at 8 MiB.** A TXT file is read up to its first 8 MiB, and each
 chapter document inside an EPUB up to 8 MiB, so extraction stays within bounded memory. Text
