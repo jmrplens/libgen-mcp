@@ -130,8 +130,8 @@ sboms:
       - --output
       - spdx-json=${document}
   # THIRD_PARTY_NOTICES: the license, notice and patent texts of every module
-  # the six binaries link, which their licenses (BSD-3-Clause, Apache-2.0,
-  # MPL-2.0) ask to travel with a binary redistribution and the SBOMs above
+  # the six binaries link, which their licenses (BSD-3-Clause, Apache-2.0 and
+  # MIT) ask to travel with a binary redistribution and the SBOMs above
   # name without carrying. It is an sboms entry because that is the one hook
   # GoReleaser runs after every build and before checksums.txt is computed and
   # signed, so the file becomes a release asset listed in the signed

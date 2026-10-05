@@ -104,10 +104,12 @@ Hub form is `index.docker.io/jmrplens/libgen-mcp`. Docker Scout documents
 `pkg:docker/jmrplens/libgen-mcp@<tag>`. Every product names
 `pkg:golang/<module>` as its subcomponent. None is written without a version: a
 product with none matches every release, including ones the gate never saw,
-which measured with Trivy is exactly what happens. The committed document names
-the version in `VERSION`, so `check-vex` fails a version bump until
-`make gen-vex` has run, and it carries no OCI purl, because before the image is
-pushed there is no digest to pin it to.
+which measured with Trivy is exactly what happens. Each statement in the
+committed document names the version in `VERSION`, so while the table holds a
+`not-linked` declaration `check-vex` fails a version bump until `make gen-vex`
+has run. With none, as now, the document has no product to name a version in,
+and a bump passes without it. It carries no OCI purl, because before the image
+is pushed there is no digest to pin it to.
 
 **No release carries a statement yet.** The table's one declaration when this
 was built, GO-2026-5932 against `golang.org/x/crypto`, went in 2.2.1 with the
@@ -159,8 +161,9 @@ on the bare binary (`trivy rootfs`), and still reports it on the 2.1.0 image,
 which the document does not name. With a Sigstore bundle of the release copy attached
 as a referrer to a copy of the 2.2.0 index in a local registry, `--vex oci`
 does the same, citing "VEX attestation in OCI registry". Grype 0.120 does not
-report the advisory on an image or binary scan, but does on the SPDX and
-CycloneDX SBOMs the release attaches and on a default syft-json SBOM. Neither
+report the advisory on an image or binary scan, but does on the SPDX SBOMs the
+release attaches and on the SBOMs syft writes for the image in CycloneDX, SPDX
+and its own syft-json format. Neither
 scanner can apply the statement to the shipped SPDX SBOMs: Trivy finds no
 relationship data tying the module to the image, and Grype has no image digest
 or tag to match. Grype suppresses it only on a syft-json SBOM of the image,
