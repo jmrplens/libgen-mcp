@@ -2,8 +2,9 @@
 %%Title: sections fixture
 % The source of sections.pdf. Regenerate it with:
 %   gs -q -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -dCompatibilityLevel=1.7 -sOutputFile=sections.pdf sections.ps
-% Its RC4 copies, with an empty user password, add to that command
-% (Ghostscript 10.00.0):
+% Its PDF 2.0 copy, sections-pdf20.pdf, is the same command with
+% -dCompatibilityLevel=2.0. Its RC4 copies, with an empty user password, add
+% to that command (Ghostscript 10.00.0):
 %   -sOwnerPassword=owner -dEncryptionR=2 -dKeyLength=40 -dPermissions=-64 -sOutputFile=encrypted-rc4-40.pdf
 %   -sOwnerPassword=owner -dEncryptionR=3 -dKeyLength=80 -dPermissions=-3904 -sOutputFile=encrypted-rc4-80.pdf
 %   -sOwnerPassword=owner -dEncryptionR=3 -dKeyLength=88 -dPermissions=-3904 -sOutputFile=encrypted-rc4-88.pdf

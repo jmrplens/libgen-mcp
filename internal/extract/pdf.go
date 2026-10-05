@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 	"unicode"
@@ -147,6 +148,51 @@ func openPDFReason(err error) string {
 	}
 }
 
+// pdf20Header is how a PDF 2.0 file begins. ledongthuc/pdf opens a file only
+// when its header names a version from 1.0 to 1.7, and refuses every 2.0 file
+// as "not a PDF file: invalid header" before reading anything else, which
+// called a valid file invalid and lost its outline. PDF 2.0 keeps the file
+// structure of 1.7 (the cross-reference table or stream, the trailer, object
+// streams, the page tree and the outline), so the reader is shown the file
+// with a 1.7 header and reads the rest as it is. AES-256, the encryption 2.0
+// asks a writer for, is still refused as one the reader does not decrypt.
+const pdf20Header = "%PDF-2."
+
+// shownVersion is the version a PDF 2.0 file's header names to the reader. It
+// is written over the header's own version, which starts at versionAt, where
+// "%PDF-" ends.
+const (
+	shownVersion = "1.7"
+	versionAt    = int64(len("%PDF-"))
+)
+
+// headerView is a PDF 2.0 file as the reader is shown it: every byte as it
+// is, except the header's version, which reads as shownVersion.
+type headerView struct {
+	io.ReaderAt
+}
+
+// ReadAt reads p from the file at off, and then writes over whatever part of
+// p holds the header's version.
+func (v headerView) ReadAt(p []byte, off int64) (int, error) {
+	n, err := v.ReaderAt.ReadAt(p, off)
+	for at := max(off, versionAt); at < min(off+int64(n), versionAt+int64(len(shownVersion))); at++ {
+		p[at-off] = shownVersion[at-versionAt]
+	}
+	return n, err
+}
+
+// pdfBytes returns what the PDF reader is given for d: a PDF 2.0 file through
+// headerView, and any other file as it is.
+func pdfBytes(d document) io.ReaderAt {
+	head := make([]byte, len(pdf20Header))
+	n, _ := d.r.ReadAt(head, 0)
+	if string(head[:n]) == pdf20Header {
+		return headerView{d.r}
+	}
+	return d.r
+}
+
 // openPDF opens d with the PDF reader every mode uses and checks what each
 // mode checks before it reads a page: that the reader opened the file, that
 // it will decrypt the file into its own bytes, and that its page tree is safe
@@ -154,7 +200,7 @@ func openPDFReason(err error) string {
 // a file no mode can read. The reader can panic on malformed input, so a
 // caller runs it behind recover().
 func openPDF(d document) (r *pdf.Reader, why string) {
-	r, err := pdf.NewReader(d.r, d.size)
+	r, err := pdf.NewReader(pdfBytes(d), d.size)
 	if err != nil {
 		return nil, openPDFReason(err)
 	}

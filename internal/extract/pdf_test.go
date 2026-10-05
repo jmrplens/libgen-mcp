@@ -3,7 +3,9 @@ package extract
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -326,5 +328,91 @@ func TestExtract_PDFMalformed(t *testing.T) {
 	}
 	if c.Reason == "" {
 		t.Fatal("expected a non-empty reason for a malformed PDF")
+	}
+}
+
+// TestHeaderView reads every window of a PDF 2.0 file's first bytes through
+// the view, and each must read as the same window of the file with a 1.7
+// header: the version is replaced whichever part of it a read covers, and
+// nothing around it moves.
+func TestHeaderView(t *testing.T) {
+	const rest = "\n%\xe2\xe3\n1 0 obj"
+	file := []byte("%PDF-2.0" + rest)
+	shown := "%PDF-1.7" + rest
+	v := headerView{bytes.NewReader(file)}
+	for off := range file {
+		for size := 1; off+size <= len(file); size++ {
+			t.Run(fmt.Sprintf("%d+%d", off, size), func(t *testing.T) {
+				p := make([]byte, size)
+				n, err := v.ReadAt(p, int64(off))
+				if n != size || err != nil || string(p) != shown[off:off+size] {
+					t.Errorf("ReadAt = %d %v %q, want %d nil %q", n, err, p, size, shown[off:off+size])
+				}
+			})
+		}
+	}
+}
+
+// TestHeaderView_AShortRead passes on what the file returns past its end, and
+// replaces only the bytes that were read.
+func TestHeaderView_AShortRead(t *testing.T) {
+	p := []byte("xxxxxxxxxx")
+	n, err := headerView{strings.NewReader("%PDF-2")}.ReadAt(p, 0)
+	if n != 6 || !errors.Is(err, io.EOF) || string(p) != "%PDF-1xxxx" {
+		t.Errorf("ReadAt = %d %v %q, want 6 EOF %q", n, err, p, "%PDF-1xxxx")
+	}
+}
+
+// TestPDFBytes gives the reader a 2.0 file through the view and any other
+// file as it is, including one too short to hold a header.
+func TestPDFBytes(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		head string
+		view bool
+	}{
+		{"PDF 2.0", "%PDF-2.0\n", true},
+		{"PDF 1.7", "%PDF-1.7\n", false},
+		{"shorter than a header", "%PDF-2", false},
+		{"not a PDF", "PK\x03\x04", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := strings.NewReader(tc.head)
+			_, view := pdfBytes(document{r: src, size: int64(len(tc.head))}).(headerView)
+			if view != tc.view {
+				t.Errorf("read through the view = %v, want %v", view, tc.view)
+			}
+		})
+	}
+}
+
+// TestReadModes_PDF20 reads the sections fixture as Ghostscript writes it at
+// PDF 2.0, which the reader refuses by its header alone. Every mode must read
+// it as it reads the 1.7 file: the same outline, the same text, the same
+// matches.
+func TestReadModes_PDF20(t *testing.T) {
+	const pdf20 = "testdata/sections-pdf20.pdf"
+	ctx := context.Background()
+	for _, mode := range []struct {
+		name string
+		read func(path string) (any, error)
+	}{
+		{"outline", func(path string) (any, error) { return Outline(ctx, openFile(t, path)) }},
+		{"text", func(path string) (any, error) { return Extract(ctx, openFile(t, path), Req{MaxPages: 100}) }},
+		{"find", func(path string) (any, error) { return Search(ctx, openFile(t, path), "summary", SearchOpts{}) }},
+	} {
+		t.Run(mode.name, func(t *testing.T) {
+			want, err := mode.read(sectionsPDF)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := mode.read(pdf20)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if fmt.Sprintf("%+v", got) != fmt.Sprintf("%+v", want) {
+				t.Errorf("PDF 2.0:\n%+v\nwant the 1.7 file's:\n%+v", got, want)
+			}
+		})
 	}
 }
