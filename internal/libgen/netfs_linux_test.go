@@ -59,7 +59,10 @@ const otherDevice = "0:999999"
 
 // TestNetworkFilesystemName names exactly the filesystems whose directories
 // Linux locks on this host alone, and none whose directories take a lock that
-// reaches every host (Ceph, OCFS2) or that only one host mounts.
+// reaches every host (Ceph, GFS2, OCFS2) or that only one host mounts.
+// OrangeFS, VirtualBox's shared folders and GFS2 are written as the kernel's
+// own numbers, because x/sys/unix names none of them and a test spelling the
+// constant it tests could not catch a wrong one.
 func TestNetworkFilesystemName(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -74,12 +77,16 @@ func TestNetworkFilesystemName(t *testing.T) {
 		{"9p", unix.V9FS_MAGIC, "9p"},
 		{"AFS", unix.AFS_SUPER_MAGIC, "AFS"},
 		{"kAFS", unix.AFS_FS_MAGIC, "AFS"},
+		{"Coda", unix.CODA_SUPER_MAGIC, "Coda"},
+		{"OrangeFS", 0x20030528, "OrangeFS"},
+		{"vboxsf", 0x786f4256, "a VirtualBox shared folder"},
 		{"ext4", unix.EXT4_SUPER_MAGIC, ""},
 		{"tmpfs", unix.TMPFS_MAGIC, ""},
 		{"XFS", unix.XFS_SUPER_MAGIC, ""},
 		{"Btrfs", unix.BTRFS_SUPER_MAGIC, ""},
 		{"overlayfs", unix.OVERLAYFS_SUPER_MAGIC, ""},
 		{"Ceph", unix.CEPH_SUPER_MAGIC, ""},
+		{"GFS2", 0x01161970, ""},
 		{"OCFS2", unix.OCFS2_SUPER_MAGIC, ""},
 	}
 	for _, tc := range cases {
