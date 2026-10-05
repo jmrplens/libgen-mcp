@@ -1158,7 +1158,8 @@ document is damaged or pathologically structured)`.
 extract and no OCR runs here; DjVu, comic archives and proprietary e-book containers are not
 read at all; a PDF encrypted with AES-256, or one that needs a password, cannot be decrypted,
 and one encrypted with RC4 under a key shorter than 88 bits or under crypt filters, or with
-AES-128 leaving the metadata unencrypted, gives only its table of contents, in `outline` mode;
+AES-128 leaving the metadata unencrypted, or with no `/ID` in its trailer, gives only its table
+of contents, in `outline` mode;
 a damaged PDF is not repaired; a document that takes too long is given a time limit rather
 than a thread forever.
 

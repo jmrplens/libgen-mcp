@@ -812,20 +812,32 @@ its stream keyword and an end of line), and the walk knows which objects came ou
 strings are not encrypted again, because that read is counted. Encrypted files the reader does
 decrypt are walked this way first too, since the reader leaves its padding on strings it never
 decrypted, those in object streams, and panics on an empty string a producer left unencrypted;
-when that walk finds the outline damaged, the file is walked as the reader decrypts it. What
-remains lost is AES-256 and a file whose cross-reference table needs rebuilding: of 889 PDFs
-whose outline qpdf read, every one pdfcpu read as qpdf did reads the same but the eleven
-encrypted with AES-256. The text of the files the reader decrypts wrongly or refuses was never
-usable: the text and `find` modes called most of them "not a valid PDF", and read a 40-bit
+when that walk finds the outline damaged, the file is walked as the reader decrypts it. The
+reader's lexer also refuses three kinds of string the standard defines (an escape it does not
+know, an octal escape past 255, a hex string with an odd number of digits), and one in an
+outline item made the walk panic; an outline found damaged is walked again over a view that
+shows the reader each such string in the file's own bytes rewritten, at the same length, as
+the standard reads it. What remains lost is AES-256, a file whose cross-reference table needs
+rebuilding, an outline past the walk's bounds (20,000 items or 64 levels, where the largest
+real one measured has 4,106 entries and the deepest 6 levels), and one of those strings inside
+a compressed object stream, which the reader inflates itself (no file of the 2,106 unencrypted
+ones measured holds one anywhere). Of 1,268 PDFs whose outline qpdf read without a warning,
+every one pdfcpu read as qpdf did reads the same here but the 80 encrypted with AES-256 and 55
+whose titles differ only in control characters, which the walk turns into a space or removes
+(a tab or a line break inside a title is a space). The text of the files the reader decrypts
+wrongly or refuses was never usable: the text and `find` modes called most of them "not a
+valid PDF", and read a 40-bit
 file's pages as text-free, which called it a scan. So those modes now refuse them with an honest
 reason, that the file is encrypted in a way the reader cannot decrypt (pointing at outline mode
 when the walk can read its outline) or is damaged, and refuse a short RC4 key before reading it
 rather than returning what it decrypts into; outline mode, when it lists nothing for such a
 file, says whether it has no outline or one that is damaged or too large to list. An outline
-that is present but does not parse, or whose links lead to no item, is reported as damaged
-rather than as missing or as the items before the break, and one past the item or depth bound
-as too large to list. A link written as null ends its chain, as the standard makes it the same
-as no link.
+that is present but does not parse, or whose links lead to something that is not an item, is
+reported as damaged rather than as missing or as the items before the break, and one past the
+item or depth bound as too large to list. A link written as null, or to an object the file
+does not define, ends its chain, as the standard reads both as no link. pdfcpu had neither
+bound. They hold the work and the answer to a size a file cannot inflate: outline mode indents
+each entry by its level, so a chain nested n levels deep renders to about n² bytes.
 
 The reader's other gaps are closed rather than accepted. It refuses a PDF 2.0 header, so it is
 shown a 1.7 one and reads the rest of the file as it is. It takes a UTF-8 title for

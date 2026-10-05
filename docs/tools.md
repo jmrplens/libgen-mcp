@@ -702,15 +702,17 @@ and hand the raw file to the user. This covers, among others:
   PDF that needs no password to open, which is how a file that only restricts printing or
   copying is usually encrypted, reads like any other when it is encrypted with RC4 under a key
   of 88 bits or more (128-bit RC4 among them), or with AES-128, whether its crypt filter gives
-  the key length in bytes, as qpdf and pypdf write it, or in bits, as pdfcpu does. Three more
+  the key length in bytes, as qpdf and pypdf write it, or in bits, as pdfcpu does. Four more
   are read in part: RC4 with a key shorter than 88 bits (the 40-bit "no copy" PDFs that
   Acrobat 3 and 4 compatibility settings write, which the text reader would decrypt into
-  noise), RC4 under crypt filters, and AES-128 that leaves the document's metadata
-  unencrypted. Their table of contents is listed in `outline` mode, and the text and `find`
-  modes refuse them with `"cannot read PDF text: it is encrypted in a way this reader cannot
-  decrypt for its text, though outline mode may still list its table of contents"`. When
-  `outline` mode lists nothing for one of them, its reason opens the same way and says why: the
-  document has no table of contents, or its table of contents is damaged or too large to list.
+  noise), RC4 under crypt filters, AES-128 that leaves the document's metadata unencrypted,
+  and RC4 or AES-128 in a file whose producer left out the trailer's `/ID`, which the standard
+  requires of an encrypted file. Their table of contents is listed in `outline` mode, and the
+  text and `find` modes refuse them with `"cannot read PDF text: it is encrypted in a way this
+  reader cannot decrypt for its text, though outline mode may still list its table of
+  contents"`. When `outline` mode lists nothing for one of them, its reason opens the same way
+  and says why: the document has no table of contents, or its table of contents is damaged or
+  too large to list.
   AES-256 and a certificate-based security handler get the first reason in every mode. One
   that needs a password to open says so, since `read` takes none.
 - **Damaged PDFs** — `"cannot read PDF: the file is damaged (…), and this reader does not
@@ -838,13 +840,19 @@ A PDF whose bookmarks are damaged while its pages read is told apart from one th
 it returns `extractable: true`, an empty `outline` and a `reason` saying the table of contents
 is damaged and could not be read, so the model reads by page or with `find` instead of
 concluding the book has no chapters. Damaged means a bookmark the reader cannot parse, or a
-link from one bookmark to the next or to its first child that leads to no bookmark. A link
-written as `null` is not one of those: the standard makes it the same as no link, so it ends
-its chain. The part before such a break is not listed, because a table of contents cut short
-would read as the whole of one. An outline with more than 20,000 entries, or nested more than
-64 levels deep, is reported the same way with its own `reason`, since no real table of contents
-comes near either bound. A [`section`](#read-one-section) read of either says the table of contents could not be
-read, not that there is none. A PDF that no mode can open, because it is encrypted in
+link from one bookmark to the next or to its first child that leads to something that is not a
+bookmark. A link written as `null`, or to an object the file does not define (one it deleted,
+say), is not one of those: the standard reads both as no link, so it ends its chain. Nor is a
+string the standard defines and the reader's lexer refuses: an escape it does not know, as in a
+Windows path written with single backslashes, an octal escape past 255, or a hex string with an
+odd number of digits. The reader is shown each such string rewritten as the standard reads it,
+which reaches every string in the file's own bytes; one inside a compressed object stream is
+still refused, and that outline is reported as damaged. The part before a break is not listed,
+because a table of contents cut short would read as the whole of one. An outline with more than
+20,000 entries, or nested more than 64 levels deep, is reported the same way with its own
+`reason`, since no real table of contents comes near either bound. A
+[`section`](#read-one-section) read of either says the table of contents could not be read, not
+that there is none. A PDF that no mode can open, because it is encrypted in
 a way the reader cannot decrypt or because the file itself is damaged, has no outline either,
 and `outline` mode reports it with the same `reason` the text and `find` modes give (see [Not
 extractable](#not-extractable)). An encrypted PDF whose text the reader cannot decrypt still
