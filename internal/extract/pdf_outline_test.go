@@ -1196,6 +1196,47 @@ func TestOutline_PDFPartlyEncryptedWithNoOutline(t *testing.T) {
 	}
 }
 
+// noIDPDF returns an outline PDF encrypted with a 40-bit RC4 key under the
+// empty user password, with no /ID in its trailer, as a producer that leaves
+// the ID out writes one: its key is derived from an empty ID. Each title is
+// encrypted with the key of its own object, 9 onward, the item i leading to
+// page i+1, and the encryption dictionary is the object after the last item.
+func noIDPDF(titles ...string) []byte {
+	o := strings.Repeat("\x5a", len(paddingString))
+	c := stringCrypt{key: fileKey(o, -4, "", 2, minFileKeyBits/8, true)}
+	objs := make([]string, 0, len(titles)+1)
+	for i, title := range titles {
+		next := ""
+		if i+1 < len(titles) {
+			next = fmt.Sprintf("/Next %d 0 R", 10+i)
+		}
+		sealed := rc4XOR(c.objectKey(objRef{id: uint32(9 + i)}), []byte(title))
+		objs = append(objs, fmt.Sprintf("<</Title<%x>/Dest[%d 0 R/Fit]%s>>", sealed, 3+i, next))
+	}
+	objs = append(objs, fmt.Sprintf("<</Filter/Standard/V 1/R 2/Length 40/P -4/O<%x>/U<%x>>>", o, rc4XOR(c.key, []byte(paddingString))))
+	return bytes.Replace(outlinePDF("", objs...), []byte("/Root 1 0 R>>"), fmt.Appendf(nil, "/Root 1 0 R/Encrypt %d 0 R>>", 9+len(titles)), 1)
+}
+
+// TestOutline_PDFEncryptedWithNoID reads an encrypted file whose trailer has
+// no /ID, which the reader refuses as malformed: the walk derives its key from
+// an empty ID, as pdfcpu did, and lists every title, and the text modes,
+// which the reader cannot open it for, point at outline mode. Every mode
+// called it damaged, and told the caller another copy might be intact.
+func TestOutline_PDFEncryptedWithNoID(t *testing.T) {
+	data := noIDPDF("A", "B", "C")
+	if _, err := pdf.NewReader(bytes.NewReader(data), int64(len(data))); err == nil || err.Error() != missingIDRefusal {
+		t.Fatalf("the reader opens the file with %v, want %q", err, missingIDRefusal)
+	}
+	res := outlineOf(t, data)
+	if got := entryLines(res.Entries); got != "0 1 A\n0 2 B\n0 3 C\n" || res.Reason != "" {
+		t.Errorf("outline:\n%s(%q)\nwant the three titles", got, res.Reason)
+	}
+	chunk, err := Extract(context.Background(), openFile(t, writeBytes(t, t.TempDir(), "noid.pdf", data)), Req{})
+	if err != nil || chunk.Reason != partlyEncryptedPDFReason {
+		t.Errorf("text = %q (%v), want %q", chunk.Reason, err, partlyEncryptedPDFReason)
+	}
+}
+
 // nameTreePDF returns a two-page PDF whose catalog's /T is object 5, the first
 // of objs, which are objects 5 onward. A destination "[3 0 R/Fit]" names page
 // 1 and "[4 0 R/Fit]" page 2.

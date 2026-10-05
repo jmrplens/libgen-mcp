@@ -52,9 +52,10 @@ const encryptedPDFReason = "cannot read PDF: it is encrypted in a way this reade
 // minRC4KeyBits or more, and an AES-128 crypt filter (V=4 with AESV2), whose
 // /Length openReader shows it in bytes when pdfcpu wrote it in bits, in a file
 // that encrypts its metadata. It refuses RC4 under a crypt filter (V=4 with
-// V2), takes a file that leaves its metadata unencrypted for one that needs a
-// password, and openPDF refuses the shorter RC4 keys, which the reader would
-// decrypt into other bytes. The outline walk decrypts all three itself
+// V2) and a file whose trailer has no /ID, takes a file that leaves its
+// metadata unencrypted for one that needs a password, and openPDF refuses the
+// shorter RC4 keys, which the reader would decrypt into other bytes. The
+// outline walk decrypts all four itself
 // (selfDecrypting), the strings it reads and the object streams the reader
 // takes objects out of, so the caller is pointed at outline mode, which lists
 // the table of contents. In outline mode, when the walk lists nothing, the
@@ -297,13 +298,22 @@ func selfDecrypts(d document) bool {
 // selfDecryptable reports whether err, the reader's refusal of a file, is one
 // the standard security handler may still open with the empty password, so
 // that selfDecrypting is worth asking: a crypt filter (V=4) the reader does
-// not take, and a password it could not match. The second is what a file that
-// leaves its metadata unencrypted gives it, Acrobat's "encrypt all contents
-// except metadata", since the reader derives the key as if it did not; a file
-// that does need a password fails selfDecrypting's check as well.
+// not take, a password it could not match, and a trailer with no /ID. The
+// second is what a file that leaves its metadata unencrypted gives it,
+// Acrobat's "encrypt all contents except metadata", since the reader derives
+// the key as if it did not; a file that does need a password fails
+// selfDecrypting's check as well. The third is a file whose producer left the
+// /ID out, which ISO 32000-1 requires of an encrypted file and pdfcpu did not
+// insist on: its key is derived from an empty ID, which is what selfDecrypting
+// reads for it, and a key derived from any other fails the same check.
 func selfDecryptable(err error) bool {
-	return errors.Is(err, pdf.ErrInvalidPassword) || strings.HasPrefix(err.Error(), v4Refusal)
+	msg := err.Error()
+	return errors.Is(err, pdf.ErrInvalidPassword) || strings.HasPrefix(msg, v4Refusal) || msg == missingIDRefusal
 }
+
+// missingIDRefusal is the reader's whole error for an encrypted file whose
+// trailer has no /ID, or one whose first element is not a string.
+const missingIDRefusal = "malformed PDF: missing ID in trailer"
 
 // malformedPDFReason is the diagnosis for a PDF that made the reader panic —
 // malformed or encrypted input. Shared so every read mode words it the same way.

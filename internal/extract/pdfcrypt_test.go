@@ -547,9 +547,9 @@ func TestSelfDecrypting(t *testing.T) {
 }
 
 // TestSelfDecryptable names the refusals selfDecrypting is asked about: a
-// password the reader could not match, however wrapped, and a crypt filter
-// it does not take, and no other, nor a damaged file whose error quotes the
-// words.
+// password the reader could not match, however wrapped, a crypt filter it
+// does not take, and a trailer with no /ID, and no other, nor a damaged file
+// whose error quotes the words.
 func TestSelfDecryptable(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -559,6 +559,8 @@ func TestSelfDecryptable(t *testing.T) {
 		{"a password", pdf.ErrInvalidPassword, true},
 		{"a password, wrapped", fmt.Errorf("opening: %w", pdf.ErrInvalidPassword), true},
 		{"a crypt filter", errors.New(v4Refusal + " <<...>>"), true},
+		{"no /ID", errors.New(missingIDRefusal), true},
+		{"damage ending in the words", errors.New("malformed PDF: unexpected " + missingIDRefusal), false},
 		{"AES-256", errors.New("malformed PDF: 256-bit encryption key"), false},
 		{"version 5", errors.New("unsupported PDF: encryption version V=5; <<...>>"), false},
 		{"damage quoting the words", errors.New("malformed PDF: unexpected " + v4Refusal), false},
