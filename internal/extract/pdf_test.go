@@ -331,6 +331,29 @@ func TestExtract_PDFMalformed(t *testing.T) {
 	}
 }
 
+// TestEncryptionOf reads the encryption dictionary of a plain file, an RC4
+// file at two revisions and an AES-128 file, and of the AES-128 file pikepdf
+// writes with an empty /OE and /UE, which the reader panics on while it
+// decrypts them and which is read as V=4 with nothing else known.
+func TestEncryptionOf(t *testing.T) {
+	for _, tc := range []struct {
+		path string
+		want encryption
+	}{
+		{sectionsPDF, encryption{}},
+		{"testdata/encrypted-rc4-40.pdf", encryption{version: 1, revision: 2, bits: 40}},
+		{"testdata/encrypted-rc4-88.pdf", encryption{version: 2, revision: 3, bits: 88}},
+		{"testdata/encrypted-aes128.pdf", encryption{version: 4, revision: 4, bits: 128}},
+		{"testdata/encrypted-aes128-titles.pdf", encryption{version: 4}},
+	} {
+		t.Run(filepath.Base(tc.path), func(t *testing.T) {
+			if got := encryptionOf(readerFor(t, mustRead(t, tc.path))); got != tc.want {
+				t.Errorf("encryptionOf = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestHeaderView reads every window of a PDF 2.0 file's first bytes through
 // the view, and each must read as the same window of the file with a 1.7
 // header: the version is replaced whichever part of it a read covers, and

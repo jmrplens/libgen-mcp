@@ -66,14 +66,43 @@ const minRC4KeyBits = 88
 // rc4KeyTooShort reports whether r decrypts the file with an RC4 key shorter
 // than minRC4KeyBits. Revision 2 always takes a 40-bit key, whatever /Length
 // says, and so does the reader. From revision 3 the key is /Length bits long,
-// 40 when /Length is absent, which reads here as 0 and is short as well. An
-// AES crypt filter (V=4) is not RC4, and the AES-128 key it takes is whole.
+// 40 when /Length is absent, which reads here as 0 and is short as well. A
+// file that is not encrypted has no version, and an AES crypt filter (V=4) is
+// not RC4: the AES-128 key it takes is whole.
 func rc4KeyTooShort(r *pdf.Reader) bool {
-	enc := r.Trailer().Key("Encrypt")
-	if enc.Kind() != pdf.Dict || enc.Key("V").Int64() == 4 {
+	enc := encryptionOf(r)
+	if enc.version == 0 || enc.version == 4 {
 		return false
 	}
-	return enc.Key("R").Int64() == 2 || enc.Key("Length").Int64() < minRC4KeyBits
+	return enc.revision == 2 || enc.bits < minRC4KeyBits
+}
+
+// encryption is what the open checks and the outline walk need to know of how
+// a file is encrypted: the version, revision and key length its encryption
+// dictionary states.
+type encryption struct {
+	version, revision, bits int64
+}
+
+// encryptionOf reads r's encryption dictionary, and returns all zeros for a
+// file that is not encrypted.
+//
+// The dictionary is read through the reader, which decrypts every string in
+// an object it reads, the dictionary's own strings among them, which are not
+// encrypted. The numbers read here are not strings and come back whole, but
+// under AES the reader panics on a string shorter than one block, and pikepdf
+// writes an empty /OE and /UE into an AES-128 dictionary. The reader opened
+// the file by reading that same dictionary before it had a key, so it parses,
+// and decrypting with RC4 cannot panic: a panic here is AES, which the reader
+// decrypts only under V=4, and is answered as V=4.
+func encryptionOf(r *pdf.Reader) (enc encryption) {
+	defer func() {
+		if recover() != nil {
+			enc = encryption{version: 4}
+		}
+	}()
+	dict := r.Trailer().Key("Encrypt")
+	return encryption{version: dict.Key("V").Int64(), revision: dict.Key("R").Int64(), bits: dict.Key("Length").Int64()}
 }
 
 // lockedPDFReason is the diagnosis for a PDF that needs a password to open.
@@ -155,7 +184,8 @@ func openPDFReason(err error) string {
 // structure of 1.7 (the cross-reference table or stream, the trailer, object
 // streams, the page tree and the outline), so the reader is shown the file
 // with a 1.7 header and reads the rest as it is. AES-256, the encryption 2.0
-// asks a writer for, is still refused as one the reader does not decrypt.
+// asks a writer for, is still refused as one the reader does not decrypt, and
+// a title in UTF-8, which 2.0 adds, is decoded by textString.
 const pdf20Header = "%PDF-2."
 
 // shownVersion is the version a PDF 2.0 file's header names to the reader. It

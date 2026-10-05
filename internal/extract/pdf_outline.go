@@ -102,7 +102,9 @@ func pdfBookmarkEntries(ctx context.Context, d document) (entries []OutlineEntry
 		return nil, false, nil
 	}
 	root := r.Trailer().Key("Root")
-	w := newOutlineWalk(root)
+	// The reader opens a crypt filter (V=4) only when it is AESV2, so V=4 is
+	// AES here.
+	w := newOutlineWalk(root, encryptionOf(r).version == 4)
 	w.walk(ctx, root.Key("Outlines").Key("First"), 0)
 	return w.entries, false, w.items.err
 }
@@ -157,6 +159,9 @@ type outlineWalk struct {
 	// root is the document catalog, where pages and named destinations are
 	// looked up.
 	root pdf.Value
+	// aes is set when the file is encrypted with AES, whose padding the
+	// reader leaves on every string it decrypts.
+	aes bool
 	// items bounds the outline items read.
 	items walkBudget
 	// seen holds a digest of each item read, to stop at a cycle.
@@ -179,13 +184,24 @@ type nameEntry struct {
 	at    int
 }
 
-// newOutlineWalk starts an outline read of the document whose catalog is root.
-func newOutlineWalk(root pdf.Value) *outlineWalk {
+// newOutlineWalk starts an outline read of the document whose catalog is
+// root, encrypted with AES when aes is set.
+func newOutlineWalk(root pdf.Value, aes bool) *outlineWalk {
 	return &outlineWalk{
 		root:  root,
+		aes:   aes,
 		items: walkBudget{left: maxOutlineItems},
 		seen:  map[[sha256.Size]byte]bool{},
 	}
+}
+
+// str returns the bytes of the string v, without the padding AES left on it
+// when the file is encrypted with AES.
+func (w *outlineWalk) str(v pdf.Value) string {
+	if w.aes {
+		return unpadAES(v.RawString())
+	}
+	return v.RawString()
 }
 
 // walk appends item and its following siblings at level, each followed by its
@@ -199,7 +215,7 @@ func (w *outlineWalk) walk(ctx context.Context, item pdf.Value, level int) {
 		if !w.items.spend(ctx) || !w.firstVisit(item) {
 			return
 		}
-		if title := outlineTitle(item.Key("Title").Text()); title != "" {
+		if title := outlineTitle(textString(w.str(item.Key("Title")))); title != "" {
 			w.entries = append(w.entries, OutlineEntry{Title: title, Level: level, Page: w.destPage(ctx, item)})
 		}
 		w.walk(ctx, item.Key("First"), level+1)
@@ -225,8 +241,7 @@ func (w *outlineWalk) firstVisit(item pdf.Value) bool {
 // a line break or another whitespace control becomes a space, which is what a
 // producer that wrote "1\tPreface" meant, and every other C0 or C1 control is
 // removed, since it renders as nothing or as a box. Bytes that are not UTF-8,
-// which a title in neither of the PDF's two text encodings can hold, become
-// U+FFFD.
+// which textString never returns, become U+FFFD.
 func outlineTitle(text string) string {
 	return strings.TrimSpace(strings.Map(func(r rune) rune {
 		switch {
@@ -274,7 +289,7 @@ func (w *outlineWalk) explicit(ctx context.Context, dest pdf.Value) pdf.Value {
 	case pdf.Name:
 		dest = w.named(ctx, dest.Name())
 	case pdf.String:
-		dest = w.named(ctx, dest.RawString())
+		dest = w.named(ctx, w.str(dest))
 	}
 	if dest.Kind() == pdf.Dict {
 		return dest.Key("D")
@@ -292,7 +307,7 @@ func (w *outlineWalk) named(ctx context.Context, name string) pdf.Value {
 	if w.dests == nil {
 		w.dests = map[string]nameEntry{}
 		visits := walkBudget{left: maxNameTreeVisits}
-		collectNameTree(ctx, w.root.Key("Names").Key("Dests"), 0, &visits, w.dests)
+		w.collectNameTree(ctx, w.root.Key("Names").Key("Dests"), 0, &visits)
 	}
 	e, ok := w.dests[name]
 	if !ok {
@@ -301,11 +316,13 @@ func (w *outlineWalk) named(ctx context.Context, name string) pdf.Value {
 	return e.names.Index(e.at)
 }
 
-// collectNameTree records where the name tree rooted at node holds each name,
-// a later leaf's entry replacing an earlier one's. It stops at the depth bound
-// and when visits is spent or ctx has ended, so a /Kids array that leads back
-// to an ancestor ends the read rather than repeating it.
-func collectNameTree(ctx context.Context, node pdf.Value, depth int, visits *walkBudget, into map[string]nameEntry) {
+// collectNameTree records in w.dests where the name tree rooted at node holds
+// each name, a later leaf's entry replacing an earlier one's. A name is a
+// string, read as str reads one, so it matches the name an outline item gives
+// whether or not AES padded either. It stops at the depth bound and when
+// visits is spent or ctx has ended, so a /Kids array that leads back to an
+// ancestor ends the read rather than repeating it.
+func (w *outlineWalk) collectNameTree(ctx context.Context, node pdf.Value, depth int, visits *walkBudget) {
 	if node.Kind() != pdf.Dict || depth >= maxNameTreeDepth {
 		return
 	}
@@ -314,14 +331,14 @@ func collectNameTree(ctx context.Context, node pdf.Value, depth int, visits *wal
 		if !visits.spend(ctx) {
 			return
 		}
-		into[names.Index(i).RawString()] = nameEntry{names: names, at: i + 1}
+		w.dests[w.str(names.Index(i))] = nameEntry{names: names, at: i + 1}
 	}
 	kids := node.Key("Kids")
 	for i := range kids.Len() {
 		if !visits.spend(ctx) {
 			return
 		}
-		collectNameTree(ctx, kids.Index(i), depth+1, visits, into)
+		w.collectNameTree(ctx, kids.Index(i), depth+1, visits)
 	}
 }
 

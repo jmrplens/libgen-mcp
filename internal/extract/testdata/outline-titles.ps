@@ -1,0 +1,31 @@
+%!PS-Adobe-3.0
+%%Title: outline titles fixture
+% The source of outline-titles.pdf. Regenerate it with:
+%   gs -q -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -dCompatibilityLevel=1.7 -sOutputFile=outline-titles.pdf outline-titles.ps
+% and its AES-128 copy, encrypted-aes128-titles.pdf, with an empty user
+% password and no object streams, so that every title is a string encrypted
+% on its own:
+%   qpdf --object-streams=disable --encrypt --user-password= --owner-password=owner --bits=128 --use-aes=y -- outline-titles.pdf encrypted-aes128-titles.pdf
+% The committed copy was written by libqpdf 12.4.2, through pikepdf 10.16.0.
+% Ghostscript copies a pdfmark title byte for byte, so each title below is in
+% the file in the encoding it is written in: PDFDocEncoding with bytes above
+% 0x7F and an accent below 0x20, UTF-16BE with a character outside the Basic
+% Multilingual Plane, UTF-8 as some producers write it, UTF-8 behind the BOM
+% PDF 2.0 defines, and ASCII exactly one AES block long. Their lengths differ
+% so that the AES copy pads them differently: the UTF-16 title is padded by a
+% whole block, and the 15-byte PDFDocEncoding one by a single byte that the
+% encoding does not define. The last entry reaches its page through a
+% destination named by a string.
+/pg { /n exch def /Helvetica findfont 20 scalefont setfont 72 700 moveto (Page ) show n 3 string cvs show } def
+1 pg showpage
+2 pg showpage
+[ /Dest /last /View [/XYZ null null null] /DEST pdfmark
+3 pg showpage
+[ /Page 1 /View [/Fit] /Title (\200 Caf\351 na\357ve \204 \215quoted\216) /OUT pdfmark
+[ /Page 1 /View [/Fit] /Title (Part I \204 Basics) /OUT pdfmark
+[ /Page 1 /View [/Fit] /Title (Accent \031 caron) /OUT pdfmark
+[ /Page 2 /View [/Fit] /Title <FEFF004D00E900740068006F00640065007300200026002000DC006E00690063006F00640065002027130020D83CDF08> /OUT pdfmark
+[ /Page 2 /View [/Fit] /Title (Introducci\303\263n y m\303\251todos) /OUT pdfmark
+[ /Page 3 /View [/Fit] /Title (\357\273\277R\303\251sum\303\251) /OUT pdfmark
+[ /Page 3 /View [/Fit] /Title (Sixteen bytes ok) /OUT pdfmark
+[ /A << /S /GoTo /D (last) >> /Title (Named by a string) /OUT pdfmark

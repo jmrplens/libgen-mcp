@@ -441,6 +441,40 @@ func TestOutline_PDFDestinationsAsAProducerWritesThem(t *testing.T) {
 	}
 }
 
+// TestOutline_PDFTitlesInEveryEncoding reads the titles fixture, whose
+// titles Ghostscript wrote byte for byte in each encoding a producer uses, and
+// its AES-128 copy, in which the reader leaves AES padding on every title.
+// Both must read as pdfcpu read them: the padding goes, a UTF-8 title is not
+// taken for PDFDocEncoding, a UTF-8 BOM is not shown, and the destination
+// named by a string still finds its page. The AES copy's encryption
+// dictionary holds an empty /OE, as pikepdf writes it, and its pages must
+// read as well.
+func TestOutline_PDFTitlesInEveryEncoding(t *testing.T) {
+	want := "0 1 • Café naïve — “quoted”\n" +
+		"0 1 Part I — Basics\n" +
+		"0 1 Accent ˇ caron\n" +
+		"0 2 Méthodes & Ünicode ✓ \U0001F308\n" +
+		"0 2 Introducción y métodos\n" +
+		"0 3 Résumé\n" +
+		"0 3 Sixteen bytes ok\n" +
+		"0 3 Named by a string\n"
+	for _, path := range []string{"testdata/outline-titles.pdf", "testdata/encrypted-aes128-titles.pdf"} {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			res := outlineOf(t, mustRead(t, path))
+			if got := entryLines(res.Entries); got != want || !res.Extractable {
+				t.Errorf("outline:\n%s\nwant:\n%s", got, want)
+			}
+			chunk, err := Extract(context.Background(), openFile(t, path), Req{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !chunk.Extractable || !strings.Contains(chunk.Text, "Page 3") {
+				t.Errorf("want the three pages' text, got %+v", chunk)
+			}
+		})
+	}
+}
+
 // TestOutline_PDFEveryDestinationForm covers the destination forms the
 // Ghostscript fixture does not write, and the ones that lead nowhere, which
 // must give page 0 rather than a wrong page.
@@ -744,7 +778,7 @@ func TestOutlineWalk_Bounds(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := readerFor(t, tc.data).Trailer().Key("Root")
-			w := newOutlineWalk(root)
+			w := newOutlineWalk(root, false)
 			w.items.left = tc.items
 			w.walk(context.Background(), root.Key("Outlines").Key("First"), tc.level)
 			if got := entryLines(w.entries); got != tc.want {
@@ -767,33 +801,39 @@ func nameTreeLines(into map[string]nameEntry) string {
 
 // TestCollectNameTree covers the name-tree read on trees built for each edge:
 // a /Names array with a key and no value, a /Kids array that leads back to its
-// own node, the last depth read and the first not read, and a visit budget
-// spent on names and on kids. The node under test is the catalog's /T.
+// own node, the last depth read and the first not read, a visit budget spent
+// on names and on kids, and a key that carries AES padding, which is recorded
+// without it in an AES file and as it is in any other. The node under test is
+// the catalog's /T.
 func TestCollectNameTree(t *testing.T) {
 	tree := func(objs ...string) []byte {
 		return buildPDF(append([]string{"<</Type/Catalog/T 2 0 R>>"}, objs...))
 	}
+	padded := tree("<</Names[(a" + strings.Repeat(`\017`, 15) + ") 1]>>")
 	for _, tc := range []struct {
 		name   string
 		data   []byte
+		aes    bool
 		depth  int
 		visits int
 		want   string
 	}{
-		{"a key with no value", tree("<</Names[(a) 1 (b) 2 (c)]>>"), 0, maxNameTreeVisits, "a=1 b=2"},
-		{"kids lead back to the node", tree("<</Names[(a) 1]/Kids[2 0 R]>>"), 0, maxNameTreeVisits, "a=1"},
-		{"a later leaf replaces an earlier one", tree("<</Kids[3 0 R 4 0 R]>>", "<</Names[(a) 1]>>", "<</Names[(a) 2]>>"), 0, maxNameTreeVisits, "a=2"},
-		{"the last depth read", tree("<</Names[(a) 1]/Kids[3 0 R]>>", "<</Names[(b) 2]>>"), maxNameTreeDepth - 1, maxNameTreeVisits, "a=1"},
-		{"past the last depth", tree("<</Names[(a) 1]>>"), maxNameTreeDepth, maxNameTreeVisits, ""},
-		{"a budget of one name", tree("<</Names[(a) 1 (b) 2]>>"), 0, 1, "a=1"},
-		{"a budget spent on a kid", tree("<</Names[(a) 1]/Kids[3 0 R 3 0 R]>>", "<</Names[(b) 2]>>"), 0, 2, "a=1"},
+		{"a key with no value", tree("<</Names[(a) 1 (b) 2 (c)]>>"), false, 0, maxNameTreeVisits, "a=1 b=2"},
+		{"kids lead back to the node", tree("<</Names[(a) 1]/Kids[2 0 R]>>"), false, 0, maxNameTreeVisits, "a=1"},
+		{"a later leaf replaces an earlier one", tree("<</Kids[3 0 R 4 0 R]>>", "<</Names[(a) 1]>>", "<</Names[(a) 2]>>"), false, 0, maxNameTreeVisits, "a=2"},
+		{"the last depth read", tree("<</Names[(a) 1]/Kids[3 0 R]>>", "<</Names[(b) 2]>>"), false, maxNameTreeDepth - 1, maxNameTreeVisits, "a=1"},
+		{"past the last depth", tree("<</Names[(a) 1]>>"), false, maxNameTreeDepth, maxNameTreeVisits, ""},
+		{"a budget of one name", tree("<</Names[(a) 1 (b) 2]>>"), false, 0, 1, "a=1"},
+		{"a budget spent on a kid", tree("<</Names[(a) 1]/Kids[3 0 R 3 0 R]>>", "<</Names[(b) 2]>>"), false, 0, 2, "a=1"},
+		{"AES padding in an AES file", padded, true, 0, maxNameTreeVisits, "a=1"},
+		{"AES padding in another file", padded, false, 0, maxNameTreeVisits, "a" + strings.Repeat("\x0f", 15) + "=1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			node := readerFor(t, tc.data).Trailer().Key("Root").Key("T")
-			into := map[string]nameEntry{}
+			w := &outlineWalk{aes: tc.aes, dests: map[string]nameEntry{}}
 			visits := walkBudget{left: tc.visits}
-			collectNameTree(context.Background(), node, tc.depth, &visits, into)
-			if got := nameTreeLines(into); got != tc.want {
+			w.collectNameTree(context.Background(), node, tc.depth, &visits)
+			if got := nameTreeLines(w.dests); got != tc.want {
 				t.Errorf("names = %q, want %q", got, tc.want)
 			}
 		})
@@ -946,6 +986,8 @@ func FuzzPDFOutline(f *testing.F) {
 	for _, path := range []string{
 		outlineTargetsPDF, sectionsPDF, "testdata/bookmarked.pdf",
 		"testdata/encrypted-rc4.pdf", "testdata/encrypted-aes128.pdf",
+		"testdata/outline-titles.pdf", "testdata/encrypted-aes128-titles.pdf",
+		"testdata/sections-pdf20.pdf",
 	} {
 		f.Add(mustRead(f, path))
 	}
