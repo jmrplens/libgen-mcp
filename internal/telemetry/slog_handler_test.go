@@ -13,8 +13,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/log/global"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
@@ -55,9 +55,9 @@ func bridged(t *testing.T, level slog.Level) (*slog.Logger, *recordingExporter, 
 	provider := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewSimpleProcessor(exporter)))
 	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
 
-	previous := global.GetLoggerProvider()
-	global.SetLoggerProvider(provider)
-	t.Cleanup(func() { global.SetLoggerProvider(previous) })
+	previous := otel.GetLoggerProvider()
+	otel.SetLoggerProvider(provider)
+	t.Cleanup(func() { otel.SetLoggerProvider(previous) })
 
 	var stderr bytes.Buffer
 	handler := NewSlogHandler(slog.NewJSONHandler(&stderr, &slog.HandlerOptions{Level: level}), DefaultLogSeverity)
@@ -432,9 +432,9 @@ func TestTheStderrLegIsWrittenFirst(t *testing.T) {
 		notingExporter{inner: exporter, note: func() { order = append(order, "otlp") }},
 	)))
 	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
-	previous := global.GetLoggerProvider()
-	global.SetLoggerProvider(provider)
-	t.Cleanup(func() { global.SetLoggerProvider(previous) })
+	previous := otel.GetLoggerProvider()
+	otel.SetLoggerProvider(provider)
+	t.Cleanup(func() { otel.SetLoggerProvider(previous) })
 
 	slog.New(NewSlogHandler(stderr, DefaultLogSeverity)).Info("source resolved")
 
