@@ -35,6 +35,11 @@ func openReadRootLock(dir string) (*os.File, error) {
 		os.O_CREATE|os.O_RDWR|windows.O_FILE_FLAG_OPEN_REPARSE_POINT, 0o600)
 }
 
+// openReadRootDir opens the read root at dir, to list it. The sweep opens it
+// only after Lstat has found a real directory there, and the temp directory on
+// Windows is the user's own, under the profile.
+func openReadRootDir(dir string) (*os.File, error) { return os.Open(dir) }
+
 // ownedDirectory reports whether info, from an Lstat, is a real directory. A
 // symbolic link or a junction is not one to Lstat, so neither is followed.
 // Ownership is not compared here: Windows has no user id to compare it with,

@@ -22,6 +22,9 @@ var errLockUnsupported = errors.New("file locks are not supported on this platfo
 // here: the lock taken on it always fails.
 func openReadRootLock(dir string) (*os.File, error) { return os.Open(dir) }
 
+// openReadRootDir opens the read root at dir, to list it.
+func openReadRootDir(dir string) (*os.File, error) { return os.Open(dir) }
+
 // ownedDirectory reports whether info, from an Lstat, is a real directory.
 func ownedDirectory(info fs.FileInfo) bool { return info.IsDir() }
 

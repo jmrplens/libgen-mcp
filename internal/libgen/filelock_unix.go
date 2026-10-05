@@ -29,13 +29,18 @@ var readRootOwner = os.Geteuid
 // removes the emptied directory itself takes the root away outright, which the
 // owner notices and recovers from (see readRoot.fetchDir).
 //
+// It is opened as openReadRootDir opens it.
+func openReadRootLock(dir string) (*os.File, error) { return openReadRootDir(dir) }
+
+// openReadRootDir opens the read root at dir, to list it or to lock it.
+//
 // The flags are what make it safe to open a name another user may have put in
 // a shared /tmp. O_DIRECTORY opens nothing but a directory, a terminal above
 // all, which O_NOCTTY also refuses to adopt as the process's controlling
 // terminal. O_NOFOLLOW refuses a symbolic link in place of the root.
 // O_NONBLOCK keeps a FIFO from holding the open, and O_CLOEXEC keeps the lock
 // out of any process this one starts.
-func openReadRootLock(dir string) (*os.File, error) {
+func openReadRootDir(dir string) (*os.File, error) {
 	return os.OpenFile(dir, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_NOCTTY|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
 }
 

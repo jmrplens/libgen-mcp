@@ -1729,10 +1729,11 @@ in the same change. Two things about it are easy to get wrong:
   `.lock` file inside it on Windows. `Client.Close` removes the root, `run`
   defers the cleanup `newRegisteredServer` returns, and the next process's
   first fetch (a `read` by `md5` or `doi`, never one of a local `path`) removes
-  every root that is a real directory this user owns, at least a minute old,
-  and whose lock can be taken. A root removed from under a running process is
-  noticed when the next fetch directory cannot be made in it, and replaced.
-  Each of these fails silently if undone:
+  every root that is a real directory this user owns, holds a `fetch-*`
+  directory or has gone a minute unmodified, and whose lock can be taken. A
+  root removed from under a running process is noticed when the next fetch
+  directory cannot be made in it, and replaced. Each of these fails silently if
+  undone:
   - a fetch directory made anywhere but under the root outlives the process
     again, which is how every restart left one behind up to 2.2.0, and a caller
     of `newRegisteredServer` that drops the cleanup does the same on a clean
@@ -1742,7 +1743,11 @@ in the same change. Two things about it are easy to get wrong:
     process's sweep removes the live root;
   - without the one-minute age rule a sweep can land between a root's creation
     and its lock and remove it from its owner (measured: 11 in 9,600
-    processes);
+    processes). It binds only a root with no `fetch-*` directory, because the
+    owner makes the first one after it holds the lock, and the sweep must look
+    for one *before* it tries the lock. Applied to every root, it keeps what a
+    server killed seconds before a supervisor restarted it left for the whole
+    life of the new process, which sweeps once;
   - only `EWOULDBLOCK` (Unix) and `ERROR_LOCK_VIOLATION` (Windows) mean held.
     Any other lock error sends the process to loose `libgen-read-*` fetch
     directories for its whole life, with one warning, and must never leave an

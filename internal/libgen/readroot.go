@@ -40,16 +40,24 @@ var errLockHeld = errors.New("the lock is held by another open file")
 // one another file holds (see holdReadRootLock).
 var errLocksUnusable = errors.New("file locks do not work here")
 
-// readRootLockGrace is how old a read root must be before the sweep judges it
-// at all. A younger one is left alone whatever its lock says.
+// readRootLockGrace is how long a read root that holds no fetch directory
+// must go unmodified before the sweep judges it at all. A younger one is left
+// alone whatever its lock says.
 //
 // A live process makes its root and then locks it, so for an instant a live
 // root's lock is free. A sweep landing in that instant would take the free
 // lock for a dead owner and remove the root its owner is about to use, which
 // was measured happening 11 times in 9,600 processes started together. A
-// minute is far past that instant and far short of a restart. Past it, a root
-// whose lock is free is dead however its process ended, including one that
-// died between the two steps.
+// minute is far past that instant. Past it, a root whose lock is free is dead
+// however its process ended, including one that died between the two steps.
+//
+// A root that holds a fetch directory is past that instant whatever its age,
+// because its owner makes the first one only once it holds the lock. That is
+// what lets a server restarted seconds after it was killed, which is what a
+// supervisor does, remove the files the killed one left on its first fetch:
+// that root changed last when its owner fetched, seconds earlier, and the
+// sweep runs once per process, so a rule on age alone would leave it for the
+// whole life of the new process.
 func readRootLockGrace() time.Duration { return time.Minute }
 
 // readRootNow is time.Now, as a seam: a root's age is compared against
@@ -238,22 +246,47 @@ func sweepReadRoots(tmp string) int {
 //     (see ownedDirectory). The temp directory is shared on Unix, and an entry
 //     another user planted under the prefix is not ours to open, let alone to
 //     remove.
-//   - It is at least readRootLockGrace old, whatever its lock says.
+//   - It holds a fetch directory, or it has gone readRootLockGrace without a
+//     change. Only a root that holds none can be one its owner has made and
+//     not yet locked.
 //   - Its lock can be taken. A process that is alive holds it, and the
 //     operating system releases it when the process ends, however it ended,
 //     so taking it here is proof the owner is gone. It is released again at
 //     once, before the root is removed. A lock that cannot be tried at all is
 //     no proof of anything, so a lock that fails for any reason, held or not,
 //     keeps the root.
+//
+// The order is what makes the second rule sound: the fetch directory is
+// looked for before the lock is tried. Looked for after, it could be one a
+// live owner made between the two, having locked its root just after the
+// sweep found the lock free.
 func abandonedReadRoot(dir string) bool {
 	info, err := os.Lstat(dir)
 	if err != nil || !ownedDirectory(info) {
 		return false
 	}
-	if readRootNow().Sub(info.ModTime()) < readRootLockGrace() {
+	if readRootNow().Sub(info.ModTime()) < readRootLockGrace() && !holdsFetchDir(dir) {
 		return false
 	}
 	return readRootLockFree(dir)
+}
+
+// holdsFetchDir reports whether the read root at dir holds at least one
+// fetch directory. A root that cannot be opened or listed holds none, which
+// leaves the age rule to judge it.
+func holdsFetchDir(dir string) bool {
+	f, err := openReadRootDir(dir)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = f.Close() }()
+	names, _ := f.Readdirnames(0) // every name: a root holds one entry per cached file
+	for _, name := range names {
+		if ok, _ := filepath.Match(fetchDirPattern, name); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // readRootLockFree takes the lock of the read root at dir and gives it back,

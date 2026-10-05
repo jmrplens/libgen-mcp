@@ -460,10 +460,12 @@ directory holds a lock the process keeps for its whole life: an `flock` on the d
 on Unix, a lock on a `.lock` file inside it on Windows. The next server to fetch a file for
 `read` from the same temporary directory (a `read` by `md5` or `doi`, since one of a local
 `path` fetches nothing) first removes every such directory whose lock no process holds, which
-is how it tells a dead server's files from a live one's. It leaves alone a directory younger
-than a minute, which may belong to a server that has made it and not yet locked it, and on Unix
-a directory another user owns. A directory removed from under a running server, by hand or by
-a temp cleaner, is noticed on its next fetch and made again.
+is how it tells a dead server's files from a live one's. A directory that holds a fetched file
+goes however recently its server was killed, because a server fetches into it only once it
+holds the lock. It leaves alone a directory that holds none and changed less than a minute
+ago, which may belong to a server that has made it and not yet locked it, and on Unix a
+directory another user owns. A directory removed from under a running server, by hand or by a
+temp cleaner, is noticed on its next fetch and made again.
 
 That sweep relies on the lock being seen by every process that shares the temporary directory,
 so do not share one `TMPDIR` between hosts on a filesystem whose locks stay local to each host

@@ -63,12 +63,10 @@ func holdRoot(t *testing.T, tmp string) string {
 	return dir
 }
 
-// youngDeadRoot makes a read root under tmp the way a process that ended
-// leaves one, its lock free, with a cached file in a per-fetch directory
-// inside, as the cache leaves them. It has the age it was made with.
-func youngDeadRoot(t *testing.T, tmp string) string {
+// addFetch puts a cached file in a per-fetch directory inside the root at dir,
+// as the cache leaves them.
+func addFetch(t *testing.T, dir string) {
 	t.Helper()
-	dir := newRootDir(t, tmp)
 	fetch := filepath.Join(dir, "fetch-1")
 	if err := os.Mkdir(fetch, 0o700); err != nil {
 		t.Fatal(err)
@@ -76,6 +74,31 @@ func youngDeadRoot(t *testing.T, tmp string) string {
 	if err := os.WriteFile(filepath.Join(fetch, "book.pdf"), []byte("%PDF"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// youngDeadRoot makes a read root under tmp the way a process that ended
+// leaves one, its lock free, with a cached file in a per-fetch directory
+// inside. It has the age it was made with, which is what a server killed
+// seconds after its last fetch leaves.
+func youngDeadRoot(t *testing.T, tmp string) string {
+	t.Helper()
+	dir := newRootDir(t, tmp)
+	addFetch(t, dir)
+	return dir
+}
+
+// youngLiveRoot makes a read root under tmp the way a live process that has
+// just fetched leaves one: its lock held on a descriptor this test owns until
+// it ends, a cached file inside, and no older than it was made.
+func youngLiveRoot(t *testing.T, tmp string) string {
+	t.Helper()
+	dir := newRootDir(t, tmp)
+	lock, err := holdReadRootLock(dir)
+	if err != nil {
+		t.Fatalf("holdReadRootLock: %v", err)
+	}
+	t.Cleanup(func() { _ = lock.Close() })
+	addFetch(t, dir)
 	return dir
 }
 
@@ -358,6 +381,22 @@ func TestReadRoot_FirstUseSweepsAndSaysSo(t *testing.T) {
 			t.Errorf("no record of the sweep in %q", logs.String())
 		}
 	})
+	// A supervisor restarts a killed server within seconds, so the root it left
+	// changed last a few seconds before the new server's first fetch. That
+	// fetch runs the only sweep the new process makes, so a root it leaves for
+	// being young stays for the whole life of the process.
+	t.Run("a root killed seconds ago is removed by the next process's first fetch", func(t *testing.T) {
+		tmp := t.TempDir()
+		isolateTempDir(t, tmp)
+		dead := youngDeadRoot(t, tmp)
+		var r readRoot
+		t.Cleanup(r.close)
+
+		rootOf(t, &r)
+		if exists(dead) {
+			t.Errorf("first use left %q, which a server killed seconds earlier left", dead)
+		}
+	})
 	t.Run("nothing to remove, nothing said", func(t *testing.T) {
 		isolateTempDir(t, t.TempDir())
 		logs := captureLog(t)
@@ -417,16 +456,22 @@ func TestHoldReadRootLock(t *testing.T) {
 }
 
 // TestSweepReadRoots removes exactly the roots no process holds, and nothing
-// that is not a read root: live roots, a dead one still inside the grace, the
-// per-fetch directories versions up to 2.2.0 left loose in the temp directory,
-// a directory that is nobody's root, and a file that merely shares the prefix
-// all stay. Every survivor but the young root is backdated past the grace, so
-// what keeps it is the rule under test and not its age.
+// that is not a read root. Dead roots go, old or young, once they hold a fetch
+// directory, and so does an old empty one. Live roots, an empty root still
+// inside the grace (which may be one its owner has made and not yet locked),
+// the per-fetch directories versions up to 2.2.0 left loose in the temp
+// directory, a directory that is nobody's root, and a file that merely shares
+// the prefix all stay. Every survivor but the two young roots is backdated past
+// the grace, so what keeps it is the rule under test and not its age.
 func TestSweepReadRoots(t *testing.T) {
 	tmp := t.TempDir()
 	deadA, deadB := deadRoot(t, tmp), deadRoot(t, tmp)
+	youngDead := youngDeadRoot(t, tmp)
+	oldEmpty := newRootDir(t, tmp)
+	backdate(t, oldEmpty)
 	live := holdRoot(t, tmp)
-	young := youngDeadRoot(t, tmp)
+	youngLive := youngLiveRoot(t, tmp)
+	youngEmpty := newRootDir(t, tmp)
 	legacy := oldDir(t, filepath.Join(tmp, legacyFetchPrefix+"123"))
 	unrelated := oldDir(t, filepath.Join(tmp, "someone-elses-dir"))
 	plainFile := filepath.Join(tmp, readRootPrefix+"file")
@@ -435,17 +480,17 @@ func TestSweepReadRoots(t *testing.T) {
 	}
 	backdate(t, plainFile)
 
-	if got := sweepReadRoots(tmp); got != 2 {
-		t.Errorf("sweepReadRoots = %d, want 2", got)
+	if got := sweepReadRoots(tmp); got != 4 {
+		t.Errorf("sweepReadRoots = %d, want 4", got)
 	}
-	for _, gone := range []string{deadA, deadB} {
+	for _, gone := range []string{deadA, deadB, youngDead, oldEmpty} {
 		t.Run("removed "+filepath.Base(gone), func(t *testing.T) {
 			if exists(gone) {
 				t.Errorf("%q survived the sweep", gone)
 			}
 		})
 	}
-	for _, kept := range []string{live, young, legacy, unrelated, plainFile} {
+	for _, kept := range []string{live, youngLive, youngEmpty, legacy, unrelated, plainFile} {
 		t.Run("kept "+filepath.Base(kept), func(t *testing.T) {
 			if !exists(kept) {
 				t.Errorf("%q was removed", kept)
@@ -462,9 +507,10 @@ func TestSweepReadRoots_UnreadableTempDirRemovesNothing(t *testing.T) {
 	}
 }
 
-// TestAbandonedReadRoot judges one root at a time. Age comes first: a root
-// inside the grace is kept whatever its lock says, which is what covers the
-// instant between a live process making its root and locking it.
+// TestAbandonedReadRoot judges one root at a time. A root that holds no fetch
+// directory and is inside the grace is kept whatever its lock says, which is
+// what covers the instant between a live process making its root and locking
+// it. A root that holds one is judged by its lock alone, however young.
 func TestAbandonedReadRoot(t *testing.T) {
 	tmp := t.TempDir()
 	// The clock is set relative to the root's own modification time, so the
@@ -486,15 +532,27 @@ func TestAbandonedReadRoot(t *testing.T) {
 	}{
 		{"its lock is free", func(t *testing.T) string { t.Helper(); return deadRoot(t, tmp) }, true},
 		{"its lock is held", func(t *testing.T) string { t.Helper(); return holdRoot(t, tmp) }, false},
-		{"its lock is free, younger than the grace", func(t *testing.T) string {
+		{"it holds a fetch directory and its lock is free, changed this instant", func(t *testing.T) string {
 			t.Helper()
 			dir := youngDeadRoot(t, tmp)
+			atAge(t, dir, 0)
+			return dir
+		}, true},
+		{"it holds a fetch directory and its lock is held, changed this instant", func(t *testing.T) string {
+			t.Helper()
+			dir := youngLiveRoot(t, tmp)
+			atAge(t, dir, 0)
+			return dir
+		}, false},
+		{"it holds no fetch directory and its lock is free, younger than the grace", func(t *testing.T) string {
+			t.Helper()
+			dir := newRootDir(t, tmp)
 			atAge(t, dir, readRootLockGrace()-time.Nanosecond)
 			return dir
 		}, false},
-		{"its lock is free, exactly the grace old", func(t *testing.T) string {
+		{"it holds no fetch directory and its lock is free, exactly the grace old", func(t *testing.T) string {
 			t.Helper()
-			dir := youngDeadRoot(t, tmp)
+			dir := newRootDir(t, tmp)
 			atAge(t, dir, readRootLockGrace())
 			return dir
 		}, true},
@@ -519,6 +577,40 @@ func TestAbandonedReadRoot(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := abandonedReadRoot(tc.dir(t)); got != tc.want {
 				t.Errorf("abandonedReadRoot = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestHoldsFetchDir answers only for a directory named as a fetch makes one.
+// Anything else a root can hold (the lock file on Windows, a file an age
+// cleaner left) does not count, and a root that cannot be listed holds none.
+func TestHoldsFetchDir(t *testing.T) {
+	tmp := t.TempDir()
+	cases := []struct {
+		name string
+		dir  func(t *testing.T) string
+		want bool
+	}{
+		{"a fetch directory", func(t *testing.T) string { t.Helper(); return youngDeadRoot(t, tmp) }, true},
+		{"nothing", func(t *testing.T) string { t.Helper(); return newRootDir(t, tmp) }, false},
+		{"only entries a fetch does not make", func(t *testing.T) string {
+			t.Helper()
+			dir := newRootDir(t, tmp)
+			if err := os.WriteFile(filepath.Join(dir, ".lock"), nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Mkdir(filepath.Join(dir, "fetched"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			return dir
+		}, false},
+		{"the root is gone", func(*testing.T) string { return filepath.Join(tmp, readRootPrefix+"gone") }, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := holdsFetchDir(tc.dir(t)); got != tc.want {
+				t.Errorf("holdsFetchDir = %v, want %v", got, tc.want)
 			}
 		})
 	}

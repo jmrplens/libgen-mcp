@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 2026-10-04
+Last updated: 2026-10-05
 
 **libgen-mcp** is a Model Context Protocol (MCP) server you run yourself. In its
 normal use it runs entirely on your machine and acts as a bridge between your MCP
@@ -249,9 +249,9 @@ optional, and unset by default.
   TTL (`LIBGEN_MCP_READ_CACHE_BYTES` / `LIBGEN_MCP_READ_CACHE_TTL`) and removed
   when the server exits. A server that is killed instead leaves them until the
   next server to fetch a file for `read` (a book or paper named by `md5` or
-  `doi`) from the same temporary directory removes them, once they are a minute
-  old. Where that directory cannot hold a file lock, the server says so in its
-  log and a killed server's files stay until someone deletes them. An
+  `doi`) from the same temporary directory removes them, however soon after the
+  kill that is. Where that directory cannot hold a file lock, the server says so
+  in its log and a killed server's files stay until someone deletes them. An
   interrupted `download` likewise leaves a `.part` file in the destination
   directory so a later call can resume it.
 
