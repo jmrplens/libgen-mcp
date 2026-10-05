@@ -1,6 +1,6 @@
 package version
 
-import libgenmcp "github.com/jmrplens/libgen-mcp/v2"
+import libgenmcp "github.com/gfade/personal_library-mcp/v2"
 
 // current is the version this binary reports. It starts as the number compiled in
 // from the repository's VERSION file — the same file the release manifests are
@@ -35,5 +35,5 @@ func Current() string { return current }
 // variable would be initialized before a command's startup path reaches Set and
 // would pin the pre-Set value forever.
 func UserAgent() string {
-	return "libgen-mcp/" + current + " (+https://github.com/jmrplens/libgen-mcp)"
+	return "personal_library-mcp/" + current + " (+https://github.com/jmrplens/personal_library-mcp)"
 }
