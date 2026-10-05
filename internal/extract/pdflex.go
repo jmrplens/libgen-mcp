@@ -46,8 +46,8 @@ type stringFix struct {
 // lexer refuses rewritten, and false when d holds none, or ctx ended before
 // they were all found.
 func stringsFixed(ctx context.Context, d document) (document, bool) {
-	s := &lexScanner{ctx: ctx, br: bufio.NewReaderSize(io.NewSectionReader(d.r, 0, d.size), scanBuffer)}
-	s.scan()
+	s := &lexScanner{br: bufio.NewReaderSize(io.NewSectionReader(d.r, 0, d.size), scanBuffer)}
+	s.scan(ctx)
 	if len(s.fixes) == 0 || ctx.Err() != nil {
 		return document{}, false
 	}
@@ -56,11 +56,10 @@ func stringsFixed(ctx context.Context, d document) (document, bool) {
 
 // lexScanner reads a file for its strings, from its first byte to its last,
 // and records a fix for each one the reader refuses. It passes over comments
-// and the data of every stream, which are not tokens, and stops once ctx has
-// ended.
+// and the data of every stream, which are not tokens, and stops once the
+// context its reads are given has ended.
 type lexScanner struct {
-	ctx context.Context
-	br  *bufio.Reader
+	br *bufio.Reader
 	// at is the offset of the next byte.
 	at int64
 	// buf is the string being read.
@@ -71,13 +70,13 @@ type lexScanner struct {
 
 // next returns the next byte, and false at the end of the file and once ctx
 // has ended, which it asks every scanBuffer bytes.
-func (s *lexScanner) next() (byte, bool) {
+func (s *lexScanner) next(ctx context.Context) (byte, bool) {
 	c, err := s.br.ReadByte()
 	if err != nil {
 		return 0, false
 	}
 	s.at++
-	if s.at%scanBuffer == 0 && s.ctx.Err() != nil {
+	if s.at%scanBuffer == 0 && ctx.Err() != nil {
 		return 0, false
 	}
 	return c, true
@@ -99,27 +98,27 @@ func (s *lexScanner) discard(n int) {
 	s.at += int64(m)
 }
 
-// scan reads the file to its end, reading each comment, string and stream
-// where it starts. The stream keyword follows a dictionary, so it is only
-// looked for after white space or a >, which leaves the s of a name such as
-// /stream, and of a word such as endstream, as it is.
-func (s *lexScanner) scan() {
+// scan reads the file to its end, or until ctx has ended, reading each
+// comment, string and stream where it starts. The stream keyword follows a
+// dictionary, so it is only looked for after white space or a >, which leaves
+// the s of a name such as /stream, and of a word such as endstream, as it is.
+func (s *lexScanner) scan(ctx context.Context) {
 	prev := byte('\n')
 	for {
-		c, ok := s.next()
+		c, ok := s.next(ctx)
 		if !ok {
 			return
 		}
 		switch c {
 		case '%':
-			s.comment()
+			s.comment(ctx)
 		case '(':
-			s.literal(s.at - 1)
+			s.literal(ctx, s.at-1)
 		case '<':
-			s.angle(s.at - 1)
+			s.angle(ctx, s.at-1)
 		case 's':
 			if prev == '>' || strings.IndexByte(pdfWhiteSpace, prev) >= 0 {
-				s.streamKeyword()
+				s.streamKeyword(ctx)
 			}
 		}
 		prev = c
@@ -130,9 +129,9 @@ func (s *lexScanner) scan() {
 const pdfWhiteSpace = "\x00\t\n\f\r "
 
 // comment passes over a comment, to the end of its line.
-func (s *lexScanner) comment() {
+func (s *lexScanner) comment(ctx context.Context) {
 	for {
-		c, ok := s.next()
+		c, ok := s.next(ctx)
 		if !ok || c == '\r' || c == '\n' {
 			return
 		}
@@ -141,18 +140,18 @@ func (s *lexScanner) comment() {
 
 // literal reads the literal string whose ( is at start, and records a fix for
 // it when it holds an escape the reader refuses.
-func (s *lexScanner) literal(start int64) {
+func (s *lexScanner) literal(ctx context.Context, start int64) {
 	out := s.buf[:0]
 	out = append(out, '(')
 	refused := false
 	for depth := 1; depth > 0; {
-		c, ok := s.next()
+		c, ok := s.next(ctx)
 		if !ok {
 			return
 		}
 		if c == '\\' {
 			var rewritten bool
-			out, rewritten = s.escape(out)
+			out, rewritten = s.escape(ctx, out)
 			refused = refused || rewritten
 			continue
 		}
@@ -182,8 +181,8 @@ func nesting(c byte) int {
 // reader takes it, the character after the backslash when the reader does not
 // know the escape, and the value modulo 256 when it is an octal escape past
 // 255. It reports whether it rewrote the escape.
-func (s *lexScanner) escape(out []byte) ([]byte, bool) {
-	c, ok := s.next()
+func (s *lexScanner) escape(ctx context.Context, out []byte) ([]byte, bool) {
+	c, ok := s.next(ctx)
 	if !ok {
 		return out, false
 	}
@@ -220,20 +219,20 @@ func (s *lexScanner) octal(out []byte, first byte) ([]byte, bool) {
 // passes over, or a hex string, which it records a fix for when its digits are
 // odd in number. One holding anything but hex digits and white space is not a
 // string the standard defines, and is left as it is.
-func (s *lexScanner) angle(start int64) {
+func (s *lexScanner) angle(ctx context.Context, start int64) {
 	if s.peek() == '<' {
 		s.discard(1)
 		return
 	}
 	digits := s.buf[:0]
-	c, ok := s.next()
+	c, ok := s.next(ctx)
 	for ok && c != '>' {
 		if strings.IndexByte("0123456789abcdefABCDEF", c) >= 0 {
 			digits = append(digits, c)
 		} else if strings.IndexByte(pdfWhiteSpace, c) < 0 {
 			return
 		}
-		c, ok = s.next()
+		c, ok = s.next(ctx)
 	}
 	s.buf = digits
 	if ok {
@@ -269,15 +268,15 @@ func (s *lexScanner) fix(start int64, with []byte) {
 
 // streamKeyword reads on after an s that can start the stream keyword, and
 // when it does, passes over the stream's data to its endstream keyword, as
-// objStmView finds the end of an object stream's.
-func (s *lexScanner) streamKeyword() {
+// objStmView finds the end of an object stream's, unless ctx has ended.
+func (s *lexScanner) streamKeyword(ctx context.Context) {
 	const rest = "tream"
 	next, _ := s.br.Peek(len(rest) + 1)
 	if !bytes.HasPrefix(next, []byte(rest)) || len(next) == len(rest) || isRegularByte(next[len(rest)]) {
 		return
 	}
 	s.discard(len(rest))
-	for s.ctx.Err() == nil {
+	for ctx.Err() == nil {
 		data, err := s.br.Peek(scanBuffer)
 		if before, _, found := bytes.Cut(data, []byte(endStreamKeyword)); found {
 			s.discard(len(before) + len(endStreamKeyword))

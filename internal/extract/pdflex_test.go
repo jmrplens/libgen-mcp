@@ -110,8 +110,8 @@ func TestStringsFixed_LongStreams(t *testing.T) {
 
 // scanned scans data under ctx and returns the offsets of the fixes found.
 func scanned(ctx context.Context, data string) []int64 {
-	s := &lexScanner{ctx: ctx, br: bufio.NewReaderSize(strings.NewReader(data), scanBuffer)}
-	s.scan()
+	s := &lexScanner{br: bufio.NewReaderSize(strings.NewReader(data), scanBuffer)}
+	s.scan(ctx)
 	var at []int64
 	for _, f := range s.fixes {
 		at = append(at, f.at)
