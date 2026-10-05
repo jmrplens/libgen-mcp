@@ -1148,16 +1148,19 @@ remote server takes no local path at all, because the path would be on the serve
 (likely a scanned or image-only PDF); OCR is not supported`, `unsupported format .djvu: text
 extraction is not available (comic/scanned/proprietary container)`, `unsupported file
 extension .env and its bytes match no supported format (unrecognized)`, `cannot read PDF: it is
-encrypted in a way this reader cannot decrypt (…)`, `cannot read PDF: the file is damaged (…)`,
-or `cannot read the file: the reader did not finish within the time limit (the document is
-damaged or pathologically structured)`.
+encrypted in a way this reader cannot decrypt, so neither its text nor its table of contents
+can be read`, `cannot read PDF text: it is encrypted in a way this reader cannot decrypt for its
+text, though outline mode may still list its table of contents`, `cannot read PDF: the file is
+damaged (…)`, or `cannot read the file: the reader did not finish within the time limit (the
+document is damaged or pathologically structured)`.
 
 **Meaning.** `read` extracts text from PDF, EPUB and plain text. A scan has no text to
 extract and no OCR runs here; DjVu, comic archives and proprietary e-book containers are not
-read at all; a PDF encrypted with AES-256, with RC4 under crypt filters, with RC4 under a key
-shorter than 88 bits or with AES-128 as pdfcpu writes it, or one that needs a password, cannot
-be decrypted, and a damaged PDF is not repaired; a document that takes too long is given a
-time limit rather than a thread forever.
+read at all; a PDF encrypted with AES-256, or one that needs a password, cannot be decrypted,
+and one encrypted with RC4 under a key shorter than 88 bits or under crypt filters, or with
+AES-128 leaving the metadata unencrypted, gives only its table of contents, in `outline` mode;
+a damaged PDF is not repaired; a document that takes too long is given a time limit rather
+than a thread forever.
 
 **Fixes.**
 
@@ -1166,6 +1169,8 @@ time limit rather than a thread forever.
   damaged alike, since `download` checks the md5. For an article, another source may hold a
   different file.
 - Open the file locally in a reader that does OCR, or that decrypts or repairs the PDF.
+- When the text is refused with a pointer to outline mode, call `read` with `outline: true`
+  for the table of contents.
 - An outline that comes back empty is not a failure: many PDFs carry no table of contents,
   the `reason` says whether it has none, a damaged one or one too large to list, and `find`
   still searches the text.

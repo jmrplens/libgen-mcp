@@ -791,17 +791,27 @@ is 4.5 MB smaller, and Trivy 0.75 reports nothing on it where it reported GO-202
 
 **What it costs.** ledongthuc/pdf decrypts less than pdfcpu did, and does not repair a damaged
 file, where pdfcpu did both. It decrypts RC4 correctly only from an 88-bit key up, because it
-never cuts each object's key to the n+5 bytes the standard takes, and AES-128 only when the
-crypt filter gives the key length in bytes. A PDF encrypted with AES-256 (V=5), with RC4 under
-crypt filters (V=4), with RC4 under a shorter key (every 40-bit file among them), or with
-AES-128 as pdfcpu writes it, or one whose cross-reference table needs rebuilding, loses its
-outline. Those files already had no usable text: the text and `find` modes called most of them
-"not a valid PDF", and read a 40-bit file's pages as text-free, which called it a scan. So
-`read` now gives every mode one honest reason, that the file is encrypted in a way the reader
-cannot decrypt or is damaged, and refuses a short RC4 key before reading it rather than
-returning what it decrypts into. An outline that is present but does not parse, or whose links
-lead to no item, is reported as damaged rather than as missing or as the items before the
-break, and one past the item or depth bound as too large to list.
+never cuts each object's key to the n+5 bytes the standard takes; it refuses RC4 under crypt
+filters (V=4) and AES-128 whose crypt filter gives the key length in bits, as pdfcpu writes it;
+it derives the wrong key for a file that leaves its metadata unencrypted, and calls it one that
+needs a password; and it refuses AES-256 (V=5). pdfcpu's filter is shown to the reader with
+its `/Length` as 16, at the width it is written in, and the reader then reads the file whole,
+text and object streams included. The outline walk closes the other three itself, for the
+outline: it shows the reader the file with its trailer's `/Encrypt` key renamed, so the reader
+hands every string over as the file holds it, derives the key of the empty password from the
+encryption dictionary (Algorithms 2, 4 and 5 of ISO 32000-1, with the standard library's MD5,
+RC4 and AES), and decrypts each title and destination name under the key of the object it is
+in, which it reads from the text form the reader prints for the dictionary or array holding it.
+That reaches strings only, so an outline stored in a compressed object stream, whose stream only
+the reader could decrypt, is still lost under those three. What remains lost is that, AES-256,
+and a file whose cross-reference table needs rebuilding. Their text was never usable: the text and
+`find` modes called most of them "not a valid PDF", and read a 40-bit file's pages as text-free,
+which called it a scan. So those modes now refuse them with an honest reason, that the file is
+encrypted in a way the reader cannot decrypt (pointing at outline mode when the walk can read its
+outline) or is damaged, and refuse a short RC4 key before reading it rather than returning what
+it decrypts into. An outline that is present but does not parse, or whose links lead to no item,
+is reported as damaged rather than as missing or as the items before the break, and one past the
+item or depth bound as too large to list.
 
 The reader's other gaps are closed rather than accepted. It refuses a PDF 2.0 header, so it is
 shown a 1.7 one and reads the rest of the file as it is. It takes a UTF-8 title for

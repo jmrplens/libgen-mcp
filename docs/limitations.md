@@ -32,14 +32,16 @@ as unsupported, with the same reason in all three read modes (sequential text, `
 
 **Some encrypted and damaged PDFs cannot be read at all.** A PDF that needs no password to
 open, which is how a file that only restricts printing or copying is usually encrypted, reads
-like any other when it is encrypted with 128-bit RC4 or with AES-128 as qpdf and pypdf write
-it. One encrypted with AES-256, with RC4 under crypt filters, with RC4 under a key shorter than
-88 bits (the 40-bit "no copy" files older Acrobat settings write) or with AES-128 as pdfcpu
-writes it, one that needs a password to open, and one that is damaged (a truncated download, a
+like any other when it is encrypted with RC4 under a key of 88 bits or more or with AES-128 as
+qpdf, pypdf and pdfcpu write it. One encrypted with RC4 under a shorter key (the 40-bit "no
+copy" files older Acrobat settings write) or under crypt filters, or with AES-128 leaving the
+metadata unencrypted, gives its table of contents and not its text. One encrypted with
+AES-256, one of those three whose table of contents is in a compressed object stream, one
+that needs a password to open, and one that is damaged (a truncated download, a
 cross-reference table that does not lead to its objects) give neither text nor a table of
 contents, and every mode says which of these it is. Up to 2.2.0 a second PDF library read the
-table of contents of the encrypted and damaged ones; it was removed in 2.2.1 because it carried
-a module scanners flag, with no fix, into every binary, as the
+table of contents of the AES-256 and damaged ones; it was removed in 2.2.1 because it carried a
+module scanners flag, with no fix, into every binary, as the
 [source-and-capability-scope ADR](decisions/2026-07-22-source-and-capability-scope.md)
 records. Another edition of the work, or for an article another source, is the way forward.
 See [Tools → Not extractable](tools.md#not-extractable).

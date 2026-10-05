@@ -698,15 +698,21 @@ and hand the raw file to the user. This covers, among others:
 - **Scanned/image-only PDFs** — no extractable text layer (`"no extractable text layer (likely
   a scanned or image-only PDF); OCR is not supported"`).
 - **Encrypted PDFs the reader cannot decrypt** — `"cannot read PDF: it is encrypted in a way
-  this reader cannot decrypt (it decrypts only RC4 with a key of 88 bits or more and AES-128
-  whose crypt filter gives the key length in bytes), so neither its text nor its table of
-  contents can be read"`. A PDF that needs no password to open, which is how a file that only
-  restricts printing or copying is usually encrypted, reads like any other when it is
-  encrypted with 128-bit RC4, or with AES-128 as qpdf and pypdf write it. It is refused when it
-  uses AES-256, RC4 under crypt filters, RC4 with a key shorter than 88 bits (the 40-bit "no
-  copy" PDFs that Acrobat 3 and 4 compatibility settings write, which the reader would decrypt
-  into noise), or AES-128 as pdfcpu writes it, with the crypt filter's key length in bits. One
-  that needs a password to open says so, since `read` takes none.
+  this reader cannot decrypt, so neither its text nor its table of contents can be read"`. A
+  PDF that needs no password to open, which is how a file that only restricts printing or
+  copying is usually encrypted, reads like any other when it is encrypted with RC4 under a key
+  of 88 bits or more (128-bit RC4 among them), or with AES-128, whether its crypt filter gives
+  the key length in bytes, as qpdf and pypdf write it, or in bits, as pdfcpu does. Three more
+  are read in part: RC4 with a key shorter than 88 bits (the 40-bit "no copy" PDFs that
+  Acrobat 3 and 4 compatibility settings write, which the text reader would decrypt into
+  noise), RC4 under crypt filters, and AES-128 that leaves the document's metadata
+  unencrypted. Their table of contents is listed in `outline` mode, and the text and `find`
+  modes refuse them with `"cannot read PDF text: it is encrypted in a way this reader cannot
+  decrypt for its text, though outline mode may still list its table of contents"`. Their
+  outline cannot be listed either when it is stored in a compressed object stream, which only
+  the text reader could decrypt, and then `outline` mode gives the first reason. So does
+  AES-256, and a certificate-based security handler. One that needs a password to open says
+  so, since `read` takes none.
 - **Damaged PDFs** — `"cannot read PDF: the file is damaged (…), and this reader does not
   repair one, so neither its text nor its table of contents can be read; another copy of the
   file may be intact"`: a truncated download, or a cross-reference table that does not lead to
@@ -840,9 +846,15 @@ bound. A [`section`](#read-one-section) read of either says the table of content
 read, not that there is none. A PDF that no mode can open, because it is encrypted in
 a way the reader cannot decrypt or because the file itself is damaged, has no outline either,
 and `outline` mode reports it with the same `reason` the text and `find` modes give (see [Not
-extractable](#not-extractable)). Up to 2.2.0 a second PDF library read the outline and could
-open both kinds; the [source-and-capability-scope
-ADR](decisions/2026-07-22-source-and-capability-scope.md) records why it was removed.
+extractable](#not-extractable)). An encrypted PDF whose text the reader cannot decrypt still
+has its outline listed when the encryption is RC4 or AES-128 and the outline is not in a
+compressed object stream: the outline is read with its encryption hidden from the reader, and
+each title decrypted under the key the standard defines for the object it is in. An AES-128
+crypt filter whose key length pdfcpu writes in bits is shown to the reader in bytes, which is
+all it lacks to read that file whole. Up to 2.2.0
+a second PDF library read the outline and could open AES-256 and damaged files as well; the
+[source-and-capability-scope ADR](decisions/2026-07-22-source-and-capability-scope.md)
+records why it was removed.
 
 A deeply nested technical book can carry several hundred entries, which is a lot of response
 for a question as simple as "which chapter covers this?". Set `max_depth` to cut the tree to
