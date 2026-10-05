@@ -235,14 +235,15 @@ func readerStrings(aesPadded bool) stringDecoder {
 // reported as scanned; an unreadable one carries the reader's own diagnosis,
 // which for an encrypted file says it is encrypted. The text path's answer
 // for a file whose outline the walk decrypts points at outline mode, which is
-// where this is, and which listed nothing, so it is encryptedPDFReason here.
+// where this is, and which listed nothing, so here it says what the walk
+// found instead (partlyEncryptedOutlineReason).
 func pdfNoOutlineResult(ctx context.Context, d document, outline outlineState) (OutlineResult, error) {
 	state, reason, err := probePDFTextLayer(ctx, d)
 	if err != nil {
 		return OutlineResult{}, err
 	}
 	if reason == partlyEncryptedPDFReason {
-		reason = encryptedPDFReason
+		reason = partlyEncryptedOutlineReason(outline)
 	}
 	switch state {
 	case pdfTextAbsent:
@@ -257,6 +258,33 @@ func pdfNoOutlineResult(ctx context.Context, d document, outline outlineState) (
 		return OutlineResult{Format: "pdf", Extractable: true, Reason: largePDFOutlineReason, unreadable: true}, nil
 	}
 	return OutlineResult{Format: "pdf", Extractable: true, Reason: noPDFOutlineReason}, nil
+}
+
+// Outline mode's diagnoses for a PDF whose text partlyEncryptedPDFReason
+// refuses and whose outline the walk read and listed nothing from: it has
+// none, it is damaged, or it is too large to list. Each is one literal, for
+// the reason noPDFOutlineReason gives, and TestLargePDFOutlineReason holds the
+// numbers the last one names to the bounds.
+const (
+	partlyEncryptedNoOutlineReason      = "cannot read PDF text: it is encrypted in a way this reader cannot decrypt for its text, and it has no embedded table of contents"
+	partlyEncryptedDamagedOutlineReason = "cannot read PDF text: it is encrypted in a way this reader cannot decrypt for its text, and its embedded table of contents is damaged and could not be read"
+	partlyEncryptedLargeOutlineReason   = "cannot read PDF text: it is encrypted in a way this reader cannot decrypt for its text, and its embedded table of contents is larger than this reader lists (over 20000 entries, or nested over 64 levels deep), so none of it is listed"
+)
+
+// partlyEncryptedOutlineReason is outline mode's diagnosis for a PDF whose
+// text partlyEncryptedPDFReason refuses and whose outline listed nothing, by
+// what the walk found. A file it could not open is encryptedPDFReason: its
+// table of contents cannot be read either.
+func partlyEncryptedOutlineReason(outline outlineState) string {
+	switch outline {
+	case outlineWhole:
+		return partlyEncryptedNoOutlineReason
+	case outlineDamaged:
+		return partlyEncryptedDamagedOutlineReason
+	case outlineTooLarge:
+		return partlyEncryptedLargeOutlineReason
+	}
+	return encryptedPDFReason
 }
 
 // walkBudget bounds one walk over a structure the file controls: it allows a

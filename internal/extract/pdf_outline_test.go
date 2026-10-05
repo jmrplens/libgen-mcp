@@ -1138,15 +1138,50 @@ func TestOutline_PDFTooLarge(t *testing.T) {
 	}
 }
 
-// TestLargePDFOutlineReason holds the numbers the too-large reason names to
-// the bounds the walk applies, since the reason is one literal.
+// TestLargePDFOutlineReason holds the numbers the too-large reasons name to
+// the bounds the walk applies, since each reason is one literal.
 func TestLargePDFOutlineReason(t *testing.T) {
-	for _, want := range []string{fmt.Sprintf("over %d entries", maxOutlineItems), fmt.Sprintf("over %d levels", maxOutlineDepth)} {
-		t.Run(want, func(t *testing.T) {
-			if !strings.Contains(largePDFOutlineReason, want) {
-				t.Errorf("largePDFOutlineReason = %q, want it to say %q", largePDFOutlineReason, want)
+	for _, reason := range []string{largePDFOutlineReason, partlyEncryptedLargeOutlineReason} {
+		for _, want := range []string{fmt.Sprintf("over %d entries", maxOutlineItems), fmt.Sprintf("over %d levels", maxOutlineDepth)} {
+			t.Run(want, func(t *testing.T) {
+				if !strings.Contains(reason, want) {
+					t.Errorf("reason = %q, want it to say %q", reason, want)
+				}
+			})
+		}
+	}
+}
+
+// TestPartlyEncryptedOutlineReason names what outline mode says of a file
+// whose text the reader cannot decrypt and whose outline listed nothing, for
+// each thing the walk can have found.
+func TestPartlyEncryptedOutlineReason(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		outline outlineState
+		want    string
+	}{
+		{"none", outlineWhole, partlyEncryptedNoOutlineReason},
+		{"damaged", outlineDamaged, partlyEncryptedDamagedOutlineReason},
+		{"too large", outlineTooLarge, partlyEncryptedLargeOutlineReason},
+		{"not opened", outlineUnread, encryptedPDFReason},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := partlyEncryptedOutlineReason(tc.outline); got != tc.want {
+				t.Errorf("reason = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestOutline_PDFPartlyEncryptedWithNoOutline reads a two-page file
+// Ghostscript encrypted with a 40-bit RC4 key and gave no outline: outline
+// mode says it has none, where it used to say its table of contents could not
+// be read, which the text modes had just said outline mode might list.
+func TestOutline_PDFPartlyEncryptedWithNoOutline(t *testing.T) {
+	res := outlineOf(t, mustRead(t, "testdata/encrypted-rc4-40-no-outline.pdf"))
+	if len(res.Entries) != 0 || res.Extractable || res.Reason != partlyEncryptedNoOutlineReason {
+		t.Errorf("want no entries and the no-outline reason, got %+v", res)
 	}
 }
 

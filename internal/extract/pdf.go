@@ -38,8 +38,8 @@ func invalidPDFReason(err error) string {
 
 // encryptedPDFReason is the diagnosis for a PDF whose encryption keeps every
 // read mode out: AES-256 (V=5), a certificate-based handler, and a file whose
-// text partlyEncryptedPDFReason refuses when its outline could not be read
-// either. Such a file is valid, so calling it invalid would send the caller
+// text partlyEncryptedPDFReason refuses when the outline walk could not open
+// it either. Such a file is valid, so calling it invalid would send the caller
 // looking for a better copy of a file that is fine. Shared so every read mode
 // words it the same way. One literal rather than a concatenation, like
 // lockedPDFReason, for the reason noPDFOutlineReason gives.
@@ -57,8 +57,8 @@ const encryptedPDFReason = "cannot read PDF: it is encrypted in a way this reade
 // decrypt into other bytes. The outline walk decrypts all three itself
 // (selfDecrypting), the strings it reads and the object streams the reader
 // takes objects out of, so the caller is pointed at outline mode, which lists
-// the table of contents. In outline mode, when the walk could not list one,
-// the reason is encryptedPDFReason.
+// the table of contents. In outline mode, when the walk lists nothing, the
+// reason says what it found (partlyEncryptedOutlineReason).
 const partlyEncryptedPDFReason = "cannot read PDF text: it is encrypted in a way this reader cannot decrypt for its text, though outline mode may still list its table of contents"
 
 // minRC4KeyBits is the shortest RC4 file key ledongthuc/pdf decrypts
