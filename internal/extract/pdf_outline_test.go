@@ -1052,26 +1052,19 @@ func TestChildAndElement(t *testing.T) {
 	}
 }
 
-// TestOutline_PDFLinksToNothing breaks an outline at each link the walk
-// follows, with each way a link can lead to nothing: a reference past the end
-// of the cross-reference table, one at a generation the table does not hold,
-// and a value written in place that is not an item. Each is damage, reported
-// as such with no entries, since what was read before the break is not the
-// whole outline: a middle item that leads nowhere used to return the items
-// before it as the table of contents, and a first item that leads nowhere used
-// to say there was none. A chain that simply ends, with no /Next or with a
-// null one, is the outline's whole (TestOutline_PDFNullLinks).
+// TestOutline_PDFLinksToNothing breaks an outline at a link the walk follows
+// with a value that is not an item: an object of its own that is a stream,
+// and a number written in place. Each is damage, reported as such with no
+// entries, since what was read before the break is not the whole outline. A
+// link to an object the file does not define is null, and ends its chain
+// (TestOutline_PDFNullLinks).
 func TestOutline_PDFLinksToNothing(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		items    []string
 		from, to string
 	}{
-		{"the catalog's /Outlines at another generation", []string{"<</Title(A)>>"}, "/Outlines 6 0 R", "/Outlines 6 1 R"},
-		{"the first item at another generation", []string{"<</Title(A)>>"}, "/Outlines/First 9 0 R", "/Outlines/First 9 1 R"},
 		{"the first item not a dictionary", []string{"<</Title(A)>>"}, "/Outlines/First 9 0 R", "/Outlines/First 7 0 R"},
-		{"a middle item past the table", []string{"<</Title(A)/Next 99 0 R>>"}, "", ""},
-		{"a middle item at another generation", []string{"<</Title(A)/Next 10 1 R>>", "<</Title(B)>>"}, "", ""},
 		{"a child written in place as a number", []string{"<</Title(A)/First 0/Next 10 0 R>>", "<</Title(B)>>"}, "", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1089,11 +1082,21 @@ func TestOutline_PDFLinksToNothing(t *testing.T) {
 // TestOutline_PDFNullLinks writes each link the walk follows as null, which
 // ISO 32000-1 makes the same as leaving it out: the last item's /Next, a
 // leaf's /First, the first item, and the catalog's /Outlines, which is how
-// pdfcpu removes an outline. Each ends its chain, so the items read are the
-// whole outline and a section of it reads, and a null /Outlines is a document
-// with no outline rather than a damaged one. They were all reported as damage.
+// pdfcpu removes an outline. It also writes links to objects the file does
+// not define, which the standard reads as null (7.3.10): one past the end of
+// the cross-reference table, a free one, and one at a generation the table
+// does not hold, which pdfcpu and qpdf read as the end of the chain. Each ends
+// its chain, so the items read are the whole outline and a section of it
+// reads, and a null /Outlines is a document with no outline rather than a
+// damaged one. They were all reported as damage.
 func TestOutline_PDFNullLinks(t *testing.T) {
 	three := "0 1 A\n0 2 B\n0 3 C\n"
+	threeThenNext := func(next string) []byte {
+		return outlinePDF("",
+			"<</Title(A)/Dest[3 0 R/Fit]/Next 10 0 R>>",
+			"<</Title(B)/Dest[4 0 R/Fit]/Next 11 0 R>>",
+			"<</Title(C)/Dest[5 0 R/Fit]/Next "+next+">>")
+	}
 	for _, tc := range []struct {
 		name     string
 		data     []byte
@@ -1101,16 +1104,18 @@ func TestOutline_PDFNullLinks(t *testing.T) {
 		reason   string
 		sections bool
 	}{
-		{"the last item's /Next", outlinePDF("",
-			"<</Title(A)/Dest[3 0 R/Fit]/Next 10 0 R>>",
-			"<</Title(B)/Dest[4 0 R/Fit]/Next 11 0 R>>",
-			"<</Title(C)/Dest[5 0 R/Fit]/Next null>>"), three, "", true},
+		{"the last item's /Next", threeThenNext("null"), three, "", true},
+		{"a /Next past the table", threeThenNext("99 0 R"), three, "", true},
+		{"a /Next to a free object", threeThenNext("0 0 R"), three, "", true},
+		{"a /Next at another generation", threeThenNext("10 1 R"), three, "", true},
 		{"a leaf's /First", outlinePDF("",
 			"<</Title(A)/Dest[3 0 R/Fit]/First null/Next 10 0 R>>",
 			"<</Title(B)/Dest[4 0 R/Fit]/Next 11 0 R>>",
 			"<</Title(C)/Dest[5 0 R/Fit]>>"), three, "", true},
 		{"the first item", bytes.Replace(outlinePDF("", "<</Title(A)>>"), []byte("/First 9 0 R"), []byte("/First null "), 1), "", noPDFOutlineReason, false},
+		{"the first item at another generation", bytes.Replace(outlinePDF("", "<</Title(A)>>"), []byte("/First 9 0 R"), []byte("/First 9 1 R"), 1), "", noPDFOutlineReason, false},
 		{"the catalog's /Outlines", bytes.Replace(outlinePDF("", "<</Title(A)>>"), []byte("/Outlines 6 0 R"), []byte("/Outlines null "), 1), "", noPDFOutlineReason, false},
+		{"the catalog's /Outlines at another generation", bytes.Replace(outlinePDF("", "<</Title(A)>>"), []byte("/Outlines 6 0 R"), []byte("/Outlines 6 1 R"), 1), "", noPDFOutlineReason, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			res := outlineOf(t, tc.data)
