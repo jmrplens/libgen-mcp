@@ -156,10 +156,10 @@ type outlineSource struct {
 // other way is not walked.
 func outlineOpeners(d document) []func() outlineSource {
 	r, err := openReader(d, nil)
-	switch {
-	case err == nil && encryptionOf(r).version == 0:
+	if err == nil && encryptionOf(r).version == 0 {
 		return []func() outlineSource{func() outlineSource { return outlineSource{r: r, strs: readerStrings(false)} }}
-	case err != nil && !selfDecryptable(err):
+	}
+	if err != nil && !selfDecryptable(err) {
 		return nil
 	}
 	openers := []func() outlineSource{func() outlineSource { return selfDecrypting(d) }}
@@ -597,7 +597,10 @@ func (w *outlineWalk) readNameTree(ctx context.Context, tree node, depth int, re
 	}
 	kids := w.follow(&tree, "Kids")
 	kidRefs := arrayRefs(kids.v)
-	for i := 0; i < kids.v.Len() && !w.items.ended(ctx); i++ {
+	for i := range kids.v.Len() {
+		if w.items.ended(ctx) {
+			return
+		}
 		if unread(kidRefs, i, read) {
 			w.readNameTree(ctx, w.index(kids, kidRefs, i), depth+1, read)
 		}

@@ -21,30 +21,38 @@ func objStmFile(before, dict, eol, data string) ([]byte, int64) {
 // for each edge, and must notice an object stream exactly when the bytes
 // before the read end an object stream's dictionary and stream keyword with
 // an end of line the reader takes, after the object's header, and an
-// endstream keyword follows.
+// endstream keyword follows. A carriage return alone with nothing read after
+// it yet ends the line.
 func TestObjStmView_Notice(t *testing.T) {
 	const objStm = "/Type/ObjStm/N 1/First 4/Length 8"
 	for _, tc := range []struct {
 		name         string
 		before, dict string
 		eol, data    string
+		nothingRead  bool
 		ok           bool
 	}{
-		{"CR LF", "%PDF-1.7\n", objStm, "\r\n", "DATADATA", true},
-		{"LF", "%PDF-1.7\n", objStm, "\n", "DATADATA", true},
-		{"CR alone", "%PDF-1.7\n", objStm, "\r", "DATADATA", true},
-		{"CR then a line feed the reader takes", "%PDF-1.7\n", objStm, "\r", "\nDATADATA", false},
-		{"spaced type", "%PDF-1.7\n", "/Type /ObjStm /N 1", "\n", "DATA", true},
-		{"at the start of the file", "", objStm, "\n", "DATA", true},
-		{"after another object", "%PDF-1.7\n11 0 obj\nnull\nendobj\n", objStm, "\n", "DATA", true},
-		{"another type", "%PDF-1.7\n", "/Type/XRef/W[1 2 1]", "\n", "DATA", false},
-		{"a longer type name", "%PDF-1.7\n", "/Type/ObjStmX", "\n", "DATA", false},
-		{"a space before the end of line", "%PDF-1.7\n", objStm, " \n", "DATA", false},
+		{"CR LF", "%PDF-1.7\n", objStm, "\r\n", "DATADATA", false, true},
+		{"LF", "%PDF-1.7\n", objStm, "\n", "DATADATA", false, true},
+		{"CR alone", "%PDF-1.7\n", objStm, "\r", "DATADATA", false, true},
+		{"CR alone, nothing read", "%PDF-1.7\n", objStm, "\r", "DATADATA", true, true},
+		{"LF, and data that starts with a line feed", "%PDF-1.7\n", objStm, "\n", "\nDATADATA", false, true},
+		{"CR then a line feed the reader takes", "%PDF-1.7\n", objStm, "\r", "\nDATADATA", false, false},
+		{"spaced type", "%PDF-1.7\n", "/Type /ObjStm /N 1", "\n", "DATA", false, true},
+		{"at the start of the file", "", objStm, "\n", "DATA", false, true},
+		{"after another object", "%PDF-1.7\n11 0 obj\nnull\nendobj\n", objStm, "\n", "DATA", false, true},
+		{"another type", "%PDF-1.7\n", "/Type/XRef/W[1 2 1]", "\n", "DATA", false, false},
+		{"a longer type name", "%PDF-1.7\n", "/Type/ObjStmX", "\n", "DATA", false, false},
+		{"a space before the end of line", "%PDF-1.7\n", objStm, " \n", "DATA", false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			data, start := objStmFile(tc.before, tc.dict, tc.eol, tc.data)
 			v := &objStmView{ReaderAt: bytes.NewReader(data)}
-			s, ok := v.notice(start, data[start:])
+			read := data[start:]
+			if tc.nothingRead {
+				read = nil
+			}
+			s, ok := v.notice(start, read)
 			// The data runs to the line feed before endstream.
 			want := objStream{start: start, end: start + int64(len(tc.data)) + 1, in: objRef{id: 12}}
 			if ok != tc.ok || ok && s != want {
@@ -75,11 +83,21 @@ func TestObjStmView_NoticeAHeaderNotItsOwn(t *testing.T) {
 	}
 }
 
+// TestObjStmView_NoticePastTheEnd reads past the end of a file, where the
+// bytes before the read cannot all be read, and notices nothing.
+func TestObjStmView_NoticePastTheEnd(t *testing.T) {
+	data, start := objStmFile("%PDF-1.7\n", "/Type/ObjStm", "\n", "DATA")
+	v := &objStmView{ReaderAt: bytes.NewReader(data[:start])}
+	if s, ok := v.notice(start+objStmHead, nil); ok {
+		t.Errorf("notice = %+v, want nothing", s)
+	}
+}
+
 // TestObjStmView_EndOfData finds the endstream keyword at the start of the
 // data, across the boundary between two of the scan's reads, at the end of the
 // file, and not past the end of a file that has none.
 func TestObjStmView_EndOfData(t *testing.T) {
-	across := scanBuffer + len(endStreamKeyword) - 4
+	across := scanBuffer - 4
 	for _, tc := range []struct {
 		name string
 		data string
@@ -119,23 +137,27 @@ func TestObjStmView_ReadAt(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		crypt  *stringCrypt
+		first  int64
 		off, n int64
 		want   string
 		counts int
 	}{
-		{"the data's start, decrypted", &c, start, 8, plain[:8], 1},
-		{"inside the data, decrypted", &c, start + 4, 6, plain[4:10], 0},
-		{"into the end of line after the data", &c, start + int64(len(plain)) - 2, 4, extent[len(plain)-2:] + "e", 0},
-		{"from before the data", &c, start - 4, 8, string(data[start-4 : start+4]), 0},
-		{"past the data", &c, int64(len(data)) - 7, 7, "endobj\n", 0},
-		{"the data's start, counted only", nil, start, 8, enc[:8], 1},
+		{"the data's start again, decrypted", &c, 1, start, 8, plain[:8], 1},
+		{"going on inside the data, decrypted", &c, 4, start + 4, 6, plain[4:10], 0},
+		{"going on into the end of line after the data", &c, int64(len(plain)) - 2, start + int64(len(plain)) - 2, 4, extent[len(plain)-2:] + "e", 0},
+		{"inside the data, not going on from the last read", &c, 4, start + 6, 4, enc[6:10], 0},
+		{"from before the data", &c, 1, start - 4, 8, string(data[start-4 : start+4]), 0},
+		{"past the data", &c, 1, int64(len(data)) - 7, 7, "endobj\n", 0},
+		{"the data's start again, counted only", nil, 1, start, 8, enc[:8], 1},
+		{"going on inside the data, counted only", nil, 4, start + 4, 6, enc[4:10], 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			// The reader reads the data from its start, which is where the
 			// view notices the stream, before it reads on.
 			v := &objStmView{ReaderAt: bytes.NewReader(data), crypt: tc.crypt}
-			if _, err := v.ReadAt(make([]byte, 1), start); err != nil {
-				t.Fatal(err)
+			first := make([]byte, tc.first)
+			if _, err := v.ReadAt(first, start); err != nil || tc.crypt != nil && string(first) != plain[:tc.first] {
+				t.Fatalf("the first read = %q (%v), want %q", first, err, plain[:tc.first])
 			}
 			p := make([]byte, tc.n)
 			n, err := v.ReadAt(p, tc.off)
@@ -143,6 +165,18 @@ func TestObjStmView_ReadAt(t *testing.T) {
 				t.Errorf("ReadAt = %q (%v), %d more inflations, want %q, %d", p[:n], err, v.inflated()-1, tc.want, tc.counts)
 			}
 		})
+	}
+}
+
+// TestObjStmView_ReadAtTheFileStart reads a file from its first byte, where
+// no stream has been inflated yet, through a view that decrypts: the bytes
+// are the file's.
+func TestObjStmView_ReadAtTheFileStart(t *testing.T) {
+	c := stringCrypt{key: []byte{1, 2, 3, 4, 5}, streams: true}
+	v := &objStmView{ReaderAt: strings.NewReader("%PDF-1.7\n"), crypt: &c}
+	p := make([]byte, 8)
+	if n, err := v.ReadAt(p, 0); err != nil || string(p[:n]) != "%PDF-1.7" || v.inflated() != 0 {
+		t.Errorf("ReadAt = %q (%v), %d inflations, want the header and none", p[:n], err, v.inflated())
 	}
 }
 
@@ -212,13 +246,16 @@ func TestStringCrypt_DecryptStream(t *testing.T) {
 		want []byte
 	}{
 		{"whole blocks", append(iv, sealed...), padded},
+		{"one block", append(iv, sealed[:aes.BlockSize]...), padded[:aes.BlockSize]},
 		{"and a line feed", append(append(iv, sealed...), '\n'), padded},
 		{"and a carriage return and a line feed", append(append(iv, sealed...), '\r', '\n'), padded},
 		{"the vector alone", iv, nil},
 		{"the vector and part of a block", append(iv, sealed[:15]...), nil},
+		{"the vector and two bytes", append(iv, sealed[:2]...), nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := c.decryptStream(tc.data, in); !bytes.Equal(got, tc.want) {
+			// Nothing decrypted is nil, not an empty slice.
+			if got := c.decryptStream(tc.data, in); !bytes.Equal(got, tc.want) || (got == nil) != (tc.want == nil) {
 				t.Errorf("AES decryptStream = %q, want %q", got, tc.want)
 			}
 		})

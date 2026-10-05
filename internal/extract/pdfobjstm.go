@@ -30,7 +30,9 @@ import (
 // selfDecrypting opens a file whose encryption it hid from the reader, the
 // view also shows the reader each object stream's data decrypted, without
 // which the reader could inflate none of them, so no object in one could be
-// read.
+// read. The reader inflates a stream from its start, each read beginning
+// where the one before it ended, so a read is in the stream being inflated
+// when it begins where the last read of it ended.
 type objStmView struct {
 	io.ReaderAt
 	// crypt decrypts the data of an object stream, or is nil for a file the
@@ -39,6 +41,10 @@ type objStmView struct {
 	// streams are the object streams noticed so far, by where their data
 	// starts.
 	streams []objStream
+	// inflating is the object stream the reader is inflating, and next where
+	// its next read of it begins.
+	inflating objStream
+	next      int64
 	// shown is the object stream whose data plain holds decrypted.
 	shown objStream
 	plain []byte
@@ -99,36 +105,36 @@ func (v *objStmView) inflated() int {
 }
 
 // ReadAt reads p from the file at off, counting a read that starts an object
-// stream's data, and, with crypt set, writing over the part of p that holds an
-// object stream's data with that data decrypted.
+// stream's data, and, with crypt set, writing over what p holds of the data of
+// the stream being inflated with that data decrypted. A read that neither
+// starts a stream's data nor goes on with the one being inflated is the file
+// as it is.
 func (v *objStmView) ReadAt(p []byte, off int64) (int, error) {
 	n, err := v.ReaderAt.ReadAt(p, off)
-	s, ok := v.streamAt(off, p[:n])
-	if !ok {
-		return n, err
-	}
-	if off == s.start {
-		v.inflations++
-	}
-	if v.crypt != nil {
-		if plain, at := v.decrypted(s), off-s.start; at < int64(len(plain)) {
-			copy(p[:n], plain[at:])
+	if off != v.next {
+		s, ok := v.streamAt(off, p[:n])
+		if !ok {
+			return n, err
 		}
+		v.inflations++
+		v.inflating = s
+	}
+	v.next = off + int64(n)
+	if v.crypt != nil {
+		plain := v.decrypted(v.inflating)
+		copy(p[:n], plain[min(off-v.inflating.start, int64(len(plain))):])
 	}
 	return n, err
 }
 
-// streamAt returns the object stream whose data holds off, noticing one whose
-// data starts there, where read, what the read at off returned, begins.
+// streamAt returns the object stream whose data starts at off, noticing one
+// there, where read, what the read at off returned, begins.
 func (v *objStmView) streamAt(off int64, read []byte) (objStream, bool) {
 	i, found := slices.BinarySearchFunc(v.streams, off, func(s objStream, off int64) int {
 		return cmp.Compare(s.start, off)
 	})
 	if found {
 		return v.streams[i], true
-	}
-	if i > 0 && off < v.streams[i-1].end {
-		return v.streams[i-1], true
 	}
 	s, ok := v.notice(off, read)
 	if ok {
@@ -171,11 +177,11 @@ func headerRef(id, gen string) (objRef, bool) {
 	return ref, n > 0
 }
 
-// endOfData returns where the endstream keyword after off is, searching no
-// further than maxObjStmBytes.
+// endOfData returns where the endstream keyword after off is, in the
+// maxObjStmBytes from off.
 func (v *objStmView) endOfData(off int64) (int64, bool) {
-	r := io.NewSectionReader(v.ReaderAt, off, maxObjStmBytes+int64(len(endStreamKeyword)))
-	buf := make([]byte, scanBuffer+len(endStreamKeyword))
+	r := io.NewSectionReader(v.ReaderAt, off, maxObjStmBytes)
+	buf := make([]byte, scanBuffer)
 	kept := 0
 	for from := off; ; {
 		n, err := io.ReadFull(r, buf[kept:])
@@ -186,7 +192,7 @@ func (v *objStmView) endOfData(off int64) (int64, bool) {
 			return 0, false
 		}
 		// The last bytes are kept, so a keyword across two reads is found.
-		kept = len(endStreamKeyword) - 1
+		kept = len(endStreamKeyword)
 		from += int64(len(buf) - kept)
 		copy(buf, buf[len(buf)-kept:])
 	}

@@ -308,9 +308,9 @@ func outlinePDF(catalogExtra string, objs ...string) []byte {
 // in the catalog's /Dests, a string in a name tree whose value is a dictionary,
 // a GoTo action with an explicit page and with a name, a destination held in
 // an object of its own, a link out, a name nobody defines, a destination at an
-// object that is not a page, and a page given as a number, as a link into
-// another file gives it. An item with a blank title is left out and its child
-// is not.
+// object that is not a page, a page given as a number, as a link into another
+// file gives it, and a dictionary that holds no destination. An item with a
+// blank title is left out and its child is not.
 func destinationFormsPDF() []byte {
 	return outlinePDF("/Dests<</chap2[4 0 R/Fit]>>/Names<</Dests 20 0 R>>",
 		"<</Title(Name in the catalog's Dests)/Dest/chap2/Next 10 0 R>>",
@@ -323,11 +323,12 @@ func destinationFormsPDF() []byte {
 		"<</Title( )/Dest[3 0 R/Fit]/First 17 0 R/Next 18 0 R>>",
 		"<</Title(Under an untitled item)/Dest[5 0 R/Fit]>>",
 		"<</Title(GoTo through a name)/A<</S/GoTo/D/chap2>>/Next 19 0 R>>",
-		"<</Title(Destination held elsewhere)/Dest 22 0 R>>",
+		"<</Title(Destination held elsewhere)/Dest 22 0 R/Next 24 0 R>>",
 		"<</Kids[21 0 R]>>",
 		"<</Limits[(chap3)(chap3)]/Names[(chap3) 23 0 R]>>",
 		"[5 0 R/Fit]",
 		"<</D[5 0 R/XYZ 0 0 0]>>",
+		"<</Title(A dictionary with no destination)/Dest<</S/GoTo>>>>",
 	)
 }
 
@@ -491,7 +492,8 @@ func TestOutline_PDFEveryDestinationForm(t *testing.T) {
 		"0 0 A page number, as a remote link has\n" +
 		"1 3 Under an untitled item\n" +
 		"0 2 GoTo through a name\n" +
-		"0 3 Destination held elsewhere\n"
+		"0 3 Destination held elsewhere\n" +
+		"0 0 A dictionary with no destination\n"
 	if got := entryLines(res.Entries); got != want {
 		t.Errorf("outline:\n%s\nwant:\n%s", got, want)
 	}
@@ -974,6 +976,15 @@ func TestOutlineOpeners(t *testing.T) {
 	}
 }
 
+// TestReaderDecrypting_NotAPDF opens nothing for a file the reader refuses,
+// which an opener never asks it to open, rather than a source with no reader
+// that the walk would read as a broken file.
+func TestReaderDecrypting_NotAPDF(t *testing.T) {
+	if src := readerDecrypting(document{r: strings.NewReader("not a PDF"), size: 9}); src.r != nil || src.view != nil {
+		t.Errorf("readerDecrypting = %+v, want nothing", src)
+	}
+}
+
 // TestWalkOutline_Unread walks a file its opener does not open, and one whose
 // page tree is unsafe to walk: neither is walked, and each says so, so that
 // the next opener is tried.
@@ -1231,6 +1242,8 @@ func TestReadNameTree(t *testing.T) {
 		want  string
 	}{
 		{"a key with no value", nameTreePDF("<</Names[(a)[3 0 R/Fit] (b)[4 0 R/Fit] (c)]>>"), false, 0, []string{"a", "b", "c"}, `"a"=1 "b"=2 "c"=0`},
+		{"a key with no value after one with a value", nameTreePDF("<</Kids[6 0 R 7 0 R]>>", "<</Names[(c)[4 0 R/Fit]]>>", "<</Names[(a)[3 0 R/Fit] (c)]>>"), false, 0, []string{"a", "c"}, `"a"=1 "c"=2`},
+		{"an empty name, the last one", nameTreePDF("<</Names[()[4 0 R/Fit]]>>"), false, 0, []string{""}, `""=2`},
 		{"a name nobody asked for", nameTreePDF("<</Names[(a)[3 0 R/Fit] (b)[4 0 R/Fit]]>>"), false, 0, []string{"b"}, `"b"=2`},
 		{"two entries asking for one name", nameTreePDF("<</Names[(a)[4 0 R/Fit]]>>"), false, 0, []string{"a", "a"}, `"a"=2 "a"=2`},
 		{"kids lead back to the node", nameTreePDF("<</Names[(a)[4 0 R/Fit]]/Kids[5 0 R]>>"), false, 0, []string{"a"}, `"a"=2`},
@@ -1252,7 +1265,7 @@ func TestReadNameTree(t *testing.T) {
 // TestReadNameTree_EachObjectOnce reads trees that refer to one object many
 // times. One whose every node lists the same child twice, 31 levels deep, has
 // two billion paths through it and 32 objects, and must read in a moment; a
-// /Names array two nodes share is parsed once.
+// /Kids or a /Names array two nodes share is parsed once.
 func TestReadNameTree_EachObjectOnce(t *testing.T) {
 	t.Run("a node listed twice at every level", func(t *testing.T) {
 		objs := make([]string, maxNameTreeDepth)
@@ -1266,6 +1279,20 @@ func TestReadNameTree_EachObjectOnce(t *testing.T) {
 		})
 		if got != `"a"=2` {
 			t.Errorf("pages = %s, want \"a\"=2", got)
+		}
+	})
+	t.Run("a /Kids array two nodes share", func(t *testing.T) {
+		data := nameTreePDF("<</Kids[6 0 R 7 0 R]>>", "<</Kids 8 0 R>>", "<</Kids 8 0 R>>", "[9 0 R]", "<</Names[(a)[4 0 R/Fit]]>>")
+		file := &readsAt{ReaderAt: bytes.NewReader(data), off: int64(bytes.Index(data, []byte("\n8 0 obj\n")) + 1)}
+		r, err := pdf.NewReader(file, int64(len(data)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		root := r.Trailer().Key("Root")
+		w := &outlineWalk{root: node{v: root}, strs: readerStrings(false), named: map[string][]int{"a": {0}}, entries: make([]OutlineEntry, 1)}
+		w.readNameTree(context.Background(), node{v: root.Key("T")}, 0, map[objRef]bool{})
+		if w.entries[0].Page != 2 || file.count != 1 {
+			t.Errorf("page %d, /Kids read %d times, want page 2 read once", w.entries[0].Page, file.count)
 		}
 	})
 	t.Run("a /Names array two nodes share", func(t *testing.T) {
