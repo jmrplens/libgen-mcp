@@ -351,6 +351,32 @@ func TestFindMatches_Boundaries(t *testing.T) {
 	})
 }
 
+// TestFindMatches_SnippetWindow pins the snippet to its exact runes: the match
+// with half the window on each side. The offset assertions above say where a
+// match is and nothing about what the caller is shown around it.
+func TestFindMatches_SnippetWindow(t *testing.T) {
+	got := findMatches("xx needle yy", "needle", false, 1, 4)
+	if len(got) != 1 {
+		t.Fatalf("got %d matches, want 1", len(got))
+	}
+	if got[0].Snippet != "x needle y" {
+		t.Errorf("Snippet = %q, want %q: two runes either side of the match", got[0].Snippet, "x needle y")
+	}
+}
+
+// TestFindMatches_TouchingMatches verifies a match that starts on the rune
+// after the previous one ends is found, and that the scan resumes after a match
+// rather than inside it or past the next one.
+func TestFindMatches_TouchingMatches(t *testing.T) {
+	var offsets []int
+	for _, m := range findMatches("abab ab", "ab", false, 1, 40) {
+		offsets = append(offsets, m.CharOffset)
+	}
+	if len(offsets) != 3 || offsets[0] != 0 || offsets[1] != 2 || offsets[2] != 5 {
+		t.Errorf("offsets = %v, want [0 2 5]", offsets)
+	}
+}
+
 // TestFindMatches_QueryIsLiteralNotARegex pins that the matcher compares runes and
 // never interprets the query.
 //

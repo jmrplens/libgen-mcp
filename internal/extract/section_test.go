@@ -134,6 +134,77 @@ func TestSection_PDFResumeOutsideTheSection(t *testing.T) {
 	}
 }
 
+// TestSection_PDFResumeAtTheSectionEdges is the other side of the refusal: a
+// resume page on the section's first page or on its last is inside it, and so
+// is any page of the last section, which runs to the end of the document.
+func TestSection_PDFResumeAtTheSectionEdges(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		index, start int
+		wantEnd      int
+	}{
+		{name: "the first page", index: 3, start: 3, wantEnd: 4},
+		{name: "the last page", index: 3, start: 4, wantEnd: 4},
+		{name: "a page of the last section", index: 10, start: 8, wantEnd: 8},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sc, err := Section(context.Background(), openFile(t, sectionsPDF), SectionRef{Index: tc.index}, Req{StartPage: tc.start, MaxPages: 10})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !sc.Extractable || sc.PageStart != tc.start || sc.PageEnd != tc.wantEnd {
+				t.Errorf("got pages %d-%d extractable=%v reason=%q, want %d-%d", sc.PageStart, sc.PageEnd, sc.Extractable, sc.Reason, tc.start, tc.wantEnd)
+			}
+		})
+	}
+}
+
+// TestPDFSection_ReadsThatAreNotTheEntrysFault verifies that a section the
+// reader could not give text for is answered with the reader's own diagnosis,
+// never with the error that blames the entry for pointing past the last page:
+// a page with no text layer on the document's last page, and a file the reader
+// will not open, which reports no page count at all. The span keeps the
+// outline's boundary when the read learned no page count to clamp it to.
+func TestPDFSection_ReadsThatAreNotTheEntrysFault(t *testing.T) {
+	entries := []OutlineEntry{{Index: 1, Title: "One", Page: 1}, {Index: 2, Title: "Two", Page: 4}}
+	for _, tc := range []struct {
+		name       string
+		doc        document
+		wantReason string
+		wantEnd    int
+	}{
+		{name: "a page with no text layer", doc: docFor(t, writeBytes(t, t.TempDir(), "cover.pdf", graphicsOnlyPDF())), wantReason: noTextLayerReason, wantEnd: 1},
+		{name: "a file the reader will not open", doc: docFor(t, "testdata/encrypted-aes256.pdf"), wantReason: encryptedPDFReason, wantEnd: 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sc, err := pdfSection(context.Background(), tc.doc, entries, 0, Req{})
+			if err != nil {
+				t.Fatalf("err = %v, want the reader's diagnosis and no error", err)
+			}
+			if sc.Extractable || sc.Reason != tc.wantReason {
+				t.Errorf("extractable=%v reason=%q, want %q", sc.Extractable, sc.Reason, tc.wantReason)
+			}
+			if sc.Span.PageStart != 1 || sc.Span.PageEnd != tc.wantEnd {
+				t.Errorf("span pages %d-%d, want 1-%d", sc.Span.PageStart, sc.Span.PageEnd, tc.wantEnd)
+			}
+		})
+	}
+}
+
+// TestPDFSection_ABoundaryPastTheLastPage verifies a section whose next entry
+// points past the end of the document is read to the last page, and its span
+// ends there rather than at a page the document does not have.
+func TestPDFSection_ABoundaryPastTheLastPage(t *testing.T) {
+	entries := []OutlineEntry{{Index: 1, Title: "Seven", Page: 7}, {Index: 2, Title: "Phantom", Page: 99}}
+	sc, err := pdfSection(context.Background(), docFor(t, sectionsPDF), entries, 0, wholeSection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sc.Extractable || sc.Span.PageEnd != 8 || sc.PageEnd != 8 {
+		t.Errorf("span ends on %d, chunk on %d, extractable=%v, want both on page 8", sc.Span.PageEnd, sc.PageEnd, sc.Extractable)
+	}
+}
+
 // TestSection_PDFEntryWithoutAPage verifies an entry whose bookmark resolved to
 // no page is refused by name instead of read from page one.
 func TestSection_PDFEntryWithoutAPage(t *testing.T) {
@@ -302,6 +373,27 @@ func TestSection_EPUBOffsetOutsideTheSection(t *testing.T) {
 	}
 }
 
+// TestSection_EPUBOffsetAtTheSectionStart is the other side of the refusal: a
+// resume offset on the section's first character is inside it, and reads from
+// there.
+func TestSection_EPUBOffsetAtTheSectionStart(t *testing.T) {
+	f := openFile(t, sectionsEPUB)
+	whole, err := Section(context.Background(), f, SectionRef{Index: 4}, wholeSection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if whole.Span.CharStart == 0 {
+		t.Fatal("section 4 starts the text, so an offset on its start is no resume at all")
+	}
+	sc, err := Section(context.Background(), f, SectionRef{Index: 4}, Req{Offset: whole.Span.CharStart, MaxChars: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sc.CharStart != whole.Span.CharStart || sc.Text != whole.Text {
+		t.Errorf("resumed at %d with %q, want the whole section from %d", sc.CharStart, sc.Text, whole.Span.CharStart)
+	}
+}
+
 // TestSection_EPUB2NCXFragments verifies an EPUB with no nav document resolves
 // its NCX content links, fragments included, the same way.
 func TestSection_EPUB2NCXFragments(t *testing.T) {
@@ -432,7 +524,7 @@ func TestResolveSection(t *testing.T) {
 		{name: "exact title ignoring case and spacing", ref: SectionRef{Title: " chapter 2 methods "}, want: 2},
 		{name: "contained title", ref: SectionRef{Title: "foundations"}, want: 0},
 		{name: "exact title wins over containment", ref: SectionRef{Title: "Results summary"}, want: 4},
-		{name: "ambiguous exact title", ref: SectionRef{Title: "summary"}, errHint: `2 "Summary" (p.4), 4 "Summary"`},
+		{name: "ambiguous exact title", ref: SectionRef{Title: "summary"}, errHint: `mean: 2 "Summary" (p.4), 4 "Summary".`},
 		{name: "ambiguous contained title", ref: SectionRef{Title: "chapter"}, errHint: "matches 2 entries"},
 		{name: "unknown title", ref: SectionRef{Title: "epilogue"}, errHint: "no outline entry matches"},
 		{name: "empty title", ref: SectionRef{Title: "  "}, errHint: "section is empty"},

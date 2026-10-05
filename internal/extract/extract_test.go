@@ -220,6 +220,30 @@ func TestExtract_SniffingDoesNotRescueUnknownContent(t *testing.T) {
 	}
 }
 
+// TestExtract_HalfAnEPUBSignatureIsNotAnEPUB verifies an extensionless file is
+// taken for an EPUB only when it is a zip and names the EPUB media type: a zip
+// of anything else, and text that merely mentions the media type, are each
+// reported as unrecognized rather than read as a broken EPUB.
+func TestExtract_HalfAnEPUBSignatureIsNotAnEPUB(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{name: "a zip of something else", body: "PK\x03\x04\x14\x00\x00\x00\x00\x00mimetypeapplication/zip"},
+		{name: "text naming the media type", body: "mimetype is application/epub+zip, says this note"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := Extract(context.Background(), openFile(t, writeTemp(t, "abcdef", []byte(tc.body))), Req{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.Extractable || c.Format != "" || !strings.HasPrefix(c.Reason, "unrecognized content") {
+				t.Errorf("format=%q reason=%q, want an unrecognized file", c.Format, c.Reason)
+			}
+		})
+	}
+}
+
 // writeTemp writes body to a file named name inside the test's own temp dir and
 // returns its path. The name is a literal from the caller, never external input.
 func writeTemp(t *testing.T, name string, body []byte) string {

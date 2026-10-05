@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // buildPDF assembles a minimal but structurally valid PDF from the given object
@@ -207,6 +208,60 @@ func TestExtract_PDFMaxCharsStop(t *testing.T) {
 	}
 	if c.NextCursor.Page < 2 {
 		t.Errorf("want next-page cursor >= 2, got %d", c.NextCursor.Page)
+	}
+}
+
+// TestExtract_PDFMaxCharsReachedAtAPageEnd pins the character budget at its
+// edge: a budget the first page fills exactly is spent, so the read stops
+// before the second page instead of starting it.
+func TestExtract_PDFMaxCharsReachedAtAPageEnd(t *testing.T) {
+	f := openFile(t, sectionsPDF)
+	first, err := Extract(context.Background(), f, Req{MaxPages: 1, MaxChars: 1 << 20})
+	if err != nil || !first.Extractable {
+		t.Fatalf("page 1: %v %q", err, first.Reason)
+	}
+	c, err := Extract(context.Background(), f, Req{MaxPages: 5, MaxChars: utf8.RuneCountInString(first.Text)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.PageEnd != 1 || !c.Truncated || !c.HasMore || c.NextCursor.Page != 2 {
+		t.Errorf("got pages %d-%d truncated=%v has_more=%v next=%d, want page 1 alone and page 2 next",
+			c.PageStart, c.PageEnd, c.Truncated, c.HasMore, c.NextCursor.Page)
+	}
+}
+
+// TestPDFRange_WithDefaults verifies a window left at zero takes the package's
+// defaults, starting on page 1, and a window the caller set is kept as given.
+func TestPDFRange_WithDefaults(t *testing.T) {
+	if got, want := (pdfRange{last: 3}).withDefaults(), (pdfRange{start: 1, last: 3, maxPages: defaultMaxPages, maxChars: defaultMaxChars}); got != want {
+		t.Errorf("zero window = %+v, want %+v", got, want)
+	}
+	if got, want := (pdfRange{start: 2, last: 3, maxPages: 4, maxChars: 5}).withDefaults(), (pdfRange{start: 2, last: 3, maxPages: 4, maxChars: 5}); got != want {
+		t.Errorf("set window = %+v, want it kept as %+v", got, want)
+	}
+}
+
+// TestExtract_PDFWithNoPages verifies a PDF whose page tree holds no page is
+// reported the way the outline reports it, as having no text layer, and not
+// as a start page past the end of a document the caller asked nothing of.
+func TestExtract_PDFWithNoPages(t *testing.T) {
+	path := writeBytes(t, t.TempDir(), "empty.pdf", buildPDF([]string{
+		"<</Type/Catalog/Pages 2 0 R>>",
+		"<</Type/Pages/Kids[]/Count 0>>",
+	}))
+	c, err := Extract(context.Background(), openFile(t, path), Req{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Extractable || c.Reason != noTextLayerReason || c.TotalPages != 0 {
+		t.Errorf("got extractable=%v total=%d reason=%q, want no text layer and no pages", c.Extractable, c.TotalPages, c.Reason)
+	}
+	res, err := Outline(context.Background(), openFile(t, path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Reason != c.Reason {
+		t.Errorf("outline reason %q, want the one Extract gives, %q", res.Reason, c.Reason)
 	}
 }
 
