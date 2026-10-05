@@ -35,19 +35,22 @@ const largePDFOutlineReason = "the embedded table of contents is larger than thi
 
 // Bounds on the outline walk. An outline is a linked structure the file
 // controls, so a /Next or /First that leads back to an item already read is a
-// cycle, and the walk stops at it rather than going round it. The budgets are
-// what bound the work when the structure is merely enormous, the same answer
-// pageTreeReason gives a page tree.
+// cycle, and the walk stops at it rather than going round it. The item budget
+// is what bounds the work when the structure is merely enormous, the same
+// answer pageTreeReason gives a page tree. maxOutlineItems is far past any
+// real table of contents, and maxOutlineDepth matches maxPageTreeDepth.
 //
-// maxOutlineItems is far past any real table of contents, and maxOutlineDepth
-// matches maxPageTreeDepth. maxNameTreeVisits bounds the named destinations
-// read in, of which a document holds one per link target rather than one per
-// outline entry, so it is the larger of the two.
+// The name tree has no budget of names, because no number is past every real
+// one: a document holds a named destination for every link target, and the
+// Intel 64 and IA-32 manual holds 292,930 of them. A budget of 50,000 left
+// most of its entries on page 0 with nothing saying so. readNameTree reads
+// each object of the tree once instead, so the read is as long as the tree
+// the file holds, keeps only the names the outline asks for, and ends with
+// the read's context. maxNameTreeDepth bounds its descent.
 const (
-	maxOutlineItems   = 20_000
-	maxOutlineDepth   = 64
-	maxNameTreeVisits = 50_000
-	maxNameTreeDepth  = 32
+	maxOutlineItems  = 20_000
+	maxOutlineDepth  = 64
+	maxNameTreeDepth = 32
 )
 
 // ledongthuc/pdf resolves a reference as it is read and keeps no object number
@@ -128,6 +131,9 @@ func pdfBookmarkEntries(ctx context.Context, d document) (entries []OutlineEntry
 	w := newOutlineWalk(r.Trailer(), strs)
 	outlines := w.link(&w.root, "Outlines")
 	w.walk(ctx, w.link(&outlines, "First"), 0)
+	if w.state == outlineWhole {
+		w.resolveNames(ctx)
+	}
 	if w.state != outlineWhole {
 		return nil, w.state, w.items.err
 	}
@@ -222,15 +228,20 @@ type walkBudget struct {
 // spend takes one step from the budget and reports whether the walk, running
 // under ctx, may take it.
 func (b *walkBudget) spend(ctx context.Context) bool {
-	if b.left <= 0 || b.err != nil {
-		return false
-	}
-	if err := ctx.Err(); err != nil {
-		b.err = err
+	if b.left <= 0 || b.ended(ctx) {
 		return false
 	}
 	b.left--
 	return true
+}
+
+// ended reports whether ctx, or an earlier step's, has ended, keeping the
+// error, without taking a step.
+func (b *walkBudget) ended(ctx context.Context) bool {
+	if b.err == nil {
+		b.err = ctx.Err()
+	}
+	return b.err != nil
 }
 
 // node is a value the outline walk reads and the object its strings are
@@ -251,7 +262,8 @@ type outlineWalk struct {
 	root node
 	// strs decodes the strings the reader hands over.
 	strs stringDecoder
-	// items bounds the outline items read.
+	// items bounds the outline items read, and keeps the context's error for
+	// the name tree read as well.
 	items walkBudget
 	// seen holds a digest of each item read, to stop at a cycle.
 	seen map[[sha256.Size]byte]bool
@@ -263,21 +275,15 @@ type outlineWalk struct {
 	// up through the catalog parsed the whole dictionary again for every
 	// outline item that named one.
 	legacyDests *pdf.Value
-	// dests holds the name tree's named destinations, read in on first use.
-	dests map[string]nameEntry
+	// named holds, by name, the index of each entry whose destination is a
+	// name /Dests does not hold, for the name tree to give a page once the
+	// walk is done. A document holds a destination for every link in it and
+	// the outline names a few of them, so the tree is read once, for these.
+	named map[string][]int
 	// entries is the outline so far, in document order.
 	entries []OutlineEntry
 	// state is what the walk has found the outline to be so far.
 	state outlineState
-}
-
-// nameEntry is where a name tree holds a destination: its position in a leaf's
-// /Names array. The destination is resolved when an outline item asks for it
-// rather than when the tree is read, because a document holds a destination
-// for every link in it and the outline names a few of them.
-type nameEntry struct {
-	names pdf.Value
-	at    int
 }
 
 // newOutlineWalk starts an outline read of the document whose trailer is
@@ -289,6 +295,7 @@ func newOutlineWalk(trailer pdf.Value, strs stringDecoder) *outlineWalk {
 		strs:  strs,
 		items: walkBudget{left: maxOutlineItems},
 		seen:  map[[sha256.Size]byte]bool{},
+		named: map[string][]int{},
 	}
 }
 
@@ -343,7 +350,8 @@ func (w *outlineWalk) walk(ctx context.Context, item node, level int) {
 			return
 		}
 		if title := outlineTitle(textString(w.str(child(&item, "Title")))); title != "" {
-			w.entries = append(w.entries, OutlineEntry{Title: title, Level: level, Page: w.destPage(ctx, &item)})
+			page := w.destPage(&item, len(w.entries))
+			w.entries = append(w.entries, OutlineEntry{Title: title, Level: level, Page: page})
 		}
 		w.walk(ctx, w.link(&item, "First"), level+1)
 		item = w.link(&item, "Next")
@@ -401,8 +409,11 @@ func outlineTitle(text string) string {
 
 // destPage resolves an outline item's /Dest, or the /D of its GoTo action, to
 // a 1-based page number, and returns 0 when it does not lead to a page of this
-// document.
-func (w *outlineWalk) destPage(ctx context.Context, item *node) int {
+// document. A name, looked up as a name and a string as a string, is read
+// from the PDF 1.1 /Dests dictionary, and one that is not there gives 0 for
+// now: it is recorded under at, the index of the entry that asks for it, for
+// resolveNames to look up in the name tree.
+func (w *outlineWalk) destPage(item *node, at int) int {
 	dest := child(item, "Dest")
 	if dest.v.IsNull() {
 		action := child(item, "A")
@@ -411,11 +422,43 @@ func (w *outlineWalk) destPage(ctx context.Context, item *node) int {
 		}
 		dest = child(&action, "D")
 	}
-	explicit := w.explicit(ctx, dest)
-	if explicit.Kind() != pdf.Array {
+	var name string
+	switch dest.v.Kind() {
+	case pdf.Name:
+		name = dest.v.Name()
+	case pdf.String:
+		name = w.str(dest)
+	default:
+		return w.pageOf(dest.v)
+	}
+	if legacy := w.legacy(name); !legacy.IsNull() {
+		return w.pageOf(legacy)
+	}
+	w.named[name] = append(w.named[name], at)
+	return 0
+}
+
+// legacy looks name up in the PDF 1.1 /Dests dictionary, which is read in
+// once, on first use.
+func (w *outlineWalk) legacy(name string) pdf.Value {
+	if w.legacyDests == nil {
+		d := w.root.v.Key("Dests")
+		w.legacyDests = &d
+	}
+	return w.legacyDests.Key(name)
+}
+
+// pageOf returns the 1-based page an explicit destination names, a
+// destination stored as a dictionary being its /D, and 0 when it names no
+// page of this document.
+func (w *outlineWalk) pageOf(dest pdf.Value) int {
+	if dest.Kind() == pdf.Dict {
+		dest = dest.Key("D")
+	}
+	if dest.Kind() != pdf.Array {
 		return 0
 	}
-	m := leadingReferenceRE.FindStringSubmatch(explicit.String())
+	m := leadingReferenceRE.FindStringSubmatch(dest.String())
 	if m == nil {
 		return 0
 	}
@@ -425,73 +468,74 @@ func (w *outlineWalk) destPage(ctx context.Context, item *node) int {
 	return w.pages[m[1]+" "+m[2]]
 }
 
-// explicit turns a named destination into the explicit one it names, and
-// returns an explicit destination as it is. A name is looked up as a name and
-// a string as a string, and a destination stored as a dictionary is its /D.
-func (w *outlineWalk) explicit(ctx context.Context, dest node) pdf.Value {
-	d := dest.v
-	switch d.Kind() {
-	case pdf.Name:
-		d = w.named(ctx, d.Name())
-	case pdf.String:
-		d = w.named(ctx, w.str(dest))
+// resolveNames reads the /Names /Dests name tree, when an entry named a
+// destination /Dests does not hold, and gives each such entry the page the
+// tree's destination for its name leads to.
+func (w *outlineWalk) resolveNames(ctx context.Context) {
+	if len(w.named) == 0 {
+		return
 	}
-	if d.Kind() == pdf.Dict {
-		return d.Key("D")
-	}
-	return d
+	names := child(&w.root, "Names")
+	w.readNameTree(ctx, child(&names, "Dests"), 0, map[objRef]bool{})
 }
 
-// named looks a destination name up in the PDF 1.1 /Dests dictionary, and
-// then in the /Names /Dests name tree, each read in once, on first use, the
-// tree under ctx.
-func (w *outlineWalk) named(ctx context.Context, name string) pdf.Value {
-	if w.legacyDests == nil {
-		d := w.root.v.Key("Dests")
-		w.legacyDests = &d
-	}
-	if dest := w.legacyDests.Key(name); !dest.IsNull() {
-		return dest
-	}
-	if w.dests == nil {
-		w.dests = map[string]nameEntry{}
-		visits := walkBudget{left: maxNameTreeVisits}
-		names := child(&w.root, "Names")
-		w.collectNameTree(ctx, child(&names, "Dests"), 0, &visits)
-	}
-	e, ok := w.dests[name]
-	if !ok {
-		return pdf.Value{}
-	}
-	return e.names.Index(e.at)
-}
-
-// collectNameTree records in w.dests where the name tree rooted at tree holds
-// each name, a later leaf's entry replacing an earlier one's. A name is a
-// string, read as str reads one, so it matches the name an outline item gives
-// however the file is encrypted. It stops at the depth bound and when visits
-// is spent or ctx has ended, so a /Kids array that leads back to an ancestor
-// ends the read rather than repeating it.
-func (w *outlineWalk) collectNameTree(ctx context.Context, tree node, depth int, visits *walkBudget) {
+// readNameTree reads the names the tree rooted at tree defines, for the ones
+// w.named holds (readNames). read holds every object reached through a
+// reference, a node or a /Names or /Kids array, and the tree skips one it
+// holds, so each object is read once however often the tree refers to it,
+// and a /Kids array that leads back to an ancestor ends there. It stops at
+// the depth bound and once ctx has ended.
+func (w *outlineWalk) readNameTree(ctx context.Context, tree node, depth int, read map[objRef]bool) {
 	if tree.v.Kind() != pdf.Dict || depth >= maxNameTreeDepth {
 		return
 	}
-	names := child(&tree, "Names")
-	nameRefs := arrayRefs(names.v)
-	for i := 0; i+1 < names.v.Len(); i += 2 {
-		if !visits.spend(ctx) {
-			return
-		}
-		w.dests[w.str(element(names, nameRefs, i))] = nameEntry{names: names.v, at: i + 1}
+	tree.refs = dictRefs(tree.v)
+	if unread(tree.refs, "Names", read) {
+		w.readNames(ctx, child(&tree, "Names"))
+	}
+	if !unread(tree.refs, "Kids", read) {
+		return
 	}
 	kids := child(&tree, "Kids")
 	kidRefs := arrayRefs(kids.v)
-	for i := range kids.v.Len() {
-		if !visits.spend(ctx) {
-			return
+	for i := 0; i < kids.v.Len() && !w.items.ended(ctx); i++ {
+		if unread(kidRefs, i, read) {
+			w.readNameTree(ctx, element(kids, kidRefs, i), depth+1, read)
 		}
-		w.collectNameTree(ctx, element(kids, kidRefs, i), depth+1, visits)
 	}
+}
+
+// readNames gives each entry that asked for a name the /Names array names
+// holds the page that name's destination leads to, a later leaf's
+// destination replacing an earlier one's. A name is a string, read as str
+// reads one, so it matches the name an outline item gives however the file
+// is encrypted. It stops once ctx has ended.
+func (w *outlineWalk) readNames(ctx context.Context, names node) {
+	refs := arrayRefs(names.v)
+	for i := 0; i+1 < names.v.Len() && !w.items.ended(ctx); i += 2 {
+		at, ok := w.named[w.str(element(names, refs, i))]
+		if !ok {
+			continue
+		}
+		page := w.pageOf(element(names, refs, i+1).v)
+		for _, e := range at {
+			w.entries[e].Page = page
+		}
+	}
+}
+
+// unread reports whether the value refs holds at k is not a reference to an
+// object read holds, and records the object it refers to as read.
+func unread[K comparable](refs map[K]objRef, k K, read map[objRef]bool) bool {
+	ref, ok := refs[k]
+	if !ok {
+		return true
+	}
+	if read[ref] {
+		return false
+	}
+	read[ref] = true
+	return true
 }
 
 // pageRefIndex numbers every /Page leaf under root by its "id gen" reference,

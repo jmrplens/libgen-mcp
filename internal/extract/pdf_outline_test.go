@@ -1054,55 +1054,148 @@ func TestLargePDFOutlineReason(t *testing.T) {
 	}
 }
 
-// nameTreeLines writes every name collectNameTree recorded as "name=value",
-// sorted, with each value read back as an integer.
-func nameTreeLines(into map[string]nameEntry) string {
-	var lines []string
-	for name, e := range into {
-		lines = append(lines, fmt.Sprintf("%s=%d", name, e.names.Index(e.at).Int64()))
-	}
-	slices.Sort(lines)
-	return strings.Join(lines, " ")
+// nameTreePDF returns a two-page PDF whose catalog's /T is object 5, the first
+// of objs, which are objects 5 onward. A destination "[3 0 R/Fit]" names page
+// 1 and "[4 0 R/Fit]" page 2.
+func nameTreePDF(objs ...string) []byte {
+	return buildPDF(append([]string{
+		"<</Type/Catalog/Pages 2 0 R/T 5 0 R>>",
+		"<</Type/Pages/Kids[3 0 R 4 0 R]/Count 2>>",
+		"<</Type/Page>>", "<</Type/Page>>",
+	}, objs...))
 }
 
-// TestCollectNameTree covers the name-tree read on trees built for each edge:
-// a /Names array with a key and no value, a /Kids array that leads back to its
-// own node, the last depth read and the first not read, a visit budget spent
-// on names and on kids, and a key that carries AES padding, which is recorded
-// without it in an AES file and as it is in any other. The node under test is
-// the catalog's /T.
-func TestCollectNameTree(t *testing.T) {
-	tree := func(objs ...string) []byte {
-		return buildPDF(append([]string{"<</Type/Catalog/T 2 0 R>>"}, objs...))
+// nameTreeRead reads the catalog's /T in data as the name tree, from depth, for
+// an outline whose entries asked for the names asked, in that order, and
+// returns each name with the page it was given, and the walk.
+func nameTreeRead(t *testing.T, ctx context.Context, data []byte, aes bool, depth int, asked ...string) (string, *outlineWalk) {
+	t.Helper()
+	root := readerFor(t, data).Trailer().Key("Root")
+	w := &outlineWalk{root: node{v: root}, strs: readerStrings(aes), named: map[string][]int{}, entries: make([]OutlineEntry, len(asked))}
+	for i, name := range asked {
+		w.named[name] = append(w.named[name], i)
 	}
-	padded := tree("<</Names[(a" + strings.Repeat(`\017`, 15) + ") 1]>>")
+	w.readNameTree(ctx, node{v: root.Key("T")}, depth, map[objRef]bool{})
+	lines := make([]string, len(asked))
+	for i, name := range asked {
+		lines[i] = fmt.Sprintf("%q=%d", name, w.entries[i].Page)
+	}
+	return strings.Join(lines, " "), w
+}
+
+// TestReadNameTree covers the name-tree read on trees built for each edge: a
+// /Names array with a key and no value, a name the outline did not ask for, two
+// entries asking for one name, a /Kids array that leads back to its own node,
+// a later leaf replacing an earlier one, the last depth read and the first not
+// read, a destination held in a dictionary, and a key that carries AES padding,
+// which matches without it in an AES file and only as it is in any other.
+func TestReadNameTree(t *testing.T) {
+	padded := nameTreePDF("<</Names[(a" + strings.Repeat(`\017`, 15) + ") [4 0 R/Fit]]>>")
 	for _, tc := range []struct {
-		name   string
-		data   []byte
-		aes    bool
-		depth  int
-		visits int
-		want   string
+		name  string
+		data  []byte
+		aes   bool
+		depth int
+		asked []string
+		want  string
 	}{
-		{"a key with no value", tree("<</Names[(a) 1 (b) 2 (c)]>>"), false, 0, maxNameTreeVisits, "a=1 b=2"},
-		{"kids lead back to the node", tree("<</Names[(a) 1]/Kids[2 0 R]>>"), false, 0, maxNameTreeVisits, "a=1"},
-		{"a later leaf replaces an earlier one", tree("<</Kids[3 0 R 4 0 R]>>", "<</Names[(a) 1]>>", "<</Names[(a) 2]>>"), false, 0, maxNameTreeVisits, "a=2"},
-		{"the last depth read", tree("<</Names[(a) 1]/Kids[3 0 R]>>", "<</Names[(b) 2]>>"), false, maxNameTreeDepth - 1, maxNameTreeVisits, "a=1"},
-		{"past the last depth", tree("<</Names[(a) 1]>>"), false, maxNameTreeDepth, maxNameTreeVisits, ""},
-		{"a budget of one name", tree("<</Names[(a) 1 (b) 2]>>"), false, 0, 1, "a=1"},
-		{"a budget spent on a kid", tree("<</Names[(a) 1]/Kids[3 0 R 3 0 R]>>", "<</Names[(b) 2]>>"), false, 0, 2, "a=1"},
-		{"AES padding in an AES file", padded, true, 0, maxNameTreeVisits, "a=1"},
-		{"AES padding in another file", padded, false, 0, maxNameTreeVisits, "a" + strings.Repeat("\x0f", 15) + "=1"},
+		{"a key with no value", nameTreePDF("<</Names[(a)[3 0 R/Fit] (b)[4 0 R/Fit] (c)]>>"), false, 0, []string{"a", "b", "c"}, `"a"=1 "b"=2 "c"=0`},
+		{"a name nobody asked for", nameTreePDF("<</Names[(a)[3 0 R/Fit] (b)[4 0 R/Fit]]>>"), false, 0, []string{"b"}, `"b"=2`},
+		{"two entries asking for one name", nameTreePDF("<</Names[(a)[4 0 R/Fit]]>>"), false, 0, []string{"a", "a"}, `"a"=2 "a"=2`},
+		{"kids lead back to the node", nameTreePDF("<</Names[(a)[4 0 R/Fit]]/Kids[5 0 R]>>"), false, 0, []string{"a"}, `"a"=2`},
+		{"a later leaf replaces an earlier one", nameTreePDF("<</Kids[6 0 R 7 0 R]>>", "<</Names[(a)[3 0 R/Fit]]>>", "<</Names[(a)[4 0 R/Fit]]>>"), false, 0, []string{"a"}, `"a"=2`},
+		{"the last depth read", nameTreePDF("<</Names[(a)[3 0 R/Fit]]/Kids[6 0 R]>>", "<</Names[(b)[4 0 R/Fit]]>>"), false, maxNameTreeDepth - 1, []string{"a", "b"}, `"a"=1 "b"=0`},
+		{"past the last depth", nameTreePDF("<</Names[(a)[3 0 R/Fit]]>>"), false, maxNameTreeDepth, []string{"a"}, `"a"=0`},
+		{"a destination in a dictionary", nameTreePDF("<</Names[(a) 6 0 R]>>", "<</D[4 0 R/XYZ 0 0 0]>>"), false, 0, []string{"a"}, `"a"=2`},
+		{"AES padding in an AES file", padded, true, 0, []string{"a"}, `"a"=2`},
+		{"AES padding in another file", padded, false, 0, []string{"a", "a" + strings.Repeat("\x0f", 15)}, `"a"=0 "a\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f\x0f"=2`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			tree := node{v: readerFor(t, tc.data).Trailer().Key("Root").Key("T")}
-			w := &outlineWalk{strs: readerStrings(tc.aes), dests: map[string]nameEntry{}}
-			visits := walkBudget{left: tc.visits}
-			w.collectNameTree(context.Background(), tree, tc.depth, &visits)
-			if got := nameTreeLines(w.dests); got != tc.want {
-				t.Errorf("names = %q, want %q", got, tc.want)
+			if got, _ := nameTreeRead(t, context.Background(), tc.data, tc.aes, tc.depth, tc.asked...); got != tc.want {
+				t.Errorf("pages = %s, want %s", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestReadNameTree_EachObjectOnce reads trees that refer to one object many
+// times. One whose every node lists the same child twice, 31 levels deep, has
+// two billion paths through it and 32 objects, and must read in a moment; a
+// /Names array two nodes share is parsed once.
+func TestReadNameTree_EachObjectOnce(t *testing.T) {
+	t.Run("a node listed twice at every level", func(t *testing.T) {
+		objs := make([]string, maxNameTreeDepth)
+		for i := range objs[:len(objs)-1] {
+			objs[i] = fmt.Sprintf("<</Kids[%d 0 R %[1]d 0 R]>>", 6+i)
+		}
+		objs[len(objs)-1] = "<</Names[(a)[4 0 R/Fit]]>>"
+		var got string
+		mustReturnWithin(t, 10*time.Second, "readNameTree", func() {
+			got, _ = nameTreeRead(t, context.Background(), nameTreePDF(objs...), false, 0, "a")
+		})
+		if got != `"a"=2` {
+			t.Errorf("pages = %s, want \"a\"=2", got)
+		}
+	})
+	t.Run("a /Names array two nodes share", func(t *testing.T) {
+		data := nameTreePDF("<</Kids[6 0 R 7 0 R]>>", "<</Names 8 0 R>>", "<</Names 8 0 R>>", "[(a)[4 0 R/Fit]]")
+		file := &readsAt{ReaderAt: bytes.NewReader(data), off: int64(bytes.Index(data, []byte("\n8 0 obj\n")) + 1)}
+		r, err := pdf.NewReader(file, int64(len(data)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		root := r.Trailer().Key("Root")
+		w := &outlineWalk{root: node{v: root}, strs: readerStrings(false), named: map[string][]int{"a": {0}}, entries: make([]OutlineEntry, 1)}
+		w.readNameTree(context.Background(), node{v: root.Key("T")}, 0, map[objRef]bool{})
+		if w.entries[0].Page != 2 || file.count != 1 {
+			t.Errorf("page %d, /Names read %d times, want page 2 read once", w.entries[0].Page, file.count)
+		}
+	})
+}
+
+// TestReadNameTree_ContextEnds ends the context during the read: it stops,
+// keeps the error for the walk to return, and gives no page it had not read.
+func TestReadNameTree_ContextEnds(t *testing.T) {
+	data := nameTreePDF("<</Kids[6 0 R]>>", "<</Names[(a)[4 0 R/Fit]]>>")
+	for _, pass := range []int{0, 1} {
+		t.Run(fmt.Sprintf("after %d checks", pass), func(t *testing.T) {
+			got, w := nameTreeRead(t, passErr(pass), data, false, 0, "a")
+			if got != `"a"=0` || !errors.Is(w.items.err, context.Canceled) {
+				t.Errorf("pages = %s, err = %v, want \"a\"=0 and context.Canceled", got, w.items.err)
+			}
+		})
+	}
+}
+
+// TestOutline_PDFMoreNamedDestinationsThanABudget reads an outline whose
+// items name destinations at the far end of a name tree of 60,000 names, more
+// than the 50,000 the read used to stop at. The Intel 64 and IA-32 manual
+// holds 292,930, and 3,275 of its 4,106 entries came back on page 0 with
+// nothing saying the outline was incomplete. Every entry finds its page.
+func TestOutline_PDFMoreNamedDestinationsThanABudget(t *testing.T) {
+	const leaves, perLeaf = 600, 100
+	last := leaves*perLeaf - 1
+	// Objects 9 to 11 are the items, 12 the tree's root and 13 onward its
+	// leaves. Name k leads to page k%3+1, pages 1 to 3 being objects 3 to 5.
+	objs := []string{
+		"<</Title(First)/Dest(d000000)/Next 10 0 R>>",
+		fmt.Sprintf("<</Title(Last but one)/Dest(d%06d)/Next 11 0 R>>", last-1),
+		fmt.Sprintf("<</Title(Last)/Dest(d%06d)>>", last),
+		"",
+	}
+	kids := make([]string, leaves)
+	for l := range leaves {
+		kids[l] = fmt.Sprintf("%d 0 R", 13+l)
+		var leaf strings.Builder
+		for k := l * perLeaf; k < (l+1)*perLeaf; k++ {
+			fmt.Fprintf(&leaf, "(d%06d)[%d 0 R/Fit]", k, 3+k%3)
+		}
+		objs = append(objs, fmt.Sprintf("<</Limits[(d%06d)(d%06d)]/Names[%s]>>", l*perLeaf, (l+1)*perLeaf-1, leaf.String()))
+	}
+	objs[3] = "<</Kids[" + strings.Join(kids, " ") + "]>>"
+	res := outlineOf(t, outlinePDF("/Names<</Dests 12 0 R>>", objs...))
+	if got, want := entryLines(res.Entries), "0 1 First\n0 2 Last but one\n0 3 Last\n"; got != want || res.Reason != "" {
+		t.Errorf("outline:\n%s(%q)\nwant:\n%s", got, res.Reason, want)
 	}
 }
 

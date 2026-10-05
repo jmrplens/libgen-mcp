@@ -779,8 +779,12 @@ SBOMs the release attaches.
 **Decision.** The PDF outline is read with `github.com/ledongthuc/pdf`, the library the text,
 `find` and `section` paths already use, and pdfcpu leaves `go.mod`, taking `golang.org/x/crypto`
 with it (the one other import, a test oracle for HKDF, is frozen into vectors). The walk carries
-the bounds the page tree already has: the page-tree pre-flight first, a budget on items and on
-named destinations, a depth bound, a stop at an item met twice, and a recovered panic.
+the bounds the page tree already has: the page-tree pre-flight first, a budget on items, a depth
+bound, a stop at an item met twice, and a recovered panic. The name tree of named destinations
+has no budget, because no number is past every real one (the Intel 64 and IA-32 manual holds
+292,930 names, and a budget of 50,000 left 3,275 of its 4,106 entries on page 0 without saying
+so): it is read once, after the walk, each object of it once, keeping only the names the outline
+asks for, and the read's deadline is what ends one too large to finish.
 
 **Measured** against pdfcpu 0.16.0 on 68 PDFs (20 documents and fixtures, pdfcpu's own 47-file
 test set, and a 5.6 MB document with a 1,928-entry outline): 66 outlines identical. One title
