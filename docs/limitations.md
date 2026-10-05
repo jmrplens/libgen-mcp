@@ -63,8 +63,11 @@ fetches something new. The
 a periodic sweep as follow-up work. The files do not outlive the process, though: what the
 cache still holds when the server exits is removed with it, and a server that was killed
 leaves its files only until the next server to fetch a file for `read` from the same
-temporary directory removes them, however soon after the kill that is. A `read` of a local
-`path` fetches nothing and removes nothing. See
+temporary directory removes them, however soon after the kill that is. The exception is a
+temporary directory that cannot hold a lock every server using it would see, a network
+filesystem for one: there the files sit loose, a clean exit still removes them, and a killed
+server's files stay until deleted by hand. A `read` of a local `path` fetches nothing and
+removes nothing. See
 [Configuration](configuration.md#libgen_mcp_read_cache_bytes-and-libgen_mcp_read_cache_ttl).
 
 ## Downloads and verification
