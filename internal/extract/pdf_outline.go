@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"regexp"
-	"slices"
 	"strings"
 	"unicode"
 
@@ -351,16 +350,17 @@ func (w *outlineWalk) walk(ctx context.Context, item node, level int) {
 	}
 }
 
-// link returns what from's key leads to. A key from states that leads to no
-// dictionary (a reference to a free object, to one past the end of the
-// cross-reference table, or to something that is not an item) is recorded as
-// outlineDamaged: the outline goes on past it, so what was read before it is
-// not the whole. ISO 32000 has each of these keys be a reference to a
-// dictionary, so an explicit null is damage too. A key from does not state is
-// the end of its chain.
+// link returns what from's key leads to. A reference that leads to no
+// dictionary (to a free object, to one past the end of the cross-reference
+// table, or to something that is not an item), and a value written in place
+// that is neither null nor a dictionary, are recorded as outlineDamaged: the
+// outline goes on past them, so what was read before them is not the whole. A
+// key from does not state is the end of its chain, and so is one written as
+// null, which ISO 32000-1 (7.3.9) makes the same as leaving the key out. That
+// is how pdfcpu removes an outline: it writes /Outlines null.
 func (w *outlineWalk) link(from *node, key string) node {
 	to := child(from, key)
-	if to.v.Kind() != pdf.Dict && slices.Contains(from.v.Keys(), key) {
+	if _, ref := from.refs[key]; to.v.Kind() != pdf.Dict && (ref || !to.v.IsNull()) {
 		w.state = outlineDamaged
 	}
 	return to

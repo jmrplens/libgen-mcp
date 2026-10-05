@@ -946,13 +946,14 @@ func TestChildAndElement(t *testing.T) {
 }
 
 // TestOutline_PDFLinksToNothing breaks an outline at each link the walk
-// follows, with each way a reference can lead to nothing: past the end of the
-// cross-reference table, at a generation the table does not hold, and an
-// explicit null. Each is damage, reported as such with no entries, since what
-// was read before the break is not the whole outline: a middle item that
-// leads nowhere used to return the items before it as the table of contents,
-// and a first item that leads nowhere used to say there was none. A chain that
-// simply ends, with no /Next, is the outline's whole.
+// follows, with each way a link can lead to nothing: a reference past the end
+// of the cross-reference table, one at a generation the table does not hold,
+// and a value written in place that is not an item. Each is damage, reported
+// as such with no entries, since what was read before the break is not the
+// whole outline: a middle item that leads nowhere used to return the items
+// before it as the table of contents, and a first item that leads nowhere used
+// to say there was none. A chain that simply ends, with no /Next or with a
+// null one, is the outline's whole (TestOutline_PDFNullLinks).
 func TestOutline_PDFLinksToNothing(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -964,7 +965,7 @@ func TestOutline_PDFLinksToNothing(t *testing.T) {
 		{"the first item not a dictionary", []string{"<</Title(A)>>"}, "/Outlines/First 9 0 R", "/Outlines/First 7 0 R"},
 		{"a middle item past the table", []string{"<</Title(A)/Next 99 0 R>>"}, "", ""},
 		{"a middle item at another generation", []string{"<</Title(A)/Next 10 1 R>>", "<</Title(B)>>"}, "", ""},
-		{"a child given as null", []string{"<</Title(A)/First null/Next 10 0 R>>", "<</Title(B)>>"}, "", ""},
+		{"a child written in place as a number", []string{"<</Title(A)/First 0/Next 10 0 R>>", "<</Title(B)>>"}, "", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			// Each replacement keeps the object's length, so the
@@ -973,6 +974,46 @@ func TestOutline_PDFLinksToNothing(t *testing.T) {
 			res := outlineOf(t, data)
 			if len(res.Entries) != 0 || !res.Extractable || res.Reason != damagedPDFOutlineReason {
 				t.Errorf("want no entries and the damaged-outline reason, got %+v", res)
+			}
+		})
+	}
+}
+
+// TestOutline_PDFNullLinks writes each link the walk follows as null, which
+// ISO 32000-1 makes the same as leaving it out: the last item's /Next, a
+// leaf's /First, the first item, and the catalog's /Outlines, which is how
+// pdfcpu removes an outline. Each ends its chain, so the items read are the
+// whole outline and a section of it reads, and a null /Outlines is a document
+// with no outline rather than a damaged one. They were all reported as damage.
+func TestOutline_PDFNullLinks(t *testing.T) {
+	three := "0 1 A\n0 2 B\n0 3 C\n"
+	for _, tc := range []struct {
+		name     string
+		data     []byte
+		want     string
+		reason   string
+		sections bool
+	}{
+		{"the last item's /Next", outlinePDF("",
+			"<</Title(A)/Dest[3 0 R/Fit]/Next 10 0 R>>",
+			"<</Title(B)/Dest[4 0 R/Fit]/Next 11 0 R>>",
+			"<</Title(C)/Dest[5 0 R/Fit]/Next null>>"), three, "", true},
+		{"a leaf's /First", outlinePDF("",
+			"<</Title(A)/Dest[3 0 R/Fit]/First null/Next 10 0 R>>",
+			"<</Title(B)/Dest[4 0 R/Fit]/Next 11 0 R>>",
+			"<</Title(C)/Dest[5 0 R/Fit]>>"), three, "", true},
+		{"the first item", bytes.Replace(outlinePDF("", "<</Title(A)>>"), []byte("/First 9 0 R"), []byte("/First null "), 1), "", noPDFOutlineReason, false},
+		{"the catalog's /Outlines", bytes.Replace(outlinePDF("", "<</Title(A)>>"), []byte("/Outlines 6 0 R"), []byte("/Outlines null "), 1), "", noPDFOutlineReason, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res := outlineOf(t, tc.data)
+			if got := entryLines(res.Entries); got != tc.want || !res.Extractable || res.Reason != tc.reason {
+				t.Errorf("outline:\n%s(%q)\nwant:\n%s(%q)", got, res.Reason, tc.want, tc.reason)
+			}
+			path := writeBytes(t, t.TempDir(), "null.pdf", tc.data)
+			sc, err := Section(context.Background(), openFile(t, path), SectionRef{Index: 2}, Req{})
+			if tc.sections && (err != nil || sc.Chunk.PageStart != 2) {
+				t.Errorf("section 2 = %+v (%v), want it to start on page 2", sc.Chunk, err)
 			}
 		})
 	}
