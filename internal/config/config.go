@@ -38,11 +38,11 @@ const (
 
 // Config groups the server configuration read from the environment.
 type Config struct {
-	Mirror      string // LIBGEN_MIRROR: mirror tried first, e.g. https://libgen.li
-	DownloadDir string // LIBGEN_MCP_DOWNLOAD_DIR: download destination
+	Mirror      string // LBN_MIRROR: mirror tried first, e.g. https://libgen.li
+	DownloadDir string // PL_MCP_DOWNLOAD_DIR: download destination
 	// Timeout is the deadline for ONE HTTP request that asks a question — a catalog
 	// search, a details lookup, a mirror health probe, a single hop made by a
-	// download source. LIBGEN_MCP_TIMEOUT, a Go duration.
+	// download source. PL_MCP_TIMEOUT, a Go duration.
 	//
 	// It never applies to the transfer of a file: the download client carries no
 	// timeout at all, and a stream is governed by the request context and the
@@ -62,13 +62,13 @@ type Config struct {
 	// ResolveBudget is the wall-clock budget ONE download source gets to turn an
 	// item into a direct URL, however many sequential hops that takes, before the
 	// chain abandons it and moves to the next source.
-	// LIBGEN_MCP_RESOLVE_BUDGET, a Go duration. Default: 30s.
+	// PL_MCP_RESOLVE_BUDGET, a Go duration. Default: 30s.
 	//
 	// It is its own setting rather than a reuse of Timeout because the two bound
 	// different things. Timeout bounds one request, and it is short on purpose:
 	// every request it covers has an alternative mirror behind it, so hanging is
 	// pure loss. A resolve is a whole multi-hop conversation — Sci-Hub fetches an
-	// article page and then the embedded file URL, Anna's Archive walks a member
+	// article page and then the embedded file URL, AA walks a member
 	// download page — so a source that legitimately needs three hops needs three
 	// times one request's worth of time. Deriving the budget from Timeout coupled
 	// them, and shortening Timeout to 10s silently cut every source's resolve
@@ -79,20 +79,20 @@ type Config struct {
 	// caller's context alone; Validate rejects that from the environment, so only
 	// a Config built in code (a test) can select it.
 	ResolveBudget          time.Duration
-	LogLevel               slog.Level // LIBGEN_MCP_LOG_LEVEL: log level (debug/info/warn/error)
-	RateRPS                float64    // LIBGEN_MCP_RATE_RPS: allowed requests per second
-	RateBurst              int        // LIBGEN_MCP_RATE_BURST: maximum limiter burst
-	MaxDownloadBytes       int64      // LIBGEN_MCP_MAX_DOWNLOAD_BYTES: maximum download size in bytes (0 = no limit)
-	MaxConcurrentDownloads int        // LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS: simultaneous downloads
-	RetryAttempts          int        // LIBGEN_MCP_RETRY_ATTEMPTS: retries per request
-	UnpaywallEmail         string     // LIBGEN_MCP_UNPAYWALL_EMAIL: contact email required by the Unpaywall API
-	ScihubHosts            []string   // LIBGEN_MCP_SCIHUB_HOSTS: ordered Sci-Hub mirror hosts (comma-separated, bare host, no scheme)
-	AnnasKey               string     // LIBGEN_MCP_ANNAS_KEY: optional Anna's Archive account secret enabling the member fast-download API; empty keeps the annas source keyless (IPFS only)
-	CoreKey                string     // LIBGEN_MCP_CORE_KEY: optional CORE (core.ac.uk) API key enabling the core open-access source; empty leaves the core source out of the chain, mirroring how an empty Unpaywall email disables unpaywall
-	OpenAlexKey            string     // LIBGEN_MCP_OPENALEX_KEY: optional OpenAlex API key, sent on every OpenAlex request (the openalex download source and search provider) to draw on the key's daily budget instead of the keyless per-address one; empty keeps both keyless
-	Sources                []string   // LIBGEN_MCP_SOURCES: enabled download sources (comma-separated names; empty = all enabled)
+	LogLevel               slog.Level // PL_MCP_LOG_LEVEL: log level (debug/info/warn/error)
+	RateRPS                float64    // PL_MCP_RATE_RPS: allowed requests per second
+	RateBurst              int        // PL_MCP_RATE_BURST: maximum limiter burst
+	MaxDownloadBytes       int64      // PL_MCP_MAX_DOWNLOAD_BYTES: maximum download size in bytes (0 = no limit)
+	MaxConcurrentDownloads int        // PL_MCP_MAX_CONCURRENT_DOWNLOADS: simultaneous downloads
+	RetryAttempts          int        // PL_MCP_RETRY_ATTEMPTS: retries per request
+	UnpaywallEmail         string     // PL_MCP_UNPAYWALL_EMAIL: contact email required by the Unpaywall API
+	ScihubHosts            []string   // PL_MCP_SCIHUB_HOSTS: ordered Sci-Hub mirror hosts (comma-separated, bare host, no scheme)
+	AnnasKey               string     // PL_MCP_ANNAS_KEY: optional AA account secret enabling the member fast-download API; empty keeps the annas source keyless (IPFS only)
+	CoreKey                string     // PL_MCP_CORE_KEY: optional CORE (core.ac.uk) API key enabling the core open-access source; empty leaves the core source out of the chain, mirroring how an empty Unpaywall email disables unpaywall
+	OpenAlexKey            string     // PL_MCP_OPENALEX_KEY: optional OpenAlex API key, sent on every OpenAlex request (the openalex download source and search provider) to draw on the key's daily budget instead of the keyless per-address one; empty keeps both keyless
+	Sources                []string   // PL_MCP_SOURCES: enabled download sources (comma-separated names; empty = all enabled)
 	// ActionTimeout bounds one tool call's handler on both transports.
-	// LIBGEN_MCP_ACTION_TIMEOUT, a Go duration; 0 disables it.
+	// PL_MCP_ACTION_TIMEOUT, a Go duration; 0 disables it.
 	//
 	// It is the only wall clock on a call. ResolveBudget bounds one source's
 	// attempt to turn an item into a URL, and DownloadStallTimeout ends a
@@ -101,7 +101,7 @@ type Config struct {
 	// indefinitely. See DefaultActionTimeout for where the default comes from.
 	ActionTimeout time.Duration
 	// StdioMaxLineBytes bounds one inbound JSON-RPC line on the stdio
-	// transport. LIBGEN_MCP_STDIO_MAX_LINE_BYTES, a byte count.
+	// transport. PL_MCP_STDIO_MAX_LINE_BYTES, a byte count.
 	//
 	// The default matches what an HTTP deployment refuses with
 	// --max-request-body-bytes left at 0, which is the SDK's 4 MiB, so the two
@@ -112,47 +112,47 @@ type Config struct {
 	StdioMaxLineBytes int
 	// RemoteDownloads forces the download tool to always return a direct link (a
 	// resource_link + resolved object) instead of saving a file, regardless of
-	// transport. LIBGEN_MCP_REMOTE_DOWNLOADS, a bool. HTTP (`--http`) implies it;
+	// transport. PL_MCP_REMOTE_DOWNLOADS, a bool. HTTP (`--http`) implies it;
 	// set it for a hosted stdio deployment (e.g. behind mcp-proxy) whose disk the
 	// client cannot reach, so downloads are delivered as links the client fetches.
 	RemoteDownloads bool
 	// ServerFetch governs whether this deployment may pull a file's BODY over its
 	// own internet connection — the read tool's fetch-to-temp, and the download
-	// tool's save-to-disk. LIBGEN_MCP_SERVER_FETCH, a bool, held as a tri-state:
+	// tool's save-to-disk. PL_MCP_SERVER_FETCH, a bool, held as a tri-state:
 	// nil means the operator said nothing, so the transport picks the default
 	// (see ResolveServerFetch). It never gates resolving a link or querying a
 	// catalog; ErrServerFetchDisabled in internal/libgen records why.
 	ServerFetch *bool
 	// DownloadStartRetryWaits is the staged wait schedule between attempts to get a
-	// download to BEGIN (resolve + connect + first bytes). LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS,
+	// download to BEGIN (resolve + connect + first bytes). PL_MCP_DOWNLOAD_START_RETRY_WAITS,
 	// a comma-separated list of Go durations. len(waits) waits means len(waits)+1
 	// attempts. Default: 5s,5s,5s,10s,10s,10s,15s (8 attempts over ~60s).
 	DownloadStartRetryWaits []time.Duration
 	// DownloadStallTimeout is the progress-resetting stall window while streaming: a
 	// download is aborted only when NO bytes arrive for this long, never merely for
-	// being slow. LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT, a Go duration. Default: 60s.
+	// being slow. PL_MCP_DOWNLOAD_STALL_TIMEOUT, a Go duration. Default: 60s.
 	DownloadStallTimeout time.Duration
 	// ReadMaxChars is the max characters the read tool returns per call by
-	// default, used when a call omits max_chars. LIBGEN_MCP_READ_MAX_CHARS.
+	// default, used when a call omits max_chars. PL_MCP_READ_MAX_CHARS.
 	ReadMaxChars int
 	// ReadDefaultPages is the default max PDF pages per read call, used when a
-	// call omits max_pages. LIBGEN_MCP_READ_DEFAULT_PAGES.
+	// call omits max_pages. PL_MCP_READ_DEFAULT_PAGES.
 	ReadDefaultPages int
 	// ReadCacheBytes is the total-size cap of the FetchToTemp temp cache:
 	// downloaded read files past this aggregate size are evicted (least-recently
-	// used first, never while a read holds a reference). LIBGEN_MCP_READ_CACHE_BYTES.
+	// used first, never while a read holds a reference). PL_MCP_READ_CACHE_BYTES.
 	ReadCacheBytes int64
 	// ReadCacheTTL is how long an unreferenced FetchToTemp temp file lingers
 	// before eviction, so successive pages of one read reuse a single fetch while
-	// idle files are reclaimed. LIBGEN_MCP_READ_CACHE_TTL.
+	// idle files are reclaimed. PL_MCP_READ_CACHE_TTL.
 	ReadCacheTTL time.Duration
 	// EnrichEnabled is the deployment kill-switch for get_details' opt-in metadata
-	// enrichment (Crossref/OpenLibrary). LIBGEN_MCP_ENRICH, default true: a
+	// enrichment (Crossref/OpenLibrary). PL_MCP_ENRICH, default true: a
 	// deployment sets it false to forbid enrichment entirely, regardless of the
 	// per-call enrich flag.
 	EnrichEnabled bool
 	// ConfirmDownloads asks the user to approve each file the download tool is
-	// about to write to disk. LIBGEN_MCP_CONFIRM_DOWNLOADS, default true, and only
+	// about to write to disk. PL_MCP_CONFIRM_DOWNLOADS, default true, and only
 	// ever consulted when the client advertised elicitation — a client that cannot
 	// be asked is never prompted whatever this says. Set it false to save without
 	// prompting, the deployment-wide form of the download tool's
@@ -160,7 +160,7 @@ type Config struct {
 	ConfirmDownloads bool
 	// RetryEverySource gives every download source the full start-retry schedule
 	// instead of only the last one that can serve an item.
-	// LIBGEN_MCP_DOWNLOAD_RETRY_EVERY_SOURCE, a bool, default false.
+	// PL_MCP_DOWNLOAD_RETRY_EVERY_SOURCE, a bool, default false.
 	//
 	// The default is the restrained one: a source with another behind it gets a
 	// single attempt, so a source that is down does not hold up one that is not.
@@ -169,11 +169,11 @@ type Config struct {
 	// better behavior from its zero value instead of the worse one.
 	RetryEverySource bool
 	// ExtraSources is the deployment default for when the extra searchers (Anna's
-	// Archive plus the open-access providers) are consulted. LIBGEN_MCP_EXTRA_SOURCES,
+	// Archive plus the open-access providers) are consulted. PL_MCP_EXTRA_SOURCES,
 	// default auto.
 	ExtraSources ExtraSourcesMode
 	// AllowPrivateAddresses lifts the block on connecting to loopback, link-local,
-	// private and carrier-grade-NAT addresses. LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES, a
+	// private and carrier-grade-NAT addresses. PL_MCP_ALLOW_PRIVATE_ADDRESSES, a
 	// bool, default FALSE.
 	//
 	// The block exists because almost every URL this server fetches was supplied by
@@ -184,11 +184,11 @@ type Config struct {
 	// endpoint (see internal/netguard).
 	//
 	// The one legitimate reason to set it is an operator running their own mirror on
-	// their own network and pointing LIBGEN_MIRROR at it. Setting it re-opens the
+	// their own network and pointing LBN_MIRROR at it. Setting it re-opens the
 	// whole class for every source at once, which is why it is off by default and
 	// says so in its name.
 	AllowPrivateAddresses bool
-	// Telemetry turns OpenTelemetry on. LIBGEN_MCP_TELEMETRY, a bool, default
+	// Telemetry turns OpenTelemetry on. PL_MCP_TELEMETRY, a bool, default
 	// FALSE.
 	//
 	// Off unless an operator asks, for privacy rather than for cost:
@@ -203,7 +203,7 @@ type Config struct {
 	// no gain.
 	Telemetry bool
 	// TelemetrySignals selects which signals are exported, as a comma-separated
-	// subset of traces, metrics and logs. LIBGEN_MCP_TELEMETRY_SIGNALS, empty
+	// subset of traces, metrics and logs. PL_MCP_TELEMETRY_SIGNALS, empty
 	// (all three) by default.
 	//
 	// Separable because their costs differ: traces are per call, metrics are
@@ -211,7 +211,7 @@ type Config struct {
 	// pipeline is already collecting.
 	TelemetrySignals string
 	// TelemetryIdentity selects what an exported signal may say about who made a
-	// call: none, pseudonymous or full. LIBGEN_MCP_TELEMETRY_IDENTITY, default
+	// call: none, pseudonymous or full. PL_MCP_TELEMETRY_IDENTITY, default
 	// none.
 	//
 	// It is kept as the operator's string rather than a parsed value because
@@ -219,7 +219,7 @@ type Config struct {
 	// where the policy does, and an unknown value fails startup there.
 	TelemetryIdentity string
 	// TelemetryIdentityKey is the operator's pseudonymisation secret.
-	// LIBGEN_MCP_TELEMETRY_IDENTITY_KEY, empty by default.
+	// PL_MCP_TELEMETRY_IDENTITY_KEY, empty by default.
 	//
 	// Supplied, it gives every replica the same digest for one caller, and it
 	// never rotates: a key the operator provided is theirs to rotate, on their
@@ -231,18 +231,18 @@ type Config struct {
 	// ps and lands in shell history.
 	TelemetryIdentityKey string
 	// TelemetryIdentityRotation is how long a *generated* identity key lives.
-	// LIBGEN_MCP_TELEMETRY_IDENTITY_ROTATION, zero (the life of the process) by
+	// PL_MCP_TELEMETRY_IDENTITY_ROTATION, zero (the life of the process) by
 	// default, capped at thirty days.
 	//
 	// Ignored when a key is configured, with a warning: rotating a key somebody
 	// else supplied would destroy the correlation they configured it for.
 	TelemetryIdentityRotation time.Duration
 	// AllowedReadDirs widens the directories the read tool's `path` argument may
-	// resolve into. LIBGEN_MCP_ALLOWED_READ_DIRS, an OS path list (colon-separated
+	// resolve into. PL_MCP_ALLOWED_READ_DIRS, an OS path list (colon-separated
 	// on Unix, semicolon-separated on Windows). Empty by default.
 	//
 	// Without it, a caller-supplied path must resolve under the working directory,
-	// the OS temp directory or LIBGEN_MCP_DOWNLOAD_DIR. That is deliberately narrow:
+	// the OS temp directory or PL_MCP_DOWNLOAD_DIR. That is deliberately narrow:
 	// the text read returns is labeled UNTRUSTED, so a model acting on an
 	// instruction embedded in one document can ask for another, and without a
 	// containment ~/.ssh/id_rsa is a file like any other.
@@ -252,7 +252,7 @@ type Config struct {
 	AllowedReadDirs []string
 	// AllowedDownloadDirs is the same for the download tool's `path` argument, which
 	// is a destination this server writes to rather than a file it reads.
-	// LIBGEN_MCP_ALLOWED_DOWNLOAD_DIRS, an OS path list. Empty by default.
+	// PL_MCP_ALLOWED_DOWNLOAD_DIRS, an OS path list. Empty by default.
 	//
 	// Separate from AllowedReadDirs on purpose: what a deployment is willing to
 	// have read and what it is willing to have written are different decisions, and
@@ -260,14 +260,14 @@ type Config struct {
 	AllowedDownloadDirs []string
 }
 
-// ExtraSourcesMode selects when the extra searchers (Anna's Archive plus the
+// ExtraSourcesMode selects when the extra searchers (AA plus the
 // open-access providers) are consulted. The behavior is three-valued, so it is an
 // enum rather than a bool: "always" and "never" are each different from the
 // default and from each other.
 type ExtraSourcesMode string
 
 const (
-	// ExtraSourcesAuto consults the extra searchers only when the Library Genesis
+	// ExtraSourcesAuto consults the extra searchers only when the the primary catalog
 	// catalog returns nothing or fails. It is the default.
 	ExtraSourcesAuto ExtraSourcesMode = "auto"
 	// ExtraSourcesAlways consults them on every search, concurrently with the catalog.
@@ -307,7 +307,7 @@ func defaultStartRetryWaits() []time.Duration {
 	}
 }
 
-// KnownSources lists the download-source names recognized by LIBGEN_MCP_SOURCES,
+// KnownSources lists the download-source names recognized by PL_MCP_SOURCES,
 // in their natural chain order (DOI-based first, then md5-based). It is the
 // authority both for validating the configured list and for building the chain.
 //
@@ -395,11 +395,11 @@ const defaultStdioMaxLineBytes = 4 << 20
 const maxStdioMaxLineBytes = 16 << 20
 
 // defaultScihubHosts is the ordered list of Sci-Hub mirror hosts tried when
-// LIBGEN_MCP_SCIHUB_HOSTS is unset. Mirrors rotate, so the source falls through
+// PL_MCP_SCIHUB_HOSTS is unset. Mirrors rotate, so the source falls through
 // the list until one serves an article page.
 var defaultScihubHosts = []string{"sci-hub.ee", "sci-hub.se", "sci-hub.st", "sci-hub.ru", "sci-hub.wf"}
 
-// Defaults returns the configuration that every LIBGEN_MCP_* variable falls
+// Defaults returns the configuration that every PL_MCP_* variable falls
 // back to when it is unset. Load starts from this and applies the environment
 // on top.
 //
@@ -422,7 +422,7 @@ func Defaults() *Config {
 		MaxDownloadBytes:        0,
 		MaxConcurrentDownloads:  2,
 		RetryAttempts:           3,
-		UnpaywallEmail:          "", // empty disables the unpaywall source; each deployment sets its own contact email via LIBGEN_MCP_UNPAYWALL_EMAIL
+		UnpaywallEmail:          "", // empty disables the unpaywall source; each deployment sets its own contact email via PL_MCP_UNPAYWALL_EMAIL
 		ScihubHosts:             append([]string(nil), defaultScihubHosts...),
 		DownloadStartRetryWaits: defaultStartRetryWaits(),
 		DownloadStallTimeout:    60 * time.Second,
@@ -448,15 +448,15 @@ func Defaults() *Config {
 // The dotenv files this server reads are loaded first, and the order is the
 // whole of their precedence: godotenv never overwrites a variable that is
 // already set, so the process environment the MCP client passed wins over the
-// file LIBGEN_MCP_ENV_FILE names, which wins over ~/.libgen-mcp.env. A .env in
+// file PL_MCP_ENV_FILE names, which wins over ~/.libgen-mcp.env. A .env in
 // the working directory is on no part of that list; see env_file.go for why.
 func Load() (*Config, error) {
 	LoadEnvFiles()
 	cfg := Defaults()
-	// LIBGEN_MIRROR is read bare on purpose and is the one variable that does
+	// LBN_MIRROR is read bare on purpose and is the one variable that does
 	// not go through Getenv: it is the mirror family's own convention, not a
 	// name this server invented. See EnvPrefix.
-	cfg.Mirror = strings.TrimRight(os.Getenv("LIBGEN_MIRROR"), "/")
+	cfg.Mirror = strings.TrimRight(os.Getenv("LBN_MIRROR"), "/")
 	loadStringVars(cfg)
 	if dir := Getenv("DOWNLOAD_DIR"); dir != "" {
 		cfg.DownloadDir = dir
@@ -586,7 +586,7 @@ func parseDurations(v string) ([]time.Duration, error) {
 // loadBools fills the boolean scalar fields of cfg from the environment. It is
 // split out of loadNumeric so neither grows past the cognitive-complexity budget
 // as flags are added: each variable costs one more branch, and this file is where
-// every new LIBGEN_MCP_* setting lands.
+// every new PL_MCP_* setting lands.
 func loadBools(cfg *Config) error {
 	for _, b := range []struct {
 		key string
@@ -688,7 +688,7 @@ func splitHosts(v string) []string {
 // present. It accepts the forms strconv.ParseBool understands (1/0, t/f,
 // true/false).
 //
-// That house grammar covers every LIBGEN_MCP_* boolean, including any telemetry
+// That house grammar covers every PL_MCP_* boolean, including any telemetry
 // switch. It is deliberately looser than the OpenTelemetry specification's,
 // which accepts "true" alone: an operator typing 1 is right everywhere else on
 // this configuration surface, and being right here too is worth more than
@@ -813,22 +813,22 @@ func (c *Config) Validate() error {
 // allowed bounds, reporting the first out-of-range field in declaration order.
 func (c *Config) validateRanges() error {
 	if c.RateRPS <= 0 || c.RateRPS > 20 {
-		return fmt.Errorf("LIBGEN_MCP_RATE_RPS must be in (0, 20], got %v", c.RateRPS)
+		return fmt.Errorf("PL_MCP_RATE_RPS must be in (0, 20], got %v", c.RateRPS)
 	}
 	if c.RateBurst < 1 || c.RateBurst > 100 {
-		return fmt.Errorf("LIBGEN_MCP_RATE_BURST must be in [1, 100], got %d", c.RateBurst)
+		return fmt.Errorf("PL_MCP_RATE_BURST must be in [1, 100], got %d", c.RateBurst)
 	}
 	if c.MaxDownloadBytes < 0 || c.MaxDownloadBytes > maxDownloadBytesLimit {
-		return fmt.Errorf("LIBGEN_MCP_MAX_DOWNLOAD_BYTES must be in [0, %d], got %d", maxDownloadBytesLimit, c.MaxDownloadBytes)
+		return fmt.Errorf("PL_MCP_MAX_DOWNLOAD_BYTES must be in [0, %d], got %d", maxDownloadBytesLimit, c.MaxDownloadBytes)
 	}
 	if c.MaxConcurrentDownloads < 1 || c.MaxConcurrentDownloads > 16 {
-		return fmt.Errorf("LIBGEN_MCP_MAX_CONCURRENT_DOWNLOADS must be in [1, 16], got %d", c.MaxConcurrentDownloads)
+		return fmt.Errorf("PL_MCP_MAX_CONCURRENT_DOWNLOADS must be in [1, 16], got %d", c.MaxConcurrentDownloads)
 	}
 	if c.RetryAttempts < 1 || c.RetryAttempts > 10 {
-		return fmt.Errorf("LIBGEN_MCP_RETRY_ATTEMPTS must be in [1, 10], got %d", c.RetryAttempts)
+		return fmt.Errorf("PL_MCP_RETRY_ATTEMPTS must be in [1, 10], got %d", c.RetryAttempts)
 	}
 	if c.Timeout <= 0 || c.Timeout > maxTimeout {
-		return fmt.Errorf("LIBGEN_MCP_TIMEOUT must be in (0, %v], got %v", maxTimeout, c.Timeout)
+		return fmt.Errorf("PL_MCP_TIMEOUT must be in (0, %v], got %v", maxTimeout, c.Timeout)
 	}
 	return c.validateProcessLimits()
 }
@@ -847,13 +847,13 @@ func (c *Config) validateProcessLimits() error {
 	// every one of them off, and the only sign is a client reporting a refusal
 	// it cannot explain.
 	if c.StdioMaxLineBytes < 1 || c.StdioMaxLineBytes > maxStdioMaxLineBytes {
-		return fmt.Errorf("LIBGEN_MCP_STDIO_MAX_LINE_BYTES must be in [1, %d], got %d", maxStdioMaxLineBytes, c.StdioMaxLineBytes)
+		return fmt.Errorf("PL_MCP_STDIO_MAX_LINE_BYTES must be in [1, %d], got %d", maxStdioMaxLineBytes, c.StdioMaxLineBytes)
 	}
 	// Zero is a value rather than an omission here: it turns the cap off, which
 	// is a deployment saying it would rather hold a slot than refuse a download.
 	// Negative is a typo, and anything past a day is a unit mistake.
 	if c.ActionTimeout < 0 || c.ActionTimeout > MaxActionTimeout {
-		return fmt.Errorf("LIBGEN_MCP_ACTION_TIMEOUT must be in [0, %v] (0 disables it), got %v", MaxActionTimeout, c.ActionTimeout)
+		return fmt.Errorf("PL_MCP_ACTION_TIMEOUT must be in [0, %v] (0 disables it), got %v", MaxActionTimeout, c.ActionTimeout)
 	}
 	return nil
 }
@@ -864,16 +864,16 @@ func (c *Config) validateProcessLimits() error {
 // order.
 func (c *Config) validateReadRanges() error {
 	if c.ReadMaxChars < 500 || c.ReadMaxChars > 200000 {
-		return fmt.Errorf("LIBGEN_MCP_READ_MAX_CHARS must be in [500, 200000], got %d", c.ReadMaxChars)
+		return fmt.Errorf("PL_MCP_READ_MAX_CHARS must be in [500, 200000], got %d", c.ReadMaxChars)
 	}
 	if c.ReadDefaultPages < 1 || c.ReadDefaultPages > 200 {
-		return fmt.Errorf("LIBGEN_MCP_READ_DEFAULT_PAGES must be in [1, 200], got %d", c.ReadDefaultPages)
+		return fmt.Errorf("PL_MCP_READ_DEFAULT_PAGES must be in [1, 200], got %d", c.ReadDefaultPages)
 	}
 	if c.ReadCacheBytes < 1<<20 || c.ReadCacheBytes > maxDownloadBytesLimit {
-		return fmt.Errorf("LIBGEN_MCP_READ_CACHE_BYTES must be in [%d, %d], got %d", int64(1<<20), maxDownloadBytesLimit, c.ReadCacheBytes)
+		return fmt.Errorf("PL_MCP_READ_CACHE_BYTES must be in [%d, %d], got %d", int64(1<<20), maxDownloadBytesLimit, c.ReadCacheBytes)
 	}
 	if c.ReadCacheTTL < time.Second || c.ReadCacheTTL > 24*time.Hour {
-		return fmt.Errorf("LIBGEN_MCP_READ_CACHE_TTL must be in [%v, %v], got %v", time.Second, 24*time.Hour, c.ReadCacheTTL)
+		return fmt.Errorf("PL_MCP_READ_CACHE_TTL must be in [%v, %v], got %v", time.Second, 24*time.Hour, c.ReadCacheTTL)
 	}
 	return nil
 }
@@ -884,17 +884,17 @@ func (c *Config) validateReadRanges() error {
 // maxStartRetries waits, and each wait must be positive and within its ceiling.
 func (c *Config) validateDownloadTuning() error {
 	if c.ResolveBudget <= 0 || c.ResolveBudget > maxResolveBudget {
-		return fmt.Errorf("LIBGEN_MCP_RESOLVE_BUDGET must be in (0, %v], got %v", maxResolveBudget, c.ResolveBudget)
+		return fmt.Errorf("PL_MCP_RESOLVE_BUDGET must be in (0, %v], got %v", maxResolveBudget, c.ResolveBudget)
 	}
 	if c.DownloadStallTimeout <= 0 || c.DownloadStallTimeout > maxStallTimeout {
-		return fmt.Errorf("LIBGEN_MCP_DOWNLOAD_STALL_TIMEOUT must be in (0, %v], got %v", maxStallTimeout, c.DownloadStallTimeout)
+		return fmt.Errorf("PL_MCP_DOWNLOAD_STALL_TIMEOUT must be in (0, %v], got %v", maxStallTimeout, c.DownloadStallTimeout)
 	}
 	if len(c.DownloadStartRetryWaits) > maxStartRetries {
-		return fmt.Errorf("LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS must list at most %d waits, got %d", maxStartRetries, len(c.DownloadStartRetryWaits))
+		return fmt.Errorf("PL_MCP_DOWNLOAD_START_RETRY_WAITS must list at most %d waits, got %d", maxStartRetries, len(c.DownloadStartRetryWaits))
 	}
 	for _, w := range c.DownloadStartRetryWaits {
 		if w <= 0 || w > maxStartRetryWait {
-			return fmt.Errorf("LIBGEN_MCP_DOWNLOAD_START_RETRY_WAITS entries must be in (0, %v], got %v", maxStartRetryWait, w)
+			return fmt.Errorf("PL_MCP_DOWNLOAD_START_RETRY_WAITS entries must be in (0, %v], got %v", maxStartRetryWait, w)
 		}
 	}
 	return nil
@@ -917,15 +917,15 @@ func validateUnpaywallEmail(email string) error {
 		return nil
 	}
 	if strings.ContainsAny(email, "()") {
-		return fmt.Errorf("LIBGEN_MCP_UNPAYWALL_EMAIL must not contain a parenthesis, got %q", email)
+		return fmt.Errorf("PL_MCP_UNPAYWALL_EMAIL must not contain a parenthesis, got %q", email)
 	}
 	at := strings.Index(email, "@")
 	if at <= 0 {
-		return fmt.Errorf("LIBGEN_MCP_UNPAYWALL_EMAIL must contain %q, got %q", "@", email)
+		return fmt.Errorf("PL_MCP_UNPAYWALL_EMAIL must contain %q, got %q", "@", email)
 	}
 	dot := strings.Index(email[at+1:], ".")
 	if dot <= 0 || at+1+dot == len(email)-1 {
-		return fmt.Errorf("LIBGEN_MCP_UNPAYWALL_EMAIL must have a domain with a dot, got %q", email)
+		return fmt.Errorf("PL_MCP_UNPAYWALL_EMAIL must have a domain with a dot, got %q", email)
 	}
 	return nil
 }
@@ -935,14 +935,14 @@ func validateUnpaywallEmail(email string) error {
 // https://<host>/<doi> itself, so a scheme or path here would corrupt the URL).
 func validateScihubHosts(hosts []string) error {
 	if len(hosts) == 0 {
-		return errors.New("LIBGEN_MCP_SCIHUB_HOSTS must list at least one host")
+		return errors.New("PL_MCP_SCIHUB_HOSTS must list at least one host")
 	}
 	for _, h := range hosts {
 		if h == "" {
-			return errors.New("LIBGEN_MCP_SCIHUB_HOSTS must not contain empty hosts")
+			return errors.New("PL_MCP_SCIHUB_HOSTS must not contain empty hosts")
 		}
 		if strings.Contains(h, "/") || strings.Contains(h, "://") {
-			return fmt.Errorf("LIBGEN_MCP_SCIHUB_HOSTS entries must be bare hosts, got %q", h)
+			return fmt.Errorf("PL_MCP_SCIHUB_HOSTS entries must be bare hosts, got %q", h)
 		}
 	}
 	return nil
@@ -954,13 +954,13 @@ func validateScihubHosts(hosts []string) error {
 func validateSources(sources []string) error {
 	for _, s := range sources {
 		if !slices.Contains(KnownSources, strings.ToLower(strings.TrimSpace(s))) {
-			return fmt.Errorf("LIBGEN_MCP_SOURCES has unknown source %q (allowed: %s)", s, strings.Join(KnownSources, ", "))
+			return fmt.Errorf("PL_MCP_SOURCES has unknown source %q (allowed: %s)", s, strings.Join(KnownSources, ", "))
 		}
 	}
 	return nil
 }
 
-// ResolveServerFetch settles the LIBGEN_MCP_SERVER_FETCH tri-state against the
+// ResolveServerFetch settles the PL_MCP_SERVER_FETCH tri-state against the
 // transport and records the answer on the Config, so the tool registration and
 // the libgen client both read one decided value instead of re-deriving it from a
 // transport neither of them can see. It returns that value.
@@ -1005,8 +1005,8 @@ func (c *Config) ServerFetchAllowed() bool {
 // chain. When Sources is empty every source is enabled; otherwise only the listed
 // names (compared case-insensitively) are. Two sources are additionally gated on a
 // credential: unpaywall on a configured contact email (its API rejects requests
-// without one, so an empty LIBGEN_MCP_UNPAYWALL_EMAIL disables it), and core on a
-// configured API key (an empty LIBGEN_MCP_CORE_KEY leaves the source out of the
+// without one, so an empty PL_MCP_UNPAYWALL_EMAIL disables it), and core on a
+// configured API key (an empty PL_MCP_CORE_KEY leaves the source out of the
 // chain), regardless of the Sources list.
 func (c *Config) SourceEnabled(name string) bool {
 	if strings.EqualFold(strings.TrimSpace(name), "unpaywall") && strings.TrimSpace(c.UnpaywallEmail) == "" {
@@ -1027,8 +1027,8 @@ func (c *Config) SourceEnabled(name string) bool {
 }
 
 // OperatorHosts returns the destinations this deployment's operator named in
-// its own configuration, as written: the forced mirror (LIBGEN_MIRROR) and the
-// Sci-Hub hosts (LIBGEN_MCP_SCIHUB_HOSTS).
+// its own configuration, as written: the forced mirror (LBN_MIRROR) and the
+// Sci-Hub hosts (PL_MCP_SCIHUB_HOSTS).
 //
 // internal/netguard is the consumer, and the distinction it draws is the reason
 // this exists: a host the operator wrote down is theirs to choose, while a URL
@@ -1055,13 +1055,13 @@ func validateMirror(mirror string) error {
 	}
 	u, err := url.Parse(mirror)
 	if err != nil {
-		return fmt.Errorf("LIBGEN_MIRROR is not a valid URL: %w", err)
+		return fmt.Errorf("LBN_MIRROR is not a valid URL: %w", err)
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("LIBGEN_MIRROR must use http or https, got scheme %q", u.Scheme)
+		return fmt.Errorf("LBN_MIRROR must use http or https, got scheme %q", u.Scheme)
 	}
 	if u.Host == "" {
-		return errors.New("LIBGEN_MIRROR must include a host")
+		return errors.New("LBN_MIRROR must include a host")
 	}
 	return nil
 }
@@ -1079,21 +1079,21 @@ var (
 // it is writable using a temporary file.
 func validateDownloadDir(dir string) error {
 	if dir == "" {
-		return errors.New("LIBGEN_MCP_DOWNLOAD_DIR must not be empty")
+		return errors.New("PL_MCP_DOWNLOAD_DIR must not be empty")
 	}
 	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return fmt.Errorf("LIBGEN_MCP_DOWNLOAD_DIR %q is not usable: %w", dir, err)
+		return fmt.Errorf("PL_MCP_DOWNLOAD_DIR %q is not usable: %w", dir, err)
 	}
 	f, err := os.CreateTemp(dir, ".libgen-mcp-write-test-*")
 	if err != nil {
-		return fmt.Errorf("LIBGEN_MCP_DOWNLOAD_DIR %q is not writable: %w", dir, err)
+		return fmt.Errorf("PL_MCP_DOWNLOAD_DIR %q is not writable: %w", dir, err)
 	}
 	name := f.Name()
 	if closeErr := closeWriteTestFile(f); closeErr != nil {
-		return fmt.Errorf("LIBGEN_MCP_DOWNLOAD_DIR %q write test: %w", dir, closeErr)
+		return fmt.Errorf("PL_MCP_DOWNLOAD_DIR %q write test: %w", dir, closeErr)
 	}
 	if rmErr := removeWriteTestFile(name); rmErr != nil {
-		return fmt.Errorf("LIBGEN_MCP_DOWNLOAD_DIR %q write test cleanup: %w", dir, rmErr)
+		return fmt.Errorf("PL_MCP_DOWNLOAD_DIR %q write test cleanup: %w", dir, rmErr)
 	}
 	return nil
 }
