@@ -475,9 +475,12 @@ directory for a dead one's. A server whose temporary directory is on one of thos
 makes no `libgen-mcp-read-*` directory and sweeps nothing: it logs a warning once and makes
 each fetch's directory loose in the temporary directory as `libgen-read-*` instead, which a
 clean exit still removes and a killed server leaves behind. It does the same where the
-temporary directory cannot take the lock at all. Only those filesystems are checked, and only
-on Linux, so do not share one temporary directory between hosts on any other filesystem where
-a lock stays on the host that took it: on Linux, GFS2 or OCFS2 mounted with `localflocks`
+temporary directory cannot take the lock at all, and where `/proc/self/mountinfo` cannot be
+read, because 9p at its default protocol is only recognized through that table. Inside a
+chroot the table does not list the mount the chroot sits on, so a chroot on a 9p share is not
+recognized. Only those filesystems are checked, and only on Linux, so do not share one
+temporary directory between hosts on any other filesystem where a lock stays on the host that
+took it: on Linux, GFS2 or OCFS2 mounted with `localflocks`
 (without that option both lock across the cluster, as Ceph does), and on other systems any
 network filesystem. Up to 2.2.0 every fetch's directory sat loose in the temporary directory
 under the `libgen-read-*` name and outlived every process that fetched it. The sweep never

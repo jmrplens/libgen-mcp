@@ -81,36 +81,41 @@ func networkFilesystem(dir string) (string, error) {
 	if name := networkFilesystemName(magic); name != "" {
 		return name, nil
 	}
-	if mountType(dir) == "9p" {
+	fstype, err := mountType(dir)
+	if err != nil {
+		return "", err
+	}
+	if fstype == "9p" {
 		return "9p", nil
 	}
 	return "", nil
 }
 
 // mountType is the filesystem type of the mount dir is on, as the mount table
-// names it (the name mount -t takes), or "" when the table cannot be read or
-// lists no mount of dir's device.
+// names it (the name mount -t takes), "" when the table lists no mount of
+// dir's device, and errMountTableUnreadable when the table cannot be read.
 //
-// The mount is found by the device number its files report. A table that
-// cannot be read, or a filesystem whose files report another device number
-// than its mount (a Btrfs subvolume), leaves statfs's answer standing rather
-// than failing every read, which would turn a missing /proc into a server that
-// cannot read anything. A 9p mount's files report its own.
-func mountType(dir string) string {
+// The mount is found by the device number its files report. A filesystem
+// whose files report another device number than its mount (a Btrfs
+// subvolume) is not listed, and leaves statfs's answer standing. So does a
+// mount outside a chroot, which the kernel leaves out of the table: a chroot
+// whose root is on a 9P2000.L share is not recognized. A 9p mount's files
+// report its own device.
+func mountType(dir string) (string, error) {
 	dev, err := deviceNumber(dir)
 	if err != nil {
-		return ""
+		return "", nil
 	}
 	table, err := os.ReadFile(mountInfoPath)
 	if err != nil {
-		return ""
+		return "", errMountTableUnreadable
 	}
 	for line := range strings.Lines(string(table)) {
 		if lineDev, fstype := mountEntry(line); lineDev == dev {
-			return fstype
+			return fstype, nil
 		}
 	}
-	return ""
+	return "", nil
 }
 
 // deviceNumber is the device number of the filesystem dir is on, written as

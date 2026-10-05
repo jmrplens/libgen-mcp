@@ -42,6 +42,14 @@ var errLockHeld = errors.New("the lock is held by another open file")
 // holdReadRootLock), or one only this host would see (see networkFilesystem).
 var errLocksUnusable = errors.New("file locks do not work here")
 
+// errMountTableUnreadable is networkFilesystem's answer on Linux when statfs
+// names a local filesystem and the mount table that could say otherwise
+// cannot be read. holdReadRootLock treats it as a lock it cannot rely on: the
+// loose fallback costs only the cleanup of a killed server's files, while
+// taking a 9p share for a local disk lets another host's sweep remove this
+// host's live files.
+var errMountTableUnreadable = errors.New("the mount table cannot be read, so a 9p share cannot be told from a local disk")
+
 // readRootLockGrace is how long a read root that holds no fetch directory
 // must go unmodified before the sweep judges it at all. A younger one is left
 // alone whatever its lock says.
@@ -212,6 +220,9 @@ func (r *readRoot) dropLocked() {
 // that it never saw it.
 func holdReadRootLock(dir string) (*os.File, error) {
 	netfs, err := networkFilesystem(dir)
+	if errors.Is(err, errMountTableUnreadable) {
+		return nil, fmt.Errorf("%w: %w", errLocksUnusable, err)
+	}
 	if err != nil {
 		return nil, err
 	}

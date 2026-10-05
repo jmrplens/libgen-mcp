@@ -1760,8 +1760,8 @@ in the same change. Two things about it are easy to get wrong:
   `TMPDIR`, and on Linux a *directory's* `flock` never is across hosts on NFS,
   SMB, FUSE, 9p, AFS, Coda, OrangeFS or vboxsf, whatever the mount options:
   their directory `file_operations` have no `.flock`, so `flock(2)` takes a
-  local VFS lock and succeeds (a regular file there would have been locked on
-  the server). So
+  local VFS lock and succeeds (on NFS or SMB a regular file would have been
+  locked on the server). So
   `holdReadRootLock` asks `networkFilesystem` (the temp directory's `statfs`
   type, then its mount's type in `/proc/self/mountinfo`) before it locks, and
   a root on one of those is `errLocksUnusable`, which sends the process to the
@@ -1770,7 +1770,12 @@ in the same change. Two things about it are easy to get wrong:
   lock and reading the error: there is none. Nor into `statfs` alone: a 9p
   mount at 9P2000.L, the Linux default, reports the type of the server's
   backing filesystem (`ext4` under a QEMU virtfs share), so only the mount
-  table names it. GFS2 and OCFS2 mounted `localflocks` keep a directory's
+  table names it. When that table cannot be read the answer is
+  `errMountTableUnreadable`, which also sends the process to the fallback:
+  refusing costs only the cleanup of a killed server's files, accepting can
+  cost another host its live ones. Keep it that way round. A mount outside a
+  chroot is not in the table, so a chroot rooted on a 9P2000.L share is not
+  recognized. GFS2 and OCFS2 mounted `localflocks` keep a directory's
   flock on each node too, and are deliberately not refused: GFS2 sets that
   option on every `lock_nolock` mount, which one host alone can mount, so the
   configuration reference warns instead. Other platforms do not check at all.

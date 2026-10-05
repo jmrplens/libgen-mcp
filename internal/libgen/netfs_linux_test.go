@@ -150,22 +150,28 @@ func TestNetworkFilesystem(t *testing.T) {
 }
 
 // TestMountType finds the mount of a directory's device in the table, past a
-// line for another device, and answers "" whenever it cannot: a device the
-// table does not list, a table that cannot be read, a directory that is not
-// there. The first case reads the kernel's own table, where /proc is a proc
-// mount on every Linux system.
+// line for another device, answers "" for a device the table does not list or
+// a directory that is not there, and errMountTableUnreadable for a table that
+// cannot be read. The first case reads the kernel's own table, where /proc is
+// a proc mount on every Linux system.
 func TestMountType(t *testing.T) {
 	t.Run("the kernel's own table", func(t *testing.T) {
-		if got := mountType("/proc"); got != "proc" {
-			t.Errorf("mountType(/proc) = %q, want proc", got)
+		if got, err := mountType("/proc"); got != "proc" || err != nil {
+			t.Errorf("mountType(/proc) = %q, %v, want proc, nil", got, err)
 		}
 	})
 	t.Run("the table cannot be read", func(t *testing.T) {
 		prev := mountInfoPath
 		t.Cleanup(func() { mountInfoPath = prev })
 		mountInfoPath = filepath.Join(t.TempDir(), "absent")
-		if got := mountType(t.TempDir()); got != "" {
-			t.Errorf("mountType = %q, want \"\"", got)
+		if got, err := mountType(t.TempDir()); got != "" || !errors.Is(err, errMountTableUnreadable) {
+			t.Errorf("mountType = %q, %v, want \"\", errMountTableUnreadable", got, err)
+		}
+		if got, err := networkFilesystem(t.TempDir()); got != "" || !errors.Is(err, errMountTableUnreadable) {
+			t.Errorf("networkFilesystem = %q, %v, want \"\", errMountTableUnreadable", got, err)
+		}
+		if f, err := holdReadRootLock(t.TempDir()); f != nil || !errors.Is(err, errLocksUnusable) {
+			t.Errorf("holdReadRootLock = %v, %v, want nil, errLocksUnusable", f, err)
 		}
 	})
 	cases := []struct {
@@ -191,8 +197,8 @@ func TestMountType(t *testing.T) {
 			if tc.missing {
 				dir = filepath.Join(dir, "absent")
 			}
-			if got := mountType(dir); got != tc.want {
-				t.Errorf("mountType = %q, want %q", got, tc.want)
+			if got, err := mountType(dir); got != tc.want || err != nil {
+				t.Errorf("mountType = %q, %v, want %q, nil", got, err, tc.want)
 			}
 		})
 	}
