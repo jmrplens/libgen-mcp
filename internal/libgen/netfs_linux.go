@@ -4,7 +4,9 @@
 package libgen
 
 import (
+	"fmt"
 	"os"
+	"strings"
 
 	"golang.org/x/sys/unix"
 )
@@ -13,6 +15,11 @@ import (
 // mount to put the temp directory on, so only a substitute can make one look
 // like it.
 var statfsType = filesystemType
+
+// mountInfoPath is the mount table of this process's mount namespace, as a
+// seam for the same reason: no test machine has a 9p mount for the temp
+// directory to be on, so only a substitute table can say it is.
+var mountInfoPath = "/proc/self/mountinfo"
 
 // filesystemType is the filesystem type number statfs(2) reports for dir.
 //
@@ -44,12 +51,79 @@ func filesystemType(dir string) (uint32, error) {
 // share a directory between machines and the kernel cannot tell those from a
 // FUSE filesystem on local disk. Ceph, GFS2 and OCFS2 are not named: their
 // directories take a lock that is coherent across the cluster.
+//
+// statfs names every one of them by its own type number but one: a 9p mount
+// speaking 9P2000.L, which is the Linux default, reports the type of the
+// filesystem behind the share on the server (ext4 under a QEMU virtfs share
+// of an ext4 directory), so statfs alone takes it for a local disk. That one
+// is known by the type the mount table gives the mount instead (see
+// mountType).
 func networkFilesystem(dir string) (string, error) {
 	magic, err := statfsType(dir)
 	if err != nil {
 		return "", err
 	}
-	return networkFilesystemName(magic), nil
+	if name := networkFilesystemName(magic); name != "" {
+		return name, nil
+	}
+	if mountType(dir) == "9p" {
+		return "9p", nil
+	}
+	return "", nil
+}
+
+// mountType is the filesystem type of the mount dir is on, as the mount table
+// names it (the name mount -t takes), or "" when the table cannot be read or
+// lists no mount of dir's device.
+//
+// The mount is found by the device number its files report. A table that
+// cannot be read, or a filesystem whose files report another device number
+// than its mount (a Btrfs subvolume), leaves statfs's answer standing rather
+// than failing every read, which would turn a missing /proc into a server that
+// cannot read anything. A 9p mount's files report its own.
+func mountType(dir string) string {
+	dev, err := deviceNumber(dir)
+	if err != nil {
+		return ""
+	}
+	table, err := os.ReadFile(mountInfoPath)
+	if err != nil {
+		return ""
+	}
+	for line := range strings.Lines(string(table)) {
+		if lineDev, fstype := mountEntry(line); lineDev == dev {
+			return fstype
+		}
+	}
+	return ""
+}
+
+// deviceNumber is the device number of the filesystem dir is on, written as
+// the mount table writes it, major:minor.
+func deviceNumber(dir string) (string, error) {
+	var st unix.Stat_t
+	if err := unix.Stat(dir, &st); err != nil {
+		return "", err
+	}
+	dev := uint64(st.Dev) //nolint:unconvert // st.Dev is a uint32 on 32-bit MIPS
+	return fmt.Sprintf("%d:%d", unix.Major(dev), unix.Minor(dev)), nil
+}
+
+// mountEntry reads the device number and the filesystem type off one line of
+// a mountinfo table (proc_pid_mountinfo(5)). The device is the third field,
+// and the type is the first after the lone "-" that ends the optional fields,
+// whose number varies. A line it cannot read answers "" for both, which no
+// device number equals.
+//
+// The separator is found as " - " in the whole line, which only it can be:
+// the fields before it that hold a path escape a space as \040.
+func mountEntry(line string) (dev, fstype string) {
+	before, after, _ := strings.Cut(line, " - ")
+	head, tail := strings.Fields(before), strings.Fields(after)
+	if len(head) < 3 || len(tail) == 0 {
+		return "", ""
+	}
+	return head[2], tail[0]
 }
 
 // networkFilesystemName names the filesystem type number magic when it is one

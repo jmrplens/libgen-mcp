@@ -26,6 +26,37 @@ func statfsAnswers(t *testing.T, magic uint32, err error) *atomic.Int32 {
 	return &asked
 }
 
+// mountTable makes the mount table this process reads hold lines, in order.
+func mountTable(t *testing.T, lines ...string) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "mountinfo")
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	prev := mountInfoPath
+	t.Cleanup(func() { mountInfoPath = prev })
+	mountInfoPath = path
+}
+
+// mountLine is one line of a mount table, written as the kernel writes one,
+// for a mount of type fstype whose files report the device number dev.
+func mountLine(dev, fstype string) string {
+	return "36 25 " + dev + " / /mnt/share rw,relatime shared:1 - " + fstype + " share rw"
+}
+
+// deviceOf is the device number of a directory a test made, which has one.
+func deviceOf(t *testing.T, dir string) string {
+	t.Helper()
+	dev, err := deviceNumber(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dev
+}
+
+// otherDevice is a device number no directory a test makes is on.
+const otherDevice = "0:999999"
+
 // TestNetworkFilesystemName names exactly the filesystems whose directories
 // Linux locks on this host alone, and none whose directories take a lock that
 // reaches every host (Ceph, OCFS2) or that only one host mounts.
@@ -80,27 +111,116 @@ func TestFilesystemType(t *testing.T) {
 	})
 }
 
-// TestNetworkFilesystem passes statfs's answer through: a type it names, a
-// type it does not, and an error.
+// TestNetworkFilesystem asks statfs first and the mount table only when
+// statfs names nothing: a type statfs names, a 9p mount statfs takes for the
+// disk behind it, a local filesystem by both, and a statfs that fails.
 func TestNetworkFilesystem(t *testing.T) {
 	statfsFailed := errors.New("statfs failed")
 	cases := []struct {
 		name    string
 		magic   uint32
 		err     error
+		mounted string
 		want    string
 		wantErr error
 	}{
-		{"a network filesystem", unix.NFS_SUPER_MAGIC, nil, "NFS", nil},
-		{"a local filesystem", unix.EXT4_SUPER_MAGIC, nil, "", nil},
-		{"statfs fails", 0, statfsFailed, "", statfsFailed},
+		{"a network filesystem", unix.NFS_SUPER_MAGIC, nil, "ext4", "NFS", nil},
+		{"9P2000.L over an ext4 share", unix.EXT4_SUPER_MAGIC, nil, "9p", "9p", nil},
+		{"a local filesystem", unix.EXT4_SUPER_MAGIC, nil, "ext4", "", nil},
+		{"statfs fails", 0, statfsFailed, "9p", "", statfsFailed},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
 			statfsAnswers(t, tc.magic, tc.err)
-			got, err := networkFilesystem(t.TempDir())
+			mountTable(t, mountLine(deviceOf(t, dir), tc.mounted))
+			got, err := networkFilesystem(dir)
 			if got != tc.want || !errors.Is(err, tc.wantErr) {
 				t.Errorf("networkFilesystem = %q, %v, want %q, %v", got, err, tc.want, tc.wantErr)
+			}
+		})
+	}
+}
+
+// TestMountType finds the mount of a directory's device in the table, past a
+// line for another device, and answers "" whenever it cannot: a device the
+// table does not list, a table that cannot be read, a directory that is not
+// there. The first case reads the kernel's own table, where /proc is a proc
+// mount on every Linux system.
+func TestMountType(t *testing.T) {
+	t.Run("the kernel's own table", func(t *testing.T) {
+		if got := mountType("/proc"); got != "proc" {
+			t.Errorf("mountType(/proc) = %q, want proc", got)
+		}
+	})
+	t.Run("the table cannot be read", func(t *testing.T) {
+		prev := mountInfoPath
+		t.Cleanup(func() { mountInfoPath = prev })
+		mountInfoPath = filepath.Join(t.TempDir(), "absent")
+		if got := mountType(t.TempDir()); got != "" {
+			t.Errorf("mountType = %q, want \"\"", got)
+		}
+	})
+	cases := []struct {
+		name    string
+		table   func(dev string) []string
+		missing bool
+		want    string
+	}{
+		{"the device is listed after another", func(dev string) []string {
+			return []string{mountLine(otherDevice, "nfs4"), mountLine(dev, "9p")}
+		}, false, "9p"},
+		{"the device is not listed", func(string) []string {
+			return []string{mountLine(otherDevice, "9p")}
+		}, false, ""},
+		{"the directory is not there", func(dev string) []string {
+			return []string{mountLine(dev, "9p")}
+		}, true, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			mountTable(t, tc.table(deviceOf(t, dir))...)
+			if tc.missing {
+				dir = filepath.Join(dir, "absent")
+			}
+			if got := mountType(dir); got != tc.want {
+				t.Errorf("mountType = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestDeviceNumber_AMissingDirectory fails for a directory that is not there.
+// That a device number is written as the mount table writes it is
+// TestMountType's first case, which matches one against the kernel's table.
+func TestDeviceNumber_AMissingDirectory(t *testing.T) {
+	if dev, err := deviceNumber(filepath.Join(t.TempDir(), "absent")); dev != "" || !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("deviceNumber = %q, %v, want \"\" and fs.ErrNotExist", dev, err)
+	}
+}
+
+// TestMountEntry reads the device number and the type off every shape of
+// mountinfo line, wherever the separator falls, and nothing off a line that
+// lacks either.
+func TestMountEntry(t *testing.T) {
+	cases := []struct {
+		name, line, dev, fstype string
+	}{
+		{"one optional field", "29 1 8:1 / / rw,relatime shared:1 - ext4 /dev/sda1 rw,errors=remount-ro\n", "8:1", "ext4"},
+		{"no optional field", "40 29 0:35 / /mnt/share rw,relatime - 9p hostshare rw,access=client,trans=virtio", "0:35", "9p"},
+		{"several optional fields", "41 29 0:36 / /mnt/a rw shared:5 master:2 propagate_from:1 - nfs4 srv:/x rw", "0:36", "nfs4"},
+		{"a mount point holding a dash between spaces", `42 29 0:37 / /mnt/a\040-\040b rw - tmpfs tmpfs rw`, "0:37", "tmpfs"},
+		{"the fewest fields that hold both", "1 2 0:5 - 9p", "0:5", "9p"},
+		{"too few fields before the separator", "1 0:5 - 9p", "", ""},
+		{"no separator", "29 1 8:1 / / rw ext4 /dev/sda1 rw", "", ""},
+		{"nothing after the separator", "29 1 8:1 / / rw - \n", "", ""},
+		{"an empty line", "", "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if dev, fstype := mountEntry(tc.line); dev != tc.dev || fstype != tc.fstype {
+				t.Errorf("mountEntry(%q) = %q, %q, want %q, %q", tc.line, dev, fstype, tc.dev, tc.fstype)
 			}
 		})
 	}
@@ -123,6 +243,22 @@ func TestHoldReadRootLock_OnANetworkFilesystem(t *testing.T) {
 		}
 		if !errors.Is(err, errLocksUnusable) || !strings.Contains(err.Error(), "NFS") {
 			t.Errorf("error = %v, want errLocksUnusable naming NFS", err)
+		}
+		if got := tries.Load(); got != 0 {
+			t.Errorf("the lock was tried %d times, want never", got)
+		}
+	})
+	t.Run("9P2000.L, which only the mount table names", func(t *testing.T) {
+		statfsAnswers(t, unix.EXT4_SUPER_MAGIC, nil)
+		mountTable(t, mountLine(deviceOf(t, tmp), "9p"))
+		tries := lockAnswers(t, nil)
+		f, err := holdReadRootLock(newRootDir(t, tmp))
+		if f != nil {
+			_ = f.Close()
+			t.Error("returned a file for a root on 9p")
+		}
+		if !errors.Is(err, errLocksUnusable) || !strings.Contains(err.Error(), "9p") {
+			t.Errorf("error = %v, want errLocksUnusable naming 9p", err)
 		}
 		if got := tries.Load(); got != 0 {
 			t.Errorf("the lock was tried %d times, want never", got)

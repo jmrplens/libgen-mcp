@@ -1762,10 +1762,14 @@ in the same change. Two things about it are easy to get wrong:
   `file_operations` have no `.flock`, so `flock(2)` takes a local VFS lock and
   succeeds (a regular file there would have been locked on the server). So
   `holdReadRootLock` asks `networkFilesystem` (the temp directory's `statfs`
-  type) before it locks, and a root on one of those is `errLocksUnusable`,
-  which sends the process to the loose fallback; the sweep runs only after the
-  process's own root is locked, so such a host never sweeps either. Do not
-  "simplify" that into trying the lock and reading the error: there is none.
+  type, then its mount's type in `/proc/self/mountinfo`) before it locks, and
+  a root on one of those is `errLocksUnusable`, which sends the process to the
+  loose fallback; the sweep runs only after the process's own root is locked,
+  so such a host never sweeps either. Do not "simplify" that into trying the
+  lock and reading the error: there is none. Nor into `statfs` alone: a 9p
+  mount at 9P2000.L, the Linux default, reports the type of the server's
+  backing filesystem (`ext4` under a QEMU virtfs share), so only the mount
+  table names it.
   Other platforms do not check. The loose prefix, `libgen-read-*`, is
   deliberately never swept: nothing marks which process made one, and a server
   of those versions, or one whose temp directory cannot lock, may still be
