@@ -202,6 +202,16 @@ func TestReadRemovesWhatAKilledServerLeft(t *testing.T) {
 
 	killed := startReadServer(t, m, tmp)
 	killed.read(t)
+	// A temp directory that cannot hold a lock every server would see makes no
+	// read root at all, only loose libgen-read-* directories, which no sweep
+	// touches: there is no leftover root for the case to watch go.
+	loose, globErr := filepath.Glob(filepath.Join(tmp, "libgen-read-*"))
+	if globErr != nil {
+		t.Fatal(globErr)
+	}
+	if len(loose) > 0 {
+		t.Skip("the temp directory here cannot hold a read root's lock, so the server fell back to loose directories")
+	}
 	killed.stop(t, syscall.SIGKILL)
 	left := readRoots(t, tmp)
 	if len(left) != 1 {
