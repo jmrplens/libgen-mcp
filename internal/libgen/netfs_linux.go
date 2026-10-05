@@ -4,6 +4,7 @@
 package libgen
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -82,6 +83,9 @@ func networkFilesystem(dir string) (string, error) {
 		return name, nil
 	}
 	fstype, err := mountType(dir)
+	if errors.Is(err, errMountUnlisted) && subvolumeFilesystem(magic) {
+		return "", nil
+	}
 	if err != nil {
 		return "", err
 	}
@@ -91,31 +95,41 @@ func networkFilesystem(dir string) (string, error) {
 	return "", nil
 }
 
+// subvolumeFilesystem reports whether statfs's type number names a local
+// filesystem whose files report a device number of their own, one per
+// subvolume, that no line of the mount table carries. Such a directory is
+// unlisted in an ordinary mount namespace, so its absence from the table says
+// nothing. Only a chroot whose root is a 9p share of one of these is then
+// taken for a local disk.
+func subvolumeFilesystem(magic uint32) bool {
+	return magic == unix.BTRFS_SUPER_MAGIC || magic == unix.BCACHEFS_SUPER_MAGIC
+}
+
 // mountType is the filesystem type of the mount dir is on, as the mount table
-// names it (the name mount -t takes), "" when the table lists no mount of
-// dir's device, and errMountTableUnreadable when the table cannot be read.
+// names it (the name mount -t takes). It answers errMountUnknown when the
+// table does not say: when it cannot be read, and, wrapping errMountUnlisted,
+// when it lists no mount of dir's device.
 //
-// The mount is found by the device number its files report. A filesystem
-// whose files report another device number than its mount (a Btrfs
-// subvolume) is not listed, and leaves statfs's answer standing. So does a
-// mount outside a chroot, which the kernel leaves out of the table: a chroot
-// whose root is on a 9P2000.L share is not recognized. A 9p mount's files
-// report its own device.
+// The mount is found by the device number its files report. A 9p mount's
+// files report its own. A filesystem whose files report another device number
+// than its mount (a Btrfs subvolume) is not listed, and neither is a mount
+// outside a chroot, which the kernel leaves out of the table: networkFilesystem
+// tells those two apart by statfs's answer.
 func mountType(dir string) (string, error) {
 	dev, err := deviceNumber(dir)
 	if err != nil {
-		return "", nil
+		return "", fmt.Errorf("%w: %w", errMountUnknown, err)
 	}
 	table, err := os.ReadFile(mountInfoPath)
 	if err != nil {
-		return "", errMountTableUnreadable
+		return "", fmt.Errorf("%w: %w", errMountUnknown, err)
 	}
 	for line := range strings.Lines(string(table)) {
 		if lineDev, fstype := mountEntry(line); lineDev == dev {
 			return fstype, nil
 		}
 	}
-	return "", nil
+	return "", fmt.Errorf("%w: %w", errMountUnknown, errMountUnlisted)
 }
 
 // deviceNumber is the device number of the filesystem dir is on, written as

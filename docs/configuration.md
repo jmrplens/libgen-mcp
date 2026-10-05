@@ -475,10 +475,11 @@ directory for a dead one's. A server whose temporary directory is on one of thos
 makes no `libgen-mcp-read-*` directory and sweeps nothing: it logs a warning once and makes
 each fetch's directory loose in the temporary directory as `libgen-read-*` instead, which a
 clean exit still removes and a killed server leaves behind. It does the same where the
-temporary directory cannot take the lock at all, and where `/proc/self/mountinfo` cannot be
-read, because 9p at its default protocol is only recognized through that table. Inside a
-chroot the table does not list the mount the chroot sits on, so a chroot on a 9p share is not
-recognized. Only those filesystems are checked, and only on Linux, so do not share one
+temporary directory cannot take the lock at all, and where `/proc/self/mountinfo` does not
+describe the temporary directory's mount, because 9p at its default protocol is only
+recognized through that table: where the table cannot be read, and where it lists no mount of
+the directory's device, as inside a chroot. Btrfs and bcachefs are the exception to the last
+case, since their subvolumes are never listed by device. Only those filesystems are checked, and only on Linux, so do not share one
 temporary directory between hosts on any other filesystem where a lock stays on the host that
 took it: on Linux, GFS2 or OCFS2 mounted with `localflocks`
 (without that option both lock across the cluster, as Ceph does), and on other systems any

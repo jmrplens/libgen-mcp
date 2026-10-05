@@ -1770,12 +1770,15 @@ in the same change. Two things about it are easy to get wrong:
   lock and reading the error: there is none. Nor into `statfs` alone: a 9p
   mount at 9P2000.L, the Linux default, reports the type of the server's
   backing filesystem (`ext4` under a QEMU virtfs share), so only the mount
-  table names it. When that table cannot be read the answer is
-  `errMountTableUnreadable`, which also sends the process to the fallback:
-  refusing costs only the cleanup of a killed server's files, accepting can
-  cost another host its live ones. Keep it that way round. A mount outside a
-  chroot is not in the table, so a chroot rooted on a 9P2000.L share is not
-  recognized. GFS2 and OCFS2 mounted `localflocks` keep a directory's
+  table names it. When that table does not describe the mount, because it
+  cannot be read or lists no mount of the directory's device (a chroot hides
+  mounts outside it), the answer is `errMountUnknown`, which also sends the
+  process to the fallback: refusing costs only the cleanup of a killed
+  server's files, accepting can cost another host its live ones. Keep it that
+  way round. The one exception is `subvolumeFilesystem`: Btrfs and bcachefs
+  subvolumes report a device number no table line carries, so an unlisted
+  directory there is the ordinary case, and refusing it would cost every such
+  host its sweep. GFS2 and OCFS2 mounted `localflocks` keep a directory's
   flock on each node too, and are deliberately not refused: GFS2 sets that
   option on every `lock_nolock` mount, which one host alone can mount, so the
   configuration reference warns instead. Other platforms do not check at all.

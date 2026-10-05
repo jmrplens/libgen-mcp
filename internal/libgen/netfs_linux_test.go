@@ -135,12 +135,20 @@ func TestNetworkFilesystem(t *testing.T) {
 		{"9P2000.L over an ext4 share", unix.EXT4_SUPER_MAGIC, nil, "9p", "9p", nil},
 		{"a local filesystem", unix.EXT4_SUPER_MAGIC, nil, "ext4", "", nil},
 		{"statfs fails", 0, statfsFailed, "9p", "", statfsFailed},
+		// An empty mounted names no line for the directory's device.
+		{"ext4 the table does not list, as in a chroot on a share", unix.EXT4_SUPER_MAGIC, nil, "", "", errMountUnlisted},
+		{"a Btrfs subvolume the table does not list", unix.BTRFS_SUPER_MAGIC, nil, "", "", nil},
+		{"a bcachefs subvolume the table does not list", unix.BCACHEFS_SUPER_MAGIC, nil, "", "", nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
 			statfsAnswers(t, tc.magic, tc.err)
-			mountTable(t, mountLine(deviceOf(t, dir), tc.mounted))
+			if tc.mounted == "" {
+				mountTable(t, mountLine(otherDevice, "9p"))
+			} else {
+				mountTable(t, mountLine(deviceOf(t, dir), tc.mounted))
+			}
 			got, err := networkFilesystem(dir)
 			if got != tc.want || !errors.Is(err, tc.wantErr) {
 				t.Errorf("networkFilesystem = %q, %v, want %q, %v", got, err, tc.want, tc.wantErr)
@@ -150,45 +158,33 @@ func TestNetworkFilesystem(t *testing.T) {
 }
 
 // TestMountType finds the mount of a directory's device in the table, past a
-// line for another device, answers "" for a device the table does not list or
-// a directory that is not there, and errMountTableUnreadable for a table that
-// cannot be read. The first case reads the kernel's own table, where /proc is
-// a proc mount on every Linux system.
+// line for another device, and answers errMountUnknown whenever the table
+// does not say: a table that cannot be read, a directory that is not there,
+// and, as errMountUnlisted too, a device the table does not list. The first
+// case reads the kernel's own table, where /proc is a proc mount on every
+// Linux system.
 func TestMountType(t *testing.T) {
 	t.Run("the kernel's own table", func(t *testing.T) {
 		if got, err := mountType("/proc"); got != "proc" || err != nil {
 			t.Errorf("mountType(/proc) = %q, %v, want proc, nil", got, err)
 		}
 	})
-	t.Run("the table cannot be read", func(t *testing.T) {
-		prev := mountInfoPath
-		t.Cleanup(func() { mountInfoPath = prev })
-		mountInfoPath = filepath.Join(t.TempDir(), "absent")
-		if got, err := mountType(t.TempDir()); got != "" || !errors.Is(err, errMountTableUnreadable) {
-			t.Errorf("mountType = %q, %v, want \"\", errMountTableUnreadable", got, err)
-		}
-		if got, err := networkFilesystem(t.TempDir()); got != "" || !errors.Is(err, errMountTableUnreadable) {
-			t.Errorf("networkFilesystem = %q, %v, want \"\", errMountTableUnreadable", got, err)
-		}
-		if f, err := holdReadRootLock(t.TempDir()); f != nil || !errors.Is(err, errLocksUnusable) {
-			t.Errorf("holdReadRootLock = %v, %v, want nil, errLocksUnusable", f, err)
-		}
-	})
 	cases := []struct {
-		name    string
-		table   func(dev string) []string
-		missing bool
-		want    string
+		name     string
+		table    func(dev string) []string
+		missing  bool
+		want     string
+		wantErrs []error
 	}{
 		{"the device is listed after another", func(dev string) []string {
 			return []string{mountLine(otherDevice, "nfs4"), mountLine(dev, "9p")}
-		}, false, "9p"},
+		}, false, "9p", nil},
 		{"the device is not listed", func(string) []string {
 			return []string{mountLine(otherDevice, "9p")}
-		}, false, ""},
+		}, false, "", []error{errMountUnknown, errMountUnlisted}},
 		{"the directory is not there", func(dev string) []string {
 			return []string{mountLine(dev, "9p")}
-		}, true, ""},
+		}, true, "", []error{errMountUnknown}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -197,10 +193,41 @@ func TestMountType(t *testing.T) {
 			if tc.missing {
 				dir = filepath.Join(dir, "absent")
 			}
-			if got, err := mountType(dir); got != tc.want || err != nil {
-				t.Errorf("mountType = %q, %v, want %q, nil", got, err, tc.want)
+			got, err := mountType(dir)
+			if got != tc.want || (err != nil) != (len(tc.wantErrs) > 0) {
+				t.Errorf("mountType = %q, %v, want %q, %v", got, err, tc.want, tc.wantErrs)
 			}
+			wantErrorChain(t, err, tc.wantErrs)
 		})
+	}
+}
+
+// wantErrorChain reports every error of want that err does not wrap.
+func wantErrorChain(t *testing.T, err error, want []error) {
+	t.Helper()
+	for _, w := range want {
+		if !errors.Is(err, w) {
+			t.Errorf("error %v is not %v", err, w)
+		}
+	}
+}
+
+// TestMountType_TheTableCannotBeRead answers errMountUnknown, but not
+// errMountUnlisted, for a table that cannot be read, which networkFilesystem
+// passes on and holdReadRootLock turns into errLocksUnusable: the process
+// takes the loose fallback rather than a lock it cannot vouch for.
+func TestMountType_TheTableCannotBeRead(t *testing.T) {
+	prev := mountInfoPath
+	t.Cleanup(func() { mountInfoPath = prev })
+	mountInfoPath = filepath.Join(t.TempDir(), "absent")
+	if got, err := mountType(t.TempDir()); got != "" || !errors.Is(err, errMountUnknown) || errors.Is(err, errMountUnlisted) {
+		t.Errorf("mountType = %q, %v, want \"\", errMountUnknown and not errMountUnlisted", got, err)
+	}
+	if got, err := networkFilesystem(t.TempDir()); got != "" || !errors.Is(err, errMountUnknown) {
+		t.Errorf("networkFilesystem = %q, %v, want \"\", errMountUnknown", got, err)
+	}
+	if f, err := holdReadRootLock(t.TempDir()); f != nil || !errors.Is(err, errLocksUnusable) {
+		t.Errorf("holdReadRootLock = %v, %v, want nil, errLocksUnusable", f, err)
 	}
 }
 
