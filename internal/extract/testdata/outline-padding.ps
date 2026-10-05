@@ -1,0 +1,18 @@
+%!PS-Adobe-3.0
+%%Title: outline padding fixture
+% The source of encrypted-aes128-objstm-padding.pdf. Regenerate it with:
+%   gs -q -dNOPAUSE -dBATCH -sDEVICE=pdfwrite -dCompatibilityLevel=1.7 -sOutputFile=outline-padding.pdf outline-padding.ps
+%   qpdf --object-streams=generate --encrypt --user-password= --owner-password=owner --bits=128 --use-aes=y -- outline-padding.pdf encrypted-aes128-objstm-padding.pdf
+% The committed copy was written by qpdf 12.2.0. Every title is UTF-16BE,
+% seven characters behind the byte order mark, so sixteen bytes, one AES
+% block, and ends in a character whose last byte is 0x01, which is what one
+% byte of AES padding looks like: Thai, Chinese and Cyrillic, each ending in
+% a common letter. qpdf writes them into a compressed object stream, where
+% they are not encrypted, so nothing is padding and every byte is the title.
+/pg { /n exch def /Helvetica findfont 20 scalefont setfont 72 700 moveto (Page ) show n 3 string cvs show } def
+1 pg showpage
+2 pg showpage
+3 pg showpage
+[ /Page 1 /View [/Fit] /Title <FEFF0E200E320E040E1C0E190E270E01> /OUT pdfmark
+[ /Page 2 /View [/Fit] /Title <FEFF7B2C4E007AE075324E594E194E01> /OUT pdfmark
+[ /Page 3 /View [/Fit] /Title <FEFF0413043B04300432043000200401> /OUT pdfmark

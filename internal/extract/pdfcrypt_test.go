@@ -214,7 +214,8 @@ func encryptAES(t *testing.T, key, iv []byte, plain string) string {
 // AES key: one shorter than a block and one a block long, and one in whole
 // blocks whose padding is not valid, are not decrypted; an empty string is
 // empty; and a string one block long, padded by a whole block, and a longer
-// one, come back as they were written.
+// one, come back as they were written. A string written in no object, as one
+// taken out of an object stream is, is not encrypted and comes as it is.
 func TestStringCrypt_DecryptAES(t *testing.T) {
 	c := stringCrypt{key: bytes.Repeat([]byte{3}, 16), aes: true}
 	in := objRef{id: 9}
@@ -239,6 +240,36 @@ func TestStringCrypt_DecryptAES(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got, ok := c.decrypt(tc.s, in); got != tc.want || ok != tc.ok {
 				t.Errorf("decrypt = %q %v, want %q %v", got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+	for _, c := range []stringCrypt{c, {key: []byte{1, 2, 3, 4, 5}}} {
+		if got, ok := c.decrypt("ภาคผนวก", objRef{}); got != "ภาคผนวก" || !ok {
+			t.Errorf("decrypt in no object (AES %v) = %q %v, want it as it is", c.aes, got, ok)
+		}
+	}
+}
+
+// TestReaderStrings decodes the strings the reader hands over: under AES
+// without the padding it leaves on a string it decrypted, and as they are
+// when the file is not encrypted with AES or the string was in no encrypted
+// object, as one taken out of an object stream is, which the reader did not
+// decrypt and whose last bytes only look like padding.
+func TestReaderStrings(t *testing.T) {
+	looksPadded := "\xfe\xff\x0e\x20\x0e\x32\x0e\x04\x0e\x1c\x0e\x19\x0e\x27\x0e\x01"
+	for _, tc := range []struct {
+		name string
+		aes  bool
+		in   objRef
+		want string
+	}{
+		{"decrypted by the reader", true, objRef{id: 8}, looksPadded[:15]},
+		{"out of an object stream", true, objRef{}, looksPadded},
+		{"not AES", false, objRef{id: 8}, looksPadded},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got, ok := readerStrings(tc.aes)(looksPadded, tc.in); got != tc.want || !ok {
+				t.Errorf("decoded %q %v, want %q", got, ok, tc.want)
 			}
 		})
 	}
@@ -484,24 +515,30 @@ func TestAESLengthFixed(t *testing.T) {
 }
 
 // TestSelfDecrypting opens with its encryption hidden a file the walk
-// decrypts, and nothing for a file with no /Encrypt key, one that does not
-// open as a PDF with the key hidden, and one encrypted with AES-256.
+// decrypts, with a view that decrypts its object streams, and nothing for a
+// file with no /Encrypt key, one that does not open as a PDF with the key
+// hidden, and one encrypted with AES-256. A file whose /StmF names another
+// crypt filter than its /StrF, which leaves streams unencrypted when it is
+// /Identity, opens with a view that only counts them.
 func TestSelfDecrypting(t *testing.T) {
 	const notAPDF = "startxref 0\n/Encrypt 1 0 R\n%%EOF"
+	identity := bytes.Replace(mustRead(t, "testdata/encrypted-aes128-titles.pdf"), []byte("/StmF /StdCF"), []byte("/StmF /Ident"), 1)
 	for _, tc := range []struct {
-		name string
-		d    document
-		ok   bool
+		name    string
+		d       document
+		ok      bool
+		streams bool
 	}{
-		{"40-bit RC4", docFor(t, "testdata/encrypted-rc4-40.pdf"), true},
-		{"not encrypted", docFor(t, sectionsPDF), false},
-		{"not a PDF", document{r: strings.NewReader(notAPDF), size: int64(len(notAPDF))}, false},
-		{"AES-256", docFor(t, "testdata/encrypted-aes256.pdf"), false},
+		{"40-bit RC4", docFor(t, "testdata/encrypted-rc4-40.pdf"), true, true},
+		{"streams under another filter", docOf(identity), true, false},
+		{"not encrypted", docFor(t, sectionsPDF), false, false},
+		{"not a PDF", document{r: strings.NewReader(notAPDF), size: int64(len(notAPDF))}, false, false},
+		{"AES-256", docFor(t, "testdata/encrypted-aes256.pdf"), false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			r, strs := selfDecrypting(tc.d)
-			if (r != nil) != tc.ok || (strs != nil) != tc.ok {
-				t.Errorf("selfDecrypting = %v, %v, want a reader: %v", r, strs != nil, tc.ok)
+			src := selfDecrypting(tc.d)
+			if (src.r != nil) != tc.ok || (src.strs != nil) != tc.ok || (src.view != nil && src.view.crypt != nil) != tc.streams {
+				t.Errorf("selfDecrypting = %v, %v, %+v, want a reader: %v, streams decrypted: %v", src.r, src.strs != nil, src.view, tc.ok, tc.streams)
 			}
 		})
 	}

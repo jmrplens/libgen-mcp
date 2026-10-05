@@ -101,8 +101,9 @@ const aesBlockSize = 16
 // "တ" eight times), and in PDFDocEncoding a pad byte the encoding does
 // not define turned every byte above 0x7F into U+FFFD. A string whose length
 // is not a whole number of blocks, or whose end is not a valid padding, was not
-// decrypted that way, as a string inside an object stream is not, and is
-// returned as it is.
+// decrypted that way and is returned as it is. A string inside an object
+// stream is not decrypted either, but its end can look like a padding, so the
+// walk does not ask this of one (readerStrings).
 func unpadAES(s string) string {
 	if unpadded, ok := pkcs5Unpad(s); ok {
 		return unpadded

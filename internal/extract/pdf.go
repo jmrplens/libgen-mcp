@@ -39,11 +39,10 @@ func invalidPDFReason(err error) string {
 // encryptedPDFReason is the diagnosis for a PDF whose encryption keeps every
 // read mode out: AES-256 (V=5), a certificate-based handler, and a file whose
 // text partlyEncryptedPDFReason refuses when its outline could not be read
-// either, because it sits in a compressed object stream. Such a file is
-// valid, so calling it invalid would send the caller looking for a better copy
-// of a file that is fine. Shared so every read mode words it the same way. One
-// literal rather than a concatenation, like lockedPDFReason, for the reason
-// noPDFOutlineReason gives.
+// either. Such a file is valid, so calling it invalid would send the caller
+// looking for a better copy of a file that is fine. Shared so every read mode
+// words it the same way. One literal rather than a concatenation, like
+// lockedPDFReason, for the reason noPDFOutlineReason gives.
 const encryptedPDFReason = "cannot read PDF: it is encrypted in a way this reader cannot decrypt, so neither its text nor its table of contents can be read"
 
 // partlyEncryptedPDFReason is the diagnosis the text modes give for a PDF whose
@@ -55,11 +54,11 @@ const encryptedPDFReason = "cannot read PDF: it is encrypted in a way this reade
 // that encrypts its metadata. It refuses RC4 under a crypt filter (V=4 with
 // V2), takes a file that leaves its metadata unencrypted for one that needs a
 // password, and openPDF refuses the shorter RC4 keys, which the reader would
-// decrypt into other bytes. The outline walk decrypts the strings of all three
-// itself (selfDecrypting), so the caller is pointed at outline mode, which lists the
-// table of contents unless it is in a compressed object stream, whose stream
-// only the reader could decrypt. In outline mode, when the walk could not list
-// one, the reason is encryptedPDFReason.
+// decrypt into other bytes. The outline walk decrypts all three itself
+// (selfDecrypting), the strings it reads and the object streams the reader
+// takes objects out of, so the caller is pointed at outline mode, which lists
+// the table of contents. In outline mode, when the walk could not list one,
+// the reason is encryptedPDFReason.
 const partlyEncryptedPDFReason = "cannot read PDF text: it is encrypted in a way this reader cannot decrypt for its text, though outline mode may still list its table of contents"
 
 // minRC4KeyBits is the shortest RC4 file key ledongthuc/pdf decrypts
@@ -240,17 +239,18 @@ func pdfBytes(d document) io.ReaderAt {
 	return d.r
 }
 
-// openReader opens d with the PDF reader, through pdfBytes. A crypt filter
-// the reader refuses is tried once more through aesLengthFixed, since pdfcpu
-// writes an AES-128 filter's /Length in bits where the reader takes bytes,
-// and the reader then decrypts the whole file, text and object streams
-// included. If it still refuses the file, the first refusal is returned.
-func openReader(d document) (*pdf.Reader, error) {
-	r, err := pdf.NewReader(pdfBytes(d), d.size)
+// openReader opens d with the PDF reader, through pdfBytes, and through view
+// when there is one. A crypt filter the reader refuses is tried once more
+// through aesLengthFixed, since pdfcpu writes an AES-128 filter's /Length in
+// bits where the reader takes bytes, and the reader then decrypts the whole
+// file, text and object streams included. If it still refuses the file, the
+// first refusal is returned.
+func openReader(d document, view *objStmView) (*pdf.Reader, error) {
+	r, err := pdf.NewReader(view.over(pdfBytes(d)), d.size)
 	if err == nil || !strings.HasPrefix(err.Error(), v4Refusal) {
 		return r, err
 	}
-	if fixed, fixedErr := pdf.NewReader(aesLengthFixed(d), d.size); fixedErr == nil {
+	if fixed, fixedErr := pdf.NewReader(view.over(aesLengthFixed(d)), d.size); fixedErr == nil {
 		return fixed, nil
 	}
 	return nil, err
@@ -265,7 +265,7 @@ func openReader(d document) (*pdf.Reader, error) {
 // partlyEncryptedPDFReason, which points at outline mode. The reader can
 // panic on malformed input, so a caller runs it behind recover().
 func openPDF(d document) (r *pdf.Reader, why string) {
-	r, err := openReader(d)
+	r, err := openReader(d, nil)
 	if err != nil {
 		return nil, refusedPDFReason(d, err)
 	}
@@ -291,8 +291,7 @@ func refusedPDFReason(d document, err error) string {
 
 // selfDecrypts reports whether selfDecrypting opens d.
 func selfDecrypts(d document) bool {
-	r, _ := selfDecrypting(d)
-	return r != nil
+	return selfDecrypting(d).r != nil
 }
 
 // selfDecryptable reports whether err, the reader's refusal of a file, is one

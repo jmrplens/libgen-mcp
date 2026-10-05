@@ -3,6 +3,7 @@ package extract
 import (
 	"bytes"
 	"context"
+	"crypto/aes"
 	"errors"
 	"fmt"
 	"io"
@@ -678,12 +679,11 @@ func TestReadModes_DamageThatQuotesTheWordEncryption(t *testing.T) {
 // decrypts into other bytes, RC4 under a crypt filter (V=4 with V2), which it
 // refuses, and AES-128 that leaves the metadata unencrypted, which it takes
 // for a file that needs a password, have their outline read by the walk's own
-// decryption, and the text modes refuse them with a reason that points at
-// outline mode. A short key whose outline is in a compressed object stream,
-// which only the reader could decrypt, and AES-256 (V=5), are refused by
-// outline mode as well, and called encrypted rather than an invalid file, a
-// scan, or one without a table of contents. A file that does need a password
-// says so in every mode.
+// decryption, object streams included, and the text modes refuse them with a
+// reason that points at outline mode. AES-256 (V=5) is refused by outline
+// mode as well, and called encrypted rather than an invalid file, a scan, or
+// one without a table of contents. A file that does need a password says so
+// in every mode.
 func TestOutline_PDFEncrypted(t *testing.T) {
 	sections := entryLines(outlineOf(t, mustRead(t, sectionsPDF)).Entries)
 	titles := entryLines(outlineOf(t, mustRead(t, "testdata/outline-titles.pdf")).Entries)
@@ -708,7 +708,9 @@ func TestOutline_PDFEncrypted(t *testing.T) {
 		{"encrypted-rc4-40-titles.pdf", titles, "", partlyEncryptedPDFReason},
 		{"encrypted-rc4-v4-titles.pdf", titles, "", partlyEncryptedPDFReason},
 		{"encrypted-aes128-clear-metadata-titles.pdf", titles, "", partlyEncryptedPDFReason},
-		{"encrypted-rc4-40-objstm.pdf", "", encryptedPDFReason, partlyEncryptedPDFReason},
+		{"encrypted-rc4-40-objstm.pdf", sections, "", partlyEncryptedPDFReason},
+		{"encrypted-rc4-v4-objstm-titles.pdf", titles, "", partlyEncryptedPDFReason},
+		{"encrypted-aes128-clear-metadata-objstm-titles.pdf", titles, "", partlyEncryptedPDFReason},
 		{"encrypted-aes256.pdf", "", encryptedPDFReason, encryptedPDFReason},
 		{"encrypted-aes256-titles.pdf", "", encryptedPDFReason, encryptedPDFReason},
 		{"encrypted-aes128-user-password.pdf", "", lockedPDFReason, lockedPDFReason},
@@ -842,7 +844,7 @@ func TestOutlineWalk_Bounds(t *testing.T) {
 		{"a budget of every item", chain, 0, 3, "0 0 One\n0 0 Two\n0 0 Three\n", outlineWhole},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			w := newOutlineWalk(readerFor(t, tc.data).Trailer(), readerStrings(false))
+			w := newOutlineWalk(outlineSource{r: readerFor(t, tc.data), strs: readerStrings(false)})
 			w.items.left = tc.items
 			outlines := child(&w.root, "Outlines")
 			w.walk(context.Background(), child(&outlines, "First"), tc.level)
@@ -870,30 +872,124 @@ func TestOutline_PDFAnAESFilterItsLengthDoesNotOpen(t *testing.T) {
 	}
 }
 
-// TestOutlineReader opens for the walk a plain file, one the reader decrypts
-// and two it decrypts wrongly or refuses, and nothing, without panicking, for
-// an AES-256 file, one that needs a password, one that is not a PDF, and one
-// whose page tree is unsafe to walk.
-func TestOutlineReader(t *testing.T) {
-	cyclic := buildPDF([]string{"<</Type/Catalog/Pages 2 0 R>>", "<</Type/Pages/Kids[2 0 R]/Count 1>>"})
+// TestOutline_PDFTitlesThatLookPadded reads an AES-128 file whose titles are
+// in a compressed object stream, where they are not encrypted, and each ends
+// in a byte that reads as AES padding: sixteen bytes of UTF-16 ending in a
+// letter whose last byte is 0x01. The reader hands them over as they are,
+// and taking that byte off as padding lost each title's last letter.
+func TestOutline_PDFTitlesThatLookPadded(t *testing.T) {
+	res := outlineOf(t, mustRead(t, "testdata/encrypted-aes128-objstm-padding.pdf"))
+	if got, want := entryLines(res.Entries), "0 1 ภาคผนวก\n0 2 第一章甲乙丙丁\n0 3 Глава Ё\n"; got != want {
+		t.Errorf("outline:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// aesTitlesWithFirst returns the AES-128 titles fixture, which keeps no
+// object stream, with the title of its first item, object 8, a string of 48
+// bytes written as hexadecimal, replaced by title and padded with spaces to
+// the same length, so the cross-reference table still finds every object.
+func aesTitlesWithFirst(t *testing.T, title string) []byte {
+	t.Helper()
+	data := mustRead(t, "testdata/encrypted-aes128-titles.pdf")
+	item := bytes.Index(data, []byte("\n8 0 obj\n"))
+	at := item + bytes.Index(data[item:], []byte("/Title <")) + len("/Title ")
+	if item < 0 || data[at+97] != '>' {
+		t.Fatal("the fixture's first item is not where it was")
+	}
+	return slices.Concat(data[:at], []byte(fmt.Sprintf("%-98s", title)), data[at+98:])
+}
+
+// TestOutline_PDFStringsTheReaderCannotDecrypt writes the first title of the
+// AES-128 titles fixture two ways each decryption reads differently. An empty
+// string left unencrypted, which MuPDF writes when it adds a blank bookmark,
+// made the reader panic, so the whole outline was called damaged; the walk's
+// own decryption reads it as the empty string it is. The initialization
+// vector alone is no string the walk's decryption accepts, and the reader
+// takes it for an empty one, so that file is read as the reader decrypts it.
+// Either way the blank first title is left out and the rest are listed.
+func TestOutline_PDFStringsTheReaderCannotDecrypt(t *testing.T) {
+	titles := entryLines(outlineOf(t, mustRead(t, "testdata/outline-titles.pdf")).Entries)
+	rest := titles[strings.IndexByte(titles, '\n')+1:]
+	for _, tc := range []struct {
+		name, title string
+	}{
+		{"an empty string left unencrypted", "<>"},
+		{"the initialization vector alone", "<" + strings.Repeat("05", aes.BlockSize) + ">"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res := outlineOf(t, aesTitlesWithFirst(t, tc.title))
+			if got := entryLines(res.Entries); got != rest || res.Reason != "" {
+				t.Errorf("outline:\n%s(%q)\nwant:\n%s", got, res.Reason, rest)
+			}
+		})
+	}
+}
+
+// sourceKind names how src was opened: nothing, a file that is not
+// encrypted, one whose encryption the walk decrypts itself, or one the reader
+// decrypts.
+func sourceKind(src outlineSource) string {
+	switch {
+	case src.r == nil:
+		return "nothing"
+	case src.view == nil:
+		return "plain"
+	case src.view.crypt != nil:
+		return "self"
+	}
+	return "reader"
+}
+
+// TestOutlineOpeners names the ways the walk opens each kind of file, in the
+// order it tries them, by what each opens: a plain file as the reader hands
+// it over, one the reader decrypts correctly with the walk's own decryption
+// first and the reader's next, one it decrypts wrongly with the walk's own
+// alone, one that needs a password with an opener that opens nothing, and no
+// opener at all for an AES-256 file or one that is not a PDF.
+func TestOutlineOpeners(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		d    document
-		ok   bool
+		want string
 	}{
-		{"plain", docFor(t, sectionsPDF), true},
-		{"AES-128", docFor(t, "testdata/encrypted-aes128.pdf"), true},
-		{"40-bit RC4", docFor(t, "testdata/encrypted-rc4-40.pdf"), true},
-		{"pdfcpu's AES-128", docFor(t, "testdata/encrypted-aes128-cf-bits.pdf"), true},
-		{"AES-256", docFor(t, "testdata/encrypted-aes256.pdf"), false},
-		{"a password", docFor(t, "testdata/encrypted-aes128-user-password.pdf"), false},
-		{"not a PDF", document{r: strings.NewReader("not a PDF"), size: 9}, false},
-		{"a cyclic page tree", document{r: bytes.NewReader(cyclic), size: int64(len(cyclic))}, false},
+		{"plain", docFor(t, sectionsPDF), "plain"},
+		{"AES-128", docFor(t, "testdata/encrypted-aes128.pdf"), "self reader"},
+		{"128-bit RC4", docFor(t, "testdata/encrypted-rc4.pdf"), "self reader"},
+		{"40-bit RC4", docFor(t, "testdata/encrypted-rc4-40.pdf"), "self"},
+		{"pdfcpu's AES-128", docFor(t, "testdata/encrypted-aes128-cf-bits.pdf"), "self reader"},
+		{"metadata left unencrypted", docFor(t, "testdata/encrypted-aes128-clear-metadata-titles.pdf"), "self"},
+		{"a password", docFor(t, "testdata/encrypted-aes128-user-password.pdf"), "nothing"},
+		{"AES-256", docFor(t, "testdata/encrypted-aes256.pdf"), ""},
+		{"not a PDF", document{r: strings.NewReader("not a PDF"), size: 9}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			r, strs := outlineReader(tc.d)
-			if (r != nil) != tc.ok || (strs != nil) != tc.ok {
-				t.Errorf("outlineReader = %v, %v, want a reader: %v", r, strs != nil, tc.ok)
+			var kinds []string
+			for _, open := range outlineOpeners(tc.d) {
+				kinds = append(kinds, sourceKind(open()))
+			}
+			if got := strings.Join(kinds, " "); got != tc.want {
+				t.Errorf("openers open %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestWalkOutline_Unread walks a file its opener does not open, and one whose
+// page tree is unsafe to walk: neither is walked, and each says so, so that
+// the next opener is tried.
+func TestWalkOutline_Unread(t *testing.T) {
+	cyclic := buildPDF([]string{"<</Type/Catalog/Pages 2 0 R>>", "<</Type/Pages/Kids[2 0 R]/Count 1>>"})
+	for _, tc := range []struct {
+		name string
+		open func() outlineSource
+	}{
+		{"nothing opened", func() outlineSource { return outlineSource{} }},
+		{"a cyclic page tree", func() outlineSource { return outlineSource{r: readerFor(t, cyclic), strs: readerStrings(false)} }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			entries, outline, err := walkOutline(context.Background(), tc.open)
+			if entries != nil || outline != outlineUnread || err != nil {
+				t.Errorf("walkOutline = %v, %d, %v, want nothing and outlineUnread", entries, outline, err)
 			}
 		})
 	}
@@ -904,7 +1000,7 @@ func TestOutlineReader(t *testing.T) {
 // whole. That is damage, and the title is not listed.
 func TestOutlineWalk_AStringThatDoesNotDecode(t *testing.T) {
 	fails := func(string, objRef) (string, bool) { return "", false }
-	w := newOutlineWalk(readerFor(t, outlinePDF("", "<</Title(A)>>")).Trailer(), fails)
+	w := newOutlineWalk(outlineSource{r: readerFor(t, outlinePDF("", "<</Title(A)>>")), strs: fails})
 	outlines := child(&w.root, "Outlines")
 	w.walk(context.Background(), child(&outlines, "First"), 0)
 	if len(w.entries) != 0 || w.state != outlineDamaged {
@@ -1012,7 +1108,7 @@ func TestOutline_PDFNullLinks(t *testing.T) {
 			}
 			path := writeBytes(t, t.TempDir(), "null.pdf", tc.data)
 			sc, err := Section(context.Background(), openFile(t, path), SectionRef{Index: 2}, Req{})
-			if tc.sections && (err != nil || sc.Chunk.PageStart != 2) {
+			if tc.sections && (err != nil || sc.PageStart != 2) {
 				t.Errorf("section 2 = %+v (%v), want it to start on page 2", sc.Chunk, err)
 			}
 		})
@@ -1075,7 +1171,7 @@ func nameTreeRead(t *testing.T, ctx context.Context, data []byte, aes bool, dept
 	for i, name := range asked {
 		w.named[name] = append(w.named[name], i)
 	}
-	w.readNameTree(ctx, node{v: root.Key("T")}, depth, map[objRef]bool{})
+	w.readNameTree(ctx, node{v: root.Key("T"), in: objRef{id: 5}}, depth, map[objRef]bool{})
 	lines := make([]string, len(asked))
 	for i, name := range asked {
 		lines[i] = fmt.Sprintf("%q=%d", name, w.entries[i].Page)
@@ -1348,6 +1444,7 @@ func FuzzPDFOutline(f *testing.F) {
 		"testdata/outline-titles.pdf", "testdata/encrypted-aes128-titles.pdf",
 		"testdata/sections-pdf20.pdf", "testdata/encrypted-rc4-40-titles.pdf",
 		"testdata/encrypted-aes128-cf-bits-titles.pdf", "testdata/encrypted-rc4-40-objstm.pdf",
+		"testdata/encrypted-aes128-objstm-padding.pdf", "testdata/encrypted-aes128-clear-metadata-objstm-titles.pdf",
 	} {
 		f.Add(mustRead(f, path))
 	}

@@ -26,13 +26,16 @@ import (
 // concatenation, for the reason noPDFOutlineReason gives.
 const paddingString = "\x28\xbf\x4e\x5e\x4e\x75\x8a\x41\x64\x00\x4e\x56\xff\xfa\x01\x08\x2e\x2e\x00\xb6\xd0\x68\x3e\x80\x2f\x0c\xa9\xfe\x64\x53\x69\x7a"
 
-// stringCrypt decrypts the strings of a file encrypted by the standard
-// security handler that opens with an empty user password, which is every
-// file this server can read: key is the file key, and aes says whether
-// strings are encrypted with AES-128 or with RC4.
+// stringCrypt decrypts the strings and object streams of a file encrypted by
+// the standard security handler that opens with an empty user password, which
+// is every file this server can read: key is the file key, aes says whether
+// strings are encrypted with AES-128 or with RC4, and streams whether streams
+// are encrypted the same way, which under crypt filters (V=4) they are when
+// /StmF names the filter /StrF does.
 type stringCrypt struct {
-	key []byte
-	aes bool
+	key     []byte
+	aes     bool
+	streams bool
 }
 
 // Bounds the standard security handler sets on a file key, in bits, and how
@@ -65,7 +68,7 @@ func standardCrypt(enc pdf.Value, id string) (stringCrypt, bool) {
 	if !userKeyMatches(key, u, id, revision) {
 		return stringCrypt{}, false
 	}
-	return stringCrypt{key: key, aes: useAES}, true
+	return stringCrypt{key: key, aes: useAES, streams: enc.Key("V").Int64() != 4 || enc.Key("StmF").Name() == enc.Key("StrF").Name()}, true
 }
 
 // stringCipher says how enc encrypts strings: with AES-128 or not, and with a
@@ -168,12 +171,17 @@ func (c stringCrypt) objectKey(in objRef) []byte {
 	return h.Sum(nil)[:min(len(c.key)+5, md5.Size)]
 }
 
-// decrypt returns the string s, written in the object in, decrypted. An AES
+// decrypt returns the string s, written in the object in, decrypted. A string
+// written in no object, the trailer's or one taken out of an object stream,
+// which is decrypted whole, is not encrypted and is returned as it is. An AES
 // string is its 16-byte initialization vector and whole blocks after it, the
 // last of them ending in its padding, and one that is not, the vector alone
 // among them, is reported as not decrypted. An empty string is empty either
-// way.
+// way, which is how MuPDF writes one into an encrypted file.
 func (c stringCrypt) decrypt(s string, in objRef) (string, bool) {
+	if in == (objRef{}) {
+		return s, true
+	}
 	key := c.objectKey(in)
 	if !c.aes {
 		return string(rc4XOR(key, []byte(s))), true
@@ -191,6 +199,28 @@ func (c stringCrypt) decrypt(s string, in objRef) (string, bool) {
 	// a file holds rather than protecting anything.
 	cipher.NewCBCDecrypter(block, []byte(s[:aes.BlockSize])).CryptBlocks(plain, plain) // NOSONAR
 	return pkcs5Unpad(string(plain))
+}
+
+// decryptStream returns data, a stream's data written in the object in,
+// decrypted: under RC4 all of it, and under AES the whole blocks after its
+// 16-byte initialization vector, the padding left on. The data of an object
+// stream is compressed, and the filter that inflates it stops at its own end,
+// as it does at the end of line before the endstream keyword, which data may
+// hold too.
+func (c stringCrypt) decryptStream(data []byte, in objRef) []byte {
+	key := c.objectKey(in)
+	if !c.aes {
+		return rc4XOR(key, data)
+	}
+	if len(data) < 2*aes.BlockSize {
+		return nil
+	}
+	blocks := data[aes.BlockSize : len(data)-len(data)%aes.BlockSize]
+	block, _ := aes.NewCipher(key)
+	plain := make([]byte, len(blocks))
+	// NOSONAR: S5542, for the reason decrypt gives.
+	cipher.NewCBCDecrypter(block, data[:aes.BlockSize]).CryptBlocks(plain, blocks) // NOSONAR
+	return plain
 }
 
 // v4Refusal is how the reader's error begins when it refuses a crypt filter
@@ -297,10 +327,12 @@ func (f *readStarts) ReadAt(p []byte, off int64) (int, error) {
 // reader: the last letter of the newest trailer's /Encrypt key, at key, reads
 // as hiddenEncryptKey's, so the reader takes the file for one that is not
 // encrypted, hands each string over as the file holds it, and reads the
-// encryption dictionary under hiddenEncryptKey. reads records where it reads.
+// encryption dictionary under hiddenEncryptKey. reads records where it reads,
+// and view is the file under it, which notices its object streams.
 type hiddenEncryption struct {
 	r     *pdf.Reader
 	reads *readStarts
+	view  *objStmView
 	key   int64
 }
 
@@ -313,12 +345,13 @@ func hideEncryption(d document) (hiddenEncryption, bool) {
 		return hiddenEncryption{}, false
 	}
 	shown := overwritten{ReaderAt: pdfBytes(d), at: at + int64(len(encryptKey)) - 1, with: hiddenEncryptKey[len(hiddenEncryptKey)-1:]}
-	reads := &readStarts{ReaderAt: shown}
+	view := &objStmView{ReaderAt: shown}
+	reads := &readStarts{ReaderAt: view}
 	r, err := pdf.NewReader(reads, d.size)
 	if err != nil {
 		return hiddenEncryption{}, false
 	}
-	return hiddenEncryption{r: r, reads: reads, key: at}, true
+	return hiddenEncryption{r: r, reads: reads, view: view, key: at}, true
 }
 
 // dict returns the encryption dictionary as the file holds it, and where its
@@ -335,20 +368,24 @@ func (h hiddenEncryption) dict() (enc pdf.Value, from int64) {
 }
 
 // selfDecrypting opens d for the outline walk with its encryption hidden from
-// the reader, and returns the reader and the decryption of its strings. It
-// returns a nil reader for a file hideEncryption does not open, or whose
-// strings standardCrypt does not decrypt.
-func selfDecrypting(d document) (*pdf.Reader, stringDecoder) {
+// the reader: the walk decrypts the strings it is handed, and the view shows
+// the reader each object stream decrypted, when streams are encrypted as
+// strings are. It returns no reader for a file hideEncryption does not open,
+// or whose strings standardCrypt does not decrypt.
+func selfDecrypting(d document) outlineSource {
 	h, ok := hideEncryption(d)
 	if !ok {
-		return nil, nil
+		return outlineSource{}
 	}
 	enc, _ := h.dict()
 	c, ok := standardCrypt(enc, h.r.Trailer().Key("ID").Index(0).RawString())
 	if !ok {
-		return nil, nil
+		return outlineSource{}
 	}
-	return h.r, c.decrypt
+	if c.streams {
+		h.view.crypt = &c
+	}
+	return outlineSource{r: h.r, strs: c.decrypt, view: h.view}
 }
 
 // cryptFilterWindow is how much of the file, from where its encryption

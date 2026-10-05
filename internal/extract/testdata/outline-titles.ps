@@ -18,6 +18,8 @@
 % and, with --object-streams=generate instead, so that every title is in a
 % compressed object stream:
 %   --bits=128 --use-aes=y -- outline-titles.pdf encrypted-aes128-objstm-titles.pdf
+%   --bits=128 --use-aes=y --cleartext-metadata -- outline-titles.pdf encrypted-aes128-clear-metadata-objstm-titles.pdf
+%   --bits=128 --use-aes=n --force-V4 -- outline-titles.pdf encrypted-rc4-v4-objstm-titles.pdf
 % encrypted-aes128-user-password.pdf is the AES-128 one with
 % --user-password=user. The AES-128 copy whose crypt filter gives the key
 % length in bits is pdfcpu 0.16.0's:
