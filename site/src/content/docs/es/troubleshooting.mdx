@@ -1075,7 +1075,7 @@ Valen para un servidor arrancado con `--http`. Todo rechazo en el propio endpoin
 
     - Descarga otra edición de la misma obra: el catálogo suele tener un PDF con texto o un EPUB junto a un escaneo. Una copia del mismo md5 desde otro mirror es el mismo archivo, cifrado o dañado igual, porque `download` comprueba el md5. Para un artículo, otra fuente puede tener un archivo distinto.
     - Abre el archivo en local con un lector que haga OCR, o que descifre o repare el PDF.
-    - Cuando el texto se rechaza remitiendo al modo outline, llama a `read` con `outline: true` para obtener el índice.
+    - Cuando el texto se rechaza remitiendo al modo outline, llama a `read` con `outline: true` para obtener el índice. Si no lista nada, su motivo dice si el documento no tiene índice, o si lo tiene dañado o demasiado grande para listarlo.
     - Un índice que vuelve vacío no es un fallo: muchos PDF no llevan tabla de contenidos, el `reason` dice si no tiene ninguno, lo tiene dañado o es demasiado grande para listarlo, y `find` sigue buscando en el texto.
 
     </Fact>

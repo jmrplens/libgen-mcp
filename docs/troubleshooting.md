@@ -1170,7 +1170,8 @@ than a thread forever.
   different file.
 - Open the file locally in a reader that does OCR, or that decrypts or repairs the PDF.
 - When the text is refused with a pointer to outline mode, call `read` with `outline: true`
-  for the table of contents.
+  for the table of contents. If it lists nothing, its reason says whether the document has
+  none, or one that is damaged or too large to list.
 - An outline that comes back empty is not a failure: many PDFs carry no table of contents,
   the `reason` says whether it has none, a damaged one or one too large to list, and `find`
   still searches the text.

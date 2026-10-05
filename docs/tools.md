@@ -708,11 +708,11 @@ and hand the raw file to the user. This covers, among others:
   noise), RC4 under crypt filters, and AES-128 that leaves the document's metadata
   unencrypted. Their table of contents is listed in `outline` mode, and the text and `find`
   modes refuse them with `"cannot read PDF text: it is encrypted in a way this reader cannot
-  decrypt for its text, though outline mode may still list its table of contents"`. Their
-  outline cannot be listed either when it is stored in a compressed object stream, which only
-  the text reader could decrypt, and then `outline` mode gives the first reason. So does
-  AES-256, and a certificate-based security handler. One that needs a password to open says
-  so, since `read` takes none.
+  decrypt for its text, though outline mode may still list its table of contents"`. When
+  `outline` mode lists nothing for one of them, its reason opens the same way and says why: the
+  document has no table of contents, or its table of contents is damaged or too large to list.
+  AES-256 and a certificate-based security handler get the first reason in every mode. One
+  that needs a password to open says so, since `read` takes none.
 - **Damaged PDFs** — `"cannot read PDF: the file is damaged (…), and this reader does not
   repair one, so neither its text nor its table of contents can be read; another copy of the
   file may be intact"`: a truncated download, or a cross-reference table that does not lead to
@@ -838,22 +838,25 @@ A PDF whose bookmarks are damaged while its pages read is told apart from one th
 it returns `extractable: true`, an empty `outline` and a `reason` saying the table of contents
 is damaged and could not be read, so the model reads by page or with `find` instead of
 concluding the book has no chapters. Damaged means a bookmark the reader cannot parse, or a
-link from one bookmark to the next or to its first child that leads to no bookmark. The part
-before such a break is not listed, because a table of contents cut short would read as the
-whole of one. An outline with more than 20,000 entries, or nested more than 64 levels deep, is
-reported the same way with its own `reason`, since no real table of contents comes near either
-bound. A [`section`](#read-one-section) read of either says the table of contents could not be
+link from one bookmark to the next or to its first child that leads to no bookmark. A link
+written as `null` is not one of those: the standard makes it the same as no link, so it ends
+its chain. The part before such a break is not listed, because a table of contents cut short
+would read as the whole of one. An outline with more than 20,000 entries, or nested more than
+64 levels deep, is reported the same way with its own `reason`, since no real table of contents
+comes near either bound. A [`section`](#read-one-section) read of either says the table of contents could not be
 read, not that there is none. A PDF that no mode can open, because it is encrypted in
 a way the reader cannot decrypt or because the file itself is damaged, has no outline either,
 and `outline` mode reports it with the same `reason` the text and `find` modes give (see [Not
 extractable](#not-extractable)). An encrypted PDF whose text the reader cannot decrypt still
-has its outline listed when the encryption is RC4 or AES-128 and the outline is not in a
-compressed object stream: the outline is read with its encryption hidden from the reader, and
-each title decrypted under the key the standard defines for the object it is in. An AES-128
-crypt filter whose key length pdfcpu writes in bits is shown to the reader in bytes, which is
-all it lacks to read that file whole. Up to 2.2.0
-a second PDF library read the outline and could open AES-256 and damaged files as well; the
-[source-and-capability-scope ADR](decisions/2026-07-22-source-and-capability-scope.md)
+has its outline listed when the encryption is RC4 or AES-128: the outline is read with its
+encryption hidden from the reader, each title decrypted under the key the standard defines for
+the object it is in, and each compressed object stream the reader takes a bookmark, the
+catalog or a page out of decrypted the same way. An AES-128 crypt filter whose key length
+pdfcpu writes in bits is shown to the reader in bytes, which is all it lacks to read that file
+whole. Every entry whose destination is a name is given the page that name leads to however
+many names the document defines, and the Intel 64 and IA-32 manual defines 292,930. Up to
+2.2.0 a second PDF library read the outline and could open AES-256 and damaged files as well;
+the [source-and-capability-scope ADR](decisions/2026-07-22-source-and-capability-scope.md)
 records why it was removed.
 
 A deeply nested technical book can carry several hundred entries, which is a lot of response
