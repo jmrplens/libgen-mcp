@@ -28,8 +28,11 @@ const readRootLockName = ".lock"
 //
 // The sweep creates it too. That is what lets a root whose process died
 // between making the directory and making this file be judged at all, and it
-// is safe because the sweep only opens a root older than readRootLockGrace,
-// which no live process leaves without its file.
+// is safe because the sweep opens only a root older than readRootLockGrace or
+// one that holds a fetch directory, and no live process leaves either without
+// its file: one older than the grace is long past the instant between making
+// the root and locking it, and a live owner makes its first fetch directory
+// only after this file exists and is locked (see readRoot.pathLocked).
 func openReadRootLock(dir string) (*os.File, error) {
 	return os.OpenFile(filepath.Join(dir, readRootLockName),
 		os.O_CREATE|os.O_RDWR|windows.O_FILE_FLAG_OPEN_REPARSE_POINT, 0o600)
