@@ -191,7 +191,7 @@ func TestOutline_PDFMalformed(t *testing.T) {
 // time the text-layer probe runs propagates out of pdfNoOutlineResult as an
 // error rather than being reported as a document without a table of contents.
 func TestPdfNoOutlineResult_CtxCancelled(t *testing.T) {
-	if _, err := pdfNoOutlineResult(passErr(0), docFor(t, "testdata/sample.pdf"), false); err == nil {
+	if _, err := pdfNoOutlineResult(passErr(0), docFor(t, "testdata/sample.pdf"), outlineWhole); err == nil {
 		t.Fatal("expected the context error to propagate, got nil")
 	}
 }
@@ -800,31 +800,105 @@ func TestWalkBudget(t *testing.T) {
 	}
 }
 
-// TestOutlineWalk_Bounds drives the walk at the edges of its two bounds: the
-// last level it reads and the first it does not, and an item budget smaller
-// than the outline.
+// TestOutlineWalk_Bounds drives the walk at the edges of its two bounds: an
+// item on the last level it reads, a child one level past it and an item
+// starting past it, and item budgets one short of the outline and exactly its
+// size. Only an item left unread marks the outline too large.
 func TestOutlineWalk_Bounds(t *testing.T) {
+	leaf := outlinePDF("", "<</Title(Leaf)>>")
 	nested := outlinePDF("", "<</Title(Parent)/First 10 0 R>>", "<</Title(Child)>>")
 	chain := outlinePDF("",
 		"<</Title(One)/Next 10 0 R>>", "<</Title(Two)/Next 11 0 R>>", "<</Title(Three)>>")
+	last := maxOutlineDepth - 1
 	for _, tc := range []struct {
-		name  string
-		data  []byte
-		level int
-		items int
-		want  string
+		name      string
+		data      []byte
+		level     int
+		items     int
+		want      string
+		wantState outlineState
 	}{
-		{"the last level read", nested, maxOutlineDepth - 1, maxOutlineItems, fmt.Sprintf("%d 0 Parent\n", maxOutlineDepth-1)},
-		{"past the last level", nested, maxOutlineDepth, maxOutlineItems, ""},
-		{"a budget of two items", chain, 0, 2, "0 0 One\n0 0 Two\n"},
+		{"an item on the last level read", leaf, last, maxOutlineItems, fmt.Sprintf("%d 0 Leaf\n", last), outlineWhole},
+		{"a child past the last level", nested, last, maxOutlineItems, fmt.Sprintf("%d 0 Parent\n", last), outlineTooLarge},
+		{"an item past the last level", nested, maxOutlineDepth, maxOutlineItems, "", outlineTooLarge},
+		{"a budget one item short", chain, 0, 2, "0 0 One\n0 0 Two\n", outlineTooLarge},
+		{"a budget of every item", chain, 0, 3, "0 0 One\n0 0 Two\n0 0 Three\n", outlineWhole},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := readerFor(t, tc.data).Trailer().Key("Root")
 			w := newOutlineWalk(root, false)
 			w.items.left = tc.items
 			w.walk(context.Background(), root.Key("Outlines").Key("First"), tc.level)
-			if got := entryLines(w.entries); got != tc.want {
-				t.Errorf("outline:\n%s\nwant:\n%s", got, tc.want)
+			if got := entryLines(w.entries); got != tc.want || w.state != tc.wantState {
+				t.Errorf("outline:\n%s(state %d)\nwant:\n%s(state %d)", got, w.state, tc.want, tc.wantState)
+			}
+		})
+	}
+}
+
+// TestOutline_PDFLinksToNothing breaks an outline at each link the walk
+// follows, with each way a reference can lead to nothing: past the end of the
+// cross-reference table, at a generation the table does not hold, and an
+// explicit null. Each is damage, reported as such with no entries, since what
+// was read before the break is not the whole outline: a middle item that
+// leads nowhere used to return the items before it as the table of contents,
+// and a first item that leads nowhere used to say there was none. A chain that
+// simply ends, with no /Next, is the outline's whole.
+func TestOutline_PDFLinksToNothing(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		items    []string
+		from, to string
+	}{
+		{"the catalog's /Outlines at another generation", []string{"<</Title(A)>>"}, "/Outlines 6 0 R", "/Outlines 6 1 R"},
+		{"the first item at another generation", []string{"<</Title(A)>>"}, "/Outlines/First 9 0 R", "/Outlines/First 9 1 R"},
+		{"the first item not a dictionary", []string{"<</Title(A)>>"}, "/Outlines/First 9 0 R", "/Outlines/First 7 0 R"},
+		{"a middle item past the table", []string{"<</Title(A)/Next 99 0 R>>"}, "", ""},
+		{"a middle item at another generation", []string{"<</Title(A)/Next 10 1 R>>", "<</Title(B)>>"}, "", ""},
+		{"a child given as null", []string{"<</Title(A)/First null/Next 10 0 R>>", "<</Title(B)>>"}, "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Each replacement keeps the object's length, so the
+			// cross-reference table still finds every object.
+			data := bytes.Replace(outlinePDF("", tc.items...), []byte(tc.from), []byte(tc.to), 1)
+			res := outlineOf(t, data)
+			if len(res.Entries) != 0 || !res.Extractable || res.Reason != damagedPDFOutlineReason {
+				t.Errorf("want no entries and the damaged-outline reason, got %+v", res)
+			}
+		})
+	}
+}
+
+// TestOutline_PDFTooLarge reads an outline nested one level deeper than the
+// walk reads. It is reported as too large to list, with no entries, rather
+// than as the part above the bound, and a section read of it says the table
+// of contents could not be read rather than that there is none.
+func TestOutline_PDFTooLarge(t *testing.T) {
+	items := make([]string, maxOutlineDepth+1)
+	for i := range items {
+		items[i] = fmt.Sprintf("<</Title(Level %d)/Dest[3 0 R/Fit]/First %d 0 R>>", i, 10+i)
+	}
+	items[maxOutlineDepth] = fmt.Sprintf("<</Title(Level %d)>>", maxOutlineDepth)
+	path := writeBytes(t, t.TempDir(), "deep.pdf", outlinePDF("", items...))
+	res, err := Outline(context.Background(), openFile(t, path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Entries) != 0 || !res.Extractable || res.Reason != largePDFOutlineReason {
+		t.Errorf("want no entries and the too-large reason, got %+v", res)
+	}
+	if _, serr := Section(context.Background(), openFile(t, path), SectionRef{Index: 1}, Req{}); !errors.Is(serr, ErrOutlineUnreadable) {
+		t.Errorf("Section = %v, want ErrOutlineUnreadable", serr)
+	}
+}
+
+// TestLargePDFOutlineReason holds the numbers the too-large reason names to
+// the bounds the walk applies, since the reason is one literal.
+func TestLargePDFOutlineReason(t *testing.T) {
+	for _, want := range []string{fmt.Sprintf("over %d entries", maxOutlineItems), fmt.Sprintf("over %d levels", maxOutlineDepth)} {
+		t.Run(want, func(t *testing.T) {
+			if !strings.Contains(largePDFOutlineReason, want) {
+				t.Errorf("largePDFOutlineReason = %q, want it to say %q", largePDFOutlineReason, want)
 			}
 		})
 	}

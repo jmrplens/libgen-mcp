@@ -1038,7 +1038,8 @@ func TestReadTool_SectionCursorStopsAtTheSectionEnd(t *testing.T) {
 
 // TestReadTool_SectionRefusals verifies the requests a section read cannot
 // answer are tool errors naming what to do instead: an ambiguous title lists
-// the candidates by number, and a document with no outline points to start_page.
+// the candidates by number, and a document with no outline points to
+// start_page, as does one whose outline is damaged, without saying it has none.
 func TestReadTool_SectionRefusals(t *testing.T) {
 	h := readHandler(nil, readTestCfg())
 	testCases := []struct {
@@ -1048,7 +1049,8 @@ func TestReadTool_SectionRefusals(t *testing.T) {
 	}{
 		{name: "ambiguous title", in: ReadInput{Path: sectionsPDFPath, Section: "summary"}, want: `4 "Summary" (p.4), 8 "Summary" (p.6)`},
 		{name: "number past the end", in: ReadInput{Path: sectionsPDFPath, Section: "11"}, want: "outline has 10 entries"},
-		{name: "no outline", in: ReadInput{Path: "../extract/testdata/sample.pdf", Section: "1"}, want: "start_page"},
+		{name: "no outline", in: ReadInput{Path: "../extract/testdata/sample.pdf", Section: "1"}, want: "has no table of contents"},
+		{name: "a damaged outline", in: ReadInput{Path: "../extract/testdata/outline-damaged.pdf", Section: "1"}, want: unreadableOutlineForSection},
 		{name: "zero", in: ReadInput{Path: sectionsPDFPath, Section: "0"}, want: "starting at 1"},
 		{name: "bad cursor", in: ReadInput{Path: sectionsPDFPath, Section: "1", Cursor: "!!"}, want: "invalid cursor"},
 		{name: "unreadable file", in: ReadInput{Path: filepath.Join(t.TempDir(), "missing.pdf"), Section: "1"}, want: "missing.pdf"},

@@ -44,6 +44,11 @@ type OutlineResult struct {
 	Extractable bool           `json:"extractable"`
 	Reason      string         `json:"reason,omitempty"`
 	Entries     []OutlineEntry `json:"entries,omitempty"`
+
+	// unreadable marks a readable document with a table of contents that
+	// could not be listed, damaged or too large, as Reason says. Section
+	// tells that apart from a document with none.
+	unreadable bool
 }
 
 // ncxDoc models an EPUB2 NCX document's navMap.

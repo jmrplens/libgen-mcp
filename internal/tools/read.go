@@ -187,6 +187,13 @@ func validateSectionCursor(in ReadInput) error {
 const noOutlineForSection = "this document has no table of contents, so section cannot address part of it: " +
 	"read by page with start_page (PDF) or by character with offset (EPUB/TXT), or search it with find"
 
+// unreadableOutlineForSection answers a section read of a PDF whose table of
+// contents is damaged or too large to list, which outline mode says in its
+// reason. Saying the document has none would be false. Only a PDF reaches it,
+// so it names start_page alone.
+const unreadableOutlineForSection = "this document's table of contents could not be read (it is damaged, or larger than this reader lists), " +
+	"so section cannot address part of it: read by page with start_page, or search it with find"
+
 // parseSectionRef reads the section argument: digits only are an entry number,
 // anything else a title. A number is never also tried as a title, so the same
 // value always means the same entry, even in a book whose chapters are titled
@@ -604,6 +611,9 @@ func readSection(ctx context.Context, mcpReq *mcp.CallToolRequest, c *libgen.Cli
 	sc, err := extract.Section(ctx, f, ref, req)
 	if errors.Is(err, extract.ErrNoOutline) {
 		return ReadOutput{}, errors.New(noOutlineForSection)
+	}
+	if errors.Is(err, extract.ErrOutlineUnreadable) {
+		return ReadOutput{}, errors.New(unreadableOutlineForSection)
 	}
 	if err != nil {
 		return ReadOutput{}, err

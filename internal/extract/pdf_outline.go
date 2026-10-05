@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -25,6 +26,13 @@ const noPDFOutlineReason = "no embedded table of contents; the text layer is rea
 // document does have a table of contents, so saying it has none would be false,
 // and the pages are still there to read.
 const damagedPDFOutlineReason = "the embedded table of contents is damaged and could not be read; the text layer is readable, so read the text sequentially or use find"
+
+// largePDFOutlineReason is reported for a PDF that has a readable text layer
+// and an outline with more items than maxOutlineItems or nested deeper than
+// maxOutlineDepth. No real table of contents comes near either bound, and
+// listing the part before the bound would present it as the whole, so none of
+// it is listed. TestLargePDFOutlineReason holds the two numbers to the bounds.
+const largePDFOutlineReason = "the embedded table of contents is larger than this reader lists (over 20000 entries, or nested over 64 levels deep), so none of it is listed; the text layer is readable, so read the text sequentially or use find"
 
 // Bounds on the outline walk. An outline is a linked structure the file
 // controls, so a /Next or /First that leads back to an item already read is a
@@ -73,49 +81,69 @@ func pdfOutline(ctx context.Context, d document) (OutlineResult, error) {
 	if err := ctx.Err(); err != nil {
 		return OutlineResult{}, err
 	}
-	entries, damaged, err := pdfBookmarkEntries(ctx, d)
+	entries, outline, err := pdfBookmarkEntries(ctx, d)
 	if err != nil {
 		return OutlineResult{}, err
 	}
 	if len(entries) > 0 {
 		return OutlineResult{Format: "pdf", Extractable: true, Entries: entries}, nil
 	}
-	return pdfNoOutlineResult(ctx, d, damaged)
+	return pdfNoOutlineResult(ctx, d, outline)
 }
 
-// pdfBookmarkEntries reads the PDF's outline, flattened in document order.
+// outlineState is what a walk found an outline to be.
+type outlineState int
+
+// The three things an outline walk can find.
+const (
+	// outlineWhole is an outline read to its end, or no outline at all.
+	outlineWhole outlineState = iota
+	// outlineDamaged is an outline the walk could not follow to its end: the
+	// reader broke on an item, or a link an item states leads to no item.
+	outlineDamaged
+	// outlineTooLarge is an outline with items past the walk's item budget or
+	// depth bound.
+	outlineTooLarge
+)
+
+// pdfBookmarkEntries reads the PDF's outline, flattened in document order, and
+// says what it found.
 //
 // A file the reader will not open, or whose page tree is unsafe to walk,
 // yields no entries and no verdict of its own: the text-layer probe that
 // follows produces one, in the words the text path uses for the same file. A
-// walk that panics part-way reports damaged, and whatever it had collected is
-// dropped, because a table of contents cut short at an unknown point would be
-// read as the whole of one. Only ctx ending yields an error.
-func pdfBookmarkEntries(ctx context.Context, d document) (entries []OutlineEntry, damaged bool, err error) {
+// walk that panics part-way, that meets a link to nothing, or that reaches a
+// bound with items left drops whatever it had collected and says which,
+// because a table of contents cut short would be read as the whole of one.
+// Only ctx ending yields an error.
+func pdfBookmarkEntries(ctx context.Context, d document) (entries []OutlineEntry, outline outlineState, err error) {
 	defer func() {
 		if recover() != nil {
-			entries, damaged, err = nil, true, nil
+			entries, outline, err = nil, outlineDamaged, nil
 		}
 	}()
 	r, why := openPDF(d)
 	if why != "" {
-		return nil, false, nil
+		return nil, outlineWhole, nil
 	}
 	root := r.Trailer().Key("Root")
 	// The reader opens a crypt filter (V=4) only when it is AESV2, so V=4 is
 	// AES here.
 	w := newOutlineWalk(root, encryptionOf(r).version == 4)
-	w.walk(ctx, root.Key("Outlines").Key("First"), 0)
-	return w.entries, false, w.items.err
+	w.walk(ctx, w.link(w.link(root, "Outlines"), "First"), 0)
+	if w.state != outlineWhole {
+		return nil, w.state, w.items.err
+	}
+	return w.entries, outlineWhole, w.items.err
 }
 
 // pdfNoOutlineResult decides what to report for a PDF that yielded no outline
 // entries, by asking the same question the text path asks: does this file have
 // a text layer? A readable one is extractable with no entries, saying whether
-// the outline is absent or damaged; a text-free one is reported as scanned; an
-// unreadable one carries the reader's own diagnosis, which for an encrypted
-// file names the encryption.
-func pdfNoOutlineResult(ctx context.Context, d document, damaged bool) (OutlineResult, error) {
+// the outline is absent, damaged or too large to list; a text-free one is
+// reported as scanned; an unreadable one carries the reader's own diagnosis,
+// which for an encrypted file names the encryption.
+func pdfNoOutlineResult(ctx context.Context, d document, outline outlineState) (OutlineResult, error) {
 	state, reason, err := probePDFTextLayer(ctx, d)
 	if err != nil {
 		return OutlineResult{}, err
@@ -126,8 +154,11 @@ func pdfNoOutlineResult(ctx context.Context, d document, damaged bool) (OutlineR
 	case pdfTextUnreadable:
 		return OutlineResult{Format: "pdf", Reason: reason}, nil
 	}
-	if damaged {
-		return OutlineResult{Format: "pdf", Extractable: true, Reason: damagedPDFOutlineReason}, nil
+	switch outline {
+	case outlineDamaged:
+		return OutlineResult{Format: "pdf", Extractable: true, Reason: damagedPDFOutlineReason, unreadable: true}, nil
+	case outlineTooLarge:
+		return OutlineResult{Format: "pdf", Extractable: true, Reason: largePDFOutlineReason, unreadable: true}, nil
 	}
 	return OutlineResult{Format: "pdf", Extractable: true, Reason: noPDFOutlineReason}, nil
 }
@@ -178,6 +209,8 @@ type outlineWalk struct {
 	dests map[string]nameEntry
 	// entries is the outline so far, in document order.
 	entries []OutlineEntry
+	// state is what the walk has found the outline to be so far.
+	state outlineState
 }
 
 // nameEntry is where a name tree holds a destination: its position in a leaf's
@@ -210,21 +243,41 @@ func (w *outlineWalk) str(v pdf.Value) string {
 }
 
 // walk appends item and its following siblings at level, each followed by its
-// own children one level down. It stops at the depth bound, when the item
-// budget is spent or ctx has ended, and at an item it has read before.
+// own children one level down. It stops at an item it has read before, which
+// is where a cycle repeats the outline, and at an item past the depth bound or
+// the item budget, which it records as outlineTooLarge. The budget is also
+// spent once ctx has ended, and then the walk's error is what its caller
+// returns.
 func (w *outlineWalk) walk(ctx context.Context, item pdf.Value, level int) {
-	if level >= maxOutlineDepth {
-		return
-	}
-	for ; item.Kind() == pdf.Dict; item = item.Key("Next") {
-		if !w.items.spend(ctx) || !w.firstVisit(item) {
+	for item.Kind() == pdf.Dict {
+		if level >= maxOutlineDepth || !w.items.spend(ctx) {
+			w.state = outlineTooLarge
+			return
+		}
+		if !w.firstVisit(item) {
 			return
 		}
 		if title := outlineTitle(textString(w.str(item.Key("Title")))); title != "" {
 			w.entries = append(w.entries, OutlineEntry{Title: title, Level: level, Page: w.destPage(ctx, item)})
 		}
-		w.walk(ctx, item.Key("First"), level+1)
+		w.walk(ctx, w.link(item, "First"), level+1)
+		item = w.link(item, "Next")
 	}
+}
+
+// link returns what from's key leads to. A key from states that leads to no
+// dictionary (a reference to a free object, to one past the end of the
+// cross-reference table, or to something that is not an item) is recorded as
+// outlineDamaged: the outline goes on past it, so what was read before it is
+// not the whole. ISO 32000 has each of these keys be a reference to a
+// dictionary, so an explicit null is damage too. A key from does not state is
+// the end of its chain.
+func (w *outlineWalk) link(from pdf.Value, key string) pdf.Value {
+	to := from.Key(key)
+	if to.Kind() != pdf.Dict && slices.Contains(from.Keys(), key) {
+		w.state = outlineDamaged
+	}
+	return to
 }
 
 // firstVisit reports whether item has not been read before, recording it.

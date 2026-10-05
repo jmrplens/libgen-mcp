@@ -436,6 +436,18 @@ func TestSection_NoOutline(t *testing.T) {
 	}
 }
 
+// TestSection_DamagedOutline verifies a readable PDF whose outline is damaged
+// yields ErrOutlineUnreadable, which outline mode's diagnosis agrees with,
+// and not ErrNoOutline, which would say the document has none.
+func TestSection_DamagedOutline(t *testing.T) {
+	data := withObjectAt(t, outlinePDF("", "<</Title(A)/Dest[3 0 R/Fit]>>"), 9, 8)
+	path := writeBytes(t, t.TempDir(), "damaged.pdf", data)
+	_, err := Section(context.Background(), openFile(t, path), SectionRef{Index: 1}, Req{})
+	if !errors.Is(err, ErrOutlineUnreadable) || errors.Is(err, ErrNoOutline) {
+		t.Errorf("err = %v, want ErrOutlineUnreadable", err)
+	}
+}
+
 // TestSection_UnreadableFile verifies a file nothing can be read from comes
 // back as a not-extractable chunk with the reason the other modes give, not as
 // an error.

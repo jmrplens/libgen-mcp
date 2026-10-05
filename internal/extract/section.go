@@ -46,6 +46,11 @@ type SectionChunk struct {
 // table of contents, so no entry can be addressed in it.
 var ErrNoOutline = errors.New("this document has no table of contents")
 
+// ErrOutlineUnreadable is returned by Section for a readable document whose
+// table of contents is damaged or too large to list, as outline mode reports
+// it. Answering ErrNoOutline there would say the document has none.
+var ErrOutlineUnreadable = errors.New("this document's table of contents could not be read")
+
 // SectionError is a section request this document cannot answer as asked: an
 // entry number past the end, a title that matches nothing or more than one
 // entry, or an entry with no position to start from. Its message is written
@@ -82,8 +87,9 @@ const maxSectionCandidates = 10
 // resumes inside the section, which is what a cursor carries.
 //
 // A file nothing can be read from yields a not-extractable chunk, as Extract
-// does. A readable file with no outline yields ErrNoOutline, and a reference
-// the outline cannot satisfy yields a *SectionError. Like Extract, it reads f
+// does. A readable file with no outline yields ErrNoOutline, one whose outline
+// could not be listed yields ErrOutlineUnreadable, and a reference the outline
+// cannot satisfy yields a *SectionError. Like Extract, it reads f
 // and never reopens the file by name, and runs behind the time budget in
 // guard.go.
 func Section(ctx context.Context, f *os.File, ref SectionRef, r Req) (SectionChunk, error) {
@@ -111,6 +117,9 @@ func sectionChecked(ctx context.Context, d document, ref SectionRef, r Req) (Sec
 		return SectionChunk{Format: ol.Format, Reason: ol.Reason}, nil
 	}
 	if len(ol.Entries) == 0 {
+		if ol.unreadable {
+			return SectionChunk{}, ErrOutlineUnreadable
+		}
 		return SectionChunk{}, ErrNoOutline
 	}
 	i, err := resolveSection(ol.Entries, ref)
