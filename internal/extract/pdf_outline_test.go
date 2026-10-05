@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -492,6 +493,47 @@ func TestOutline_PDFEveryDestinationForm(t *testing.T) {
 		"0 3 Destination held elsewhere\n"
 	if got := entryLines(res.Entries); got != want {
 		t.Errorf("outline:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// readsAt counts the reads of a file that start at one offset, which for the
+// PDF reader is how many times it parsed the object there.
+type readsAt struct {
+	io.ReaderAt
+	off   int64
+	count int
+}
+
+// ReadAt reads from the file, counting a read that starts at r.off.
+func (r *readsAt) ReadAt(p []byte, off int64) (int, error) {
+	if off == r.off {
+		r.count++
+	}
+	return r.ReaderAt.ReadAt(p, off)
+}
+
+// TestOutline_PDFLegacyDestsAreReadOnce names three pages through a PDF 1.1
+// /Dests dictionary held in an object of its own, and counts the reads of
+// that object: one, however many items name a destination in it. The reader
+// keeps no object it has read, so looking each name up through the catalog
+// parsed the dictionary once per item, which on 40,000 destinations and 3,000
+// items ran past the read's time budget.
+func TestOutline_PDFLegacyDestsAreReadOnce(t *testing.T) {
+	data := outlinePDF("/Dests 12 0 R",
+		"<</Title(One)/Dest/a/Next 10 0 R>>",
+		"<</Title(Two)/Dest/b/Next 11 0 R>>",
+		"<</Title(Three)/Dest/c>>",
+		"<</a[3 0 R/Fit]/b[4 0 R/Fit]/c[5 0 R/Fit]>>")
+	file := &readsAt{ReaderAt: bytes.NewReader(data), off: int64(bytes.Index(data, []byte("\n12 0 obj\n")) + 1)}
+	entries, _, err := pdfBookmarkEntries(context.Background(), document{name: "dests.pdf", r: file, size: int64(len(data))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := entryLines(entries), "0 1 One\n0 2 Two\n0 3 Three\n"; got != want {
+		t.Errorf("outline:\n%s\nwant:\n%s", got, want)
+	}
+	if file.count != 1 {
+		t.Errorf("the /Dests dictionary was read %d times, want once", file.count)
 	}
 }
 

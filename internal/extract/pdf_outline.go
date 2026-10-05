@@ -169,6 +169,11 @@ type outlineWalk struct {
 	// pages numbers each /Page leaf by its "id gen" reference. It is built on
 	// the first destination that names a page.
 	pages map[string]int
+	// legacyDests is the catalog's PDF 1.1 /Dests dictionary, read in on first
+	// use and kept: the reader keeps no object it has read, so looking a name
+	// up through the catalog parsed the whole dictionary again for every
+	// outline item that named one.
+	legacyDests *pdf.Value
 	// dests holds the name tree's named destinations, read in on first use.
 	dests map[string]nameEntry
 	// entries is the outline so far, in document order.
@@ -298,10 +303,14 @@ func (w *outlineWalk) explicit(ctx context.Context, dest pdf.Value) pdf.Value {
 }
 
 // named looks a destination name up in the PDF 1.1 /Dests dictionary, and
-// then in the /Names /Dests name tree, which is read in on first use, under
-// ctx.
+// then in the /Names /Dests name tree, each read in once, on first use, the
+// tree under ctx.
 func (w *outlineWalk) named(ctx context.Context, name string) pdf.Value {
-	if dest := w.root.Key("Dests").Key(name); !dest.IsNull() {
+	if w.legacyDests == nil {
+		d := w.root.Key("Dests")
+		w.legacyDests = &d
+	}
+	if dest := w.legacyDests.Key(name); !dest.IsNull() {
 		return dest
 	}
 	if w.dests == nil {
