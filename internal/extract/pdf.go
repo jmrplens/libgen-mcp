@@ -223,10 +223,16 @@ type overwritten struct {
 // p holds the bytes from at on.
 func (v overwritten) ReadAt(p []byte, off int64) (int, error) {
 	n, err := v.ReaderAt.ReadAt(p, off)
-	for i := max(off, v.at); i < min(off+int64(n), v.at+int64(len(v.with))); i++ {
-		p[i-off] = v.with[i-v.at]
-	}
+	overwrite(p[:n], off, v.at, v.with)
 	return n, err
+}
+
+// overwrite writes with over whatever part of p, the file read from off,
+// holds the bytes from at on.
+func overwrite(p []byte, off, at int64, with string) {
+	for i := max(off, at); i < min(off+int64(len(p)), at+int64(len(with))); i++ {
+		p[i-off] = with[i-at]
+	}
 }
 
 // pdfBytes returns what the PDF reader is given for d: a PDF 2.0 file with

@@ -1552,6 +1552,7 @@ func FuzzPDFOutline(f *testing.F) {
 		f.Add(mustRead(f, path))
 	}
 	f.Add(destinationFormsPDF())
+	f.Add(outlinePDF("", `<</Title(Results \& discussion)/Next 10 0 R>>`, `<</Title<414>/A<</S/GoToR/F(..\docs\a.pdf)/D[0/Fit]>>>>`))
 	for _, tc := range outlineCycles() {
 		f.Add(tc.data)
 	}

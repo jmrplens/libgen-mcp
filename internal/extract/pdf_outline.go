@@ -114,15 +114,35 @@ const (
 // pdfBookmarkEntries reads the PDF's outline, flattened in document order, and
 // says what it found.
 //
-// The file is walked as each of outlineOpeners opens it in turn, the next
+// The file is walked as walkOpened walks it. When that finds the outline
+// damaged and the file holds strings the reader's lexer refuses, it is walked
+// again with them rewritten (stringsFixed), and what that walk finds is the
+// answer, unless it could not open the file at all. A file no walk opens
+// yields no entries and no verdict of its own: the text-layer probe that
+// follows produces one, in the words the text path uses for the same file.
+// Only ctx ending yields an error.
+func pdfBookmarkEntries(ctx context.Context, d document) ([]OutlineEntry, outlineState, error) {
+	entries, outline, err := walkOpened(ctx, d)
+	if err != nil || outline != outlineDamaged {
+		return entries, outline, err
+	}
+	fixed, ok := stringsFixed(ctx, d)
+	if !ok {
+		return nil, outline, ctx.Err()
+	}
+	if fixedEntries, state, fixedErr := walkOpened(ctx, fixed); fixedErr != nil || state != outlineUnread {
+		return fixedEntries, state, fixedErr
+	}
+	return nil, outline, nil
+}
+
+// walkOpened walks d as each of outlineOpeners opens it in turn, the next
 // only when a walk could not open the file or found the outline damaged. A
-// file none of them opens yields no entries and no verdict of its own: the
-// text-layer probe that follows produces one, in the words the text path uses
-// for the same file. A walk that panics part-way, that meets a link to
-// nothing, or that reaches a bound with items left drops whatever it had
-// collected and says which, because a table of contents cut short would be
-// read as the whole of one. Only ctx ending yields an error.
-func pdfBookmarkEntries(ctx context.Context, d document) (entries []OutlineEntry, outline outlineState, err error) {
+// walk that panics part-way, that meets a link to nothing, or that reaches a
+// bound with items left drops whatever it had collected and says which,
+// because a table of contents cut short would be read as the whole of one.
+// Only ctx ending yields an error.
+func walkOpened(ctx context.Context, d document) (entries []OutlineEntry, outline outlineState, err error) {
 	outline = outlineUnread
 	for _, open := range outlineOpeners(d) {
 		entries, outline, err = walkOutline(ctx, open)
