@@ -321,10 +321,11 @@ func TestFindEncryptKey(t *testing.T) {
 // TestIsRegularByte holds the bytes that end a name to ISO 32000-1's white
 // space and delimiters, and every other byte to a name's.
 func TestIsRegularByte(t *testing.T) {
-	for c := range 256 {
+	for i := range 256 {
+		c := byte(i)
 		t.Run(fmt.Sprintf("%#02x", c), func(t *testing.T) {
 			want := !strings.ContainsRune(nonRegularBytes, rune(c))
-			if got := isRegularByte(byte(c)); got != want {
+			if got := isRegularByte(c); got != want {
 				t.Errorf("isRegularByte(%#x) = %v, want %v", c, got, want)
 			}
 		})

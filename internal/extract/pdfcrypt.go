@@ -221,11 +221,11 @@ func trailerEncryptAt(d document) (int64, bool) {
 	if n, _ := d.r.ReadAt(buf, d.size-tail); int64(n) != tail {
 		return 0, false
 	}
-	i := bytes.LastIndex(buf, []byte("startxref"))
-	if i < 0 {
+	_, after, found := bytes.CutLast(buf, []byte("startxref"))
+	if !found {
 		return 0, false
 	}
-	fields := bytes.Fields(buf[i+len("startxref"):])
+	fields := bytes.Fields(after)
 	if len(fields) == 0 {
 		return 0, false
 	}
