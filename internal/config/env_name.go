@@ -17,7 +17,7 @@ import (
 // No variable this server defines has ever shipped without the prefix, so there
 // is no old spelling to keep answering to and no deprecation to warn about. The
 // rule is simply the rule.
-const EnvPrefix = "LIBGEN_MCP_"
+const EnvPrefix = "PL_MCP_"
 
 // knownNames is every setting this package reads, spelled without [EnvPrefix].
 //
@@ -28,7 +28,7 @@ const EnvPrefix = "LIBGEN_MCP_"
 //
 // Two names are deliberately absent, and both are bare on purpose:
 //
-//   - LIBGEN_MIRROR is the mirror family's own convention, the vendor-shaped
+//   - LBN_MIRROR is the mirror family's own convention, the vendor-shaped
 //     counterpart of naming a service's URL. An operator who already has it set
 //     must not have to spell it twice.
 //   - every OTEL_* name belongs to the OpenTelemetry specification and is read
