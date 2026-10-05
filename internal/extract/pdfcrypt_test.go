@@ -516,12 +516,79 @@ func TestAESLengthFixed(t *testing.T) {
 	}
 }
 
+// splitCryptFilters returns qpdf's AES-128 titles fixture, whose outline is in
+// object streams, with its one crypt filter split in two alike under two
+// names, /StdCF for strings and /StdCG for streams, each AESV2. Both
+// rewrites keep the length of what they replace, so the cross-reference
+// table still finds every object.
+func splitCryptFilters(t *testing.T) []byte {
+	t.Helper()
+	const one = "/CF << /StdCF << /AuthEvent /DocOpen /CFM /AESV2 /Length 16 >> >>"
+	two := fmt.Sprintf("%-*s", len(one), "/CF<</StdCF<</CFM/AESV2>>/StdCG<</CFM/AESV2>>>>")
+	data := mustRead(t, "testdata/encrypted-aes128-objstm-titles.pdf")
+	if !bytes.Contains(data, []byte(one)) || !bytes.Contains(data, []byte("/StmF /StdCF")) {
+		t.Fatal("the fixture's encryption dictionary is not the one this rewrites")
+	}
+	data = bytes.Replace(data, []byte(one), []byte(two), 1)
+	return bytes.Replace(data, []byte("/StmF /StdCF"), []byte("/StmF /StdCG"), 1)
+}
+
+// TestStreamCrypt reads how each version and crypt filter encrypts streams:
+// with RC4 at versions 1 and 2, and under crypt filters by the method of the
+// filter /StmF names, whatever /StrF names: AES-128 for AESV2 under a 16-byte
+// key, RC4 for V2, and nothing for /Identity, an absent /StmF, a filter of no
+// method, and AESV2 under a key AES-128 cannot take.
+func TestStreamCrypt(t *testing.T) {
+	key16, key5 := bytes.Repeat([]byte{7}, 16), bytes.Repeat([]byte{7}, 5)
+	for _, tc := range []struct {
+		name string
+		dict string
+		key  []byte
+		want string
+	}{
+		{"version 1", "<</V 1>>", key5, "RC4"},
+		{"version 2", "<</V 2>>", key16, "RC4"},
+		{"AES-128 under another name", "<</V 4/CF<</S<</CFM/V2>>/T<</CFM/AESV2>>>>/StrF/S/StmF/T>>", key16, "AES"},
+		{"AES-128 under a short key", "<</V 4/CF<</T<</CFM/AESV2>>>>/StrF/T/StmF/T>>", key5, "none"},
+		{"RC4 under another name", "<</V 4/CF<</S<</CFM/AESV2>>/T<</CFM/V2>>>>/StrF/S/StmF/T>>", key16, "RC4"},
+		{"Identity", "<</V 4/CF<</S<</CFM/V2>>>>/StrF/S/StmF/Identity>>", key16, "none"},
+		{"no /StmF", "<</V 4/CF<</S<</CFM/V2>>>>/StrF/S>>", key16, "none"},
+		{"a filter of no method", "<</V 4/CF<</S<</CFM/V2>>/T<</CFM/None>>>>/StrF/S/StmF/T>>", key16, "none"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := "none"
+			if c := streamCrypt(encryptDict(t, tc.dict), tc.key); c != nil {
+				got = map[bool]string{false: "RC4", true: "AES"}[c.aes]
+				if !bytes.Equal(c.key, tc.key) || c.stream != nil {
+					t.Errorf("streamCrypt keeps key %x and %v, want the file key %x and nothing more", c.key, c.stream, tc.key)
+				}
+			}
+			if got != tc.want {
+				t.Errorf("streamCrypt = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestOutline_PDFStreamsUnderAnotherFilterName reads an AES-128 outline in
+// object streams whose /StmF and /StrF name two crypt filters alike under
+// two names. Its object streams were left encrypted, since the walk decrypted
+// them only when the two named the same filter, so the outline was damaged.
+func TestOutline_PDFStreamsUnderAnotherFilterName(t *testing.T) {
+	want := entryLines(outlineOf(t, mustRead(t, "testdata/outline-titles.pdf")).Entries)
+	res := outlineOf(t, splitCryptFilters(t))
+	if got := entryLines(res.Entries); got != want || res.Reason != "" {
+		t.Errorf("outline:\n%s(%q)\nwant:\n%s", got, res.Reason, want)
+	}
+}
+
 // TestSelfDecrypting opens with its encryption hidden a file the walk
 // decrypts, with a view that decrypts its object streams, and nothing for a
 // file with no /Encrypt key, one that does not open as a PDF with the key
 // hidden, and one encrypted with AES-256. A file whose /StmF names another
-// crypt filter than its /StrF, which leaves streams unencrypted when it is
-// /Identity, opens with a view that only counts them.
+// crypt filter than its /StrF opens with a view that decrypts streams as that
+// filter says: not at all for /Identity, which leaves the view only counting
+// them, and with AES-128 for a second AESV2 filter.
 func TestSelfDecrypting(t *testing.T) {
 	const notAPDF = "startxref 0\n/Encrypt 1 0 R\n%%EOF"
 	identity := bytes.Replace(mustRead(t, "testdata/encrypted-aes128-titles.pdf"), []byte("/StmF /StdCF"), []byte("/StmF /Ident"), 1)
@@ -533,6 +600,7 @@ func TestSelfDecrypting(t *testing.T) {
 	}{
 		{"40-bit RC4", docFor(t, "testdata/encrypted-rc4-40.pdf"), true, true},
 		{"streams under another filter", docOf(identity), true, false},
+		{"streams under another AES-128 filter", docOf(splitCryptFilters(t)), true, true},
 		{"not encrypted", docFor(t, sectionsPDF), false, false},
 		{"not a PDF", document{r: strings.NewReader(notAPDF), size: int64(len(notAPDF))}, false, false},
 		{"AES-256", docFor(t, "testdata/encrypted-aes256.pdf"), false, false},

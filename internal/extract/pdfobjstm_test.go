@@ -128,7 +128,7 @@ func TestObjStmView_EndOfData(t *testing.T) {
 // without one, as the file holds it.
 func TestObjStmView_ReadAt(t *testing.T) {
 	plain := "0 0 (object stream data)"
-	c := stringCrypt{key: []byte{1, 2, 3, 4, 5}, streams: true}
+	c := stringCrypt{key: []byte{1, 2, 3, 4, 5}}
 	key := c.objectKey(objRef{id: 12})
 	enc := string(rc4XOR(key, []byte(plain)))
 	// The view decrypts up to endstream, the line feed before it included.
@@ -172,7 +172,7 @@ func TestObjStmView_ReadAt(t *testing.T) {
 // no stream has been inflated yet, through a view that decrypts: the bytes
 // are the file's.
 func TestObjStmView_ReadAtTheFileStart(t *testing.T) {
-	c := stringCrypt{key: []byte{1, 2, 3, 4, 5}, streams: true}
+	c := stringCrypt{key: []byte{1, 2, 3, 4, 5}}
 	v := &objStmView{ReaderAt: strings.NewReader("%PDF-1.7\n"), crypt: &c}
 	p := make([]byte, 8)
 	if n, err := v.ReadAt(p, 0); err != nil || string(p[:n]) != "%PDF-1.7" || v.inflated() != 0 {

@@ -29,13 +29,12 @@ const paddingString = "\x28\xbf\x4e\x5e\x4e\x75\x8a\x41\x64\x00\x4e\x56\xff\xfa\
 // stringCrypt decrypts the strings and object streams of a file encrypted by
 // the standard security handler that opens with an empty user password, which
 // is every file this server can read: key is the file key, aes says whether
-// strings are encrypted with AES-128 or with RC4, and streams whether streams
-// are encrypted the same way, which under crypt filters (V=4) they are when
-// /StmF names the filter /StrF does.
+// strings are encrypted with AES-128 or with RC4, and stream is how streams
+// are decrypted (streamCrypt), nil when they are not.
 type stringCrypt struct {
-	key     []byte
-	aes     bool
-	streams bool
+	key    []byte
+	aes    bool
+	stream *stringCrypt
 }
 
 // Bounds the standard security handler sets on a file key, in bits, and how
@@ -68,7 +67,30 @@ func standardCrypt(enc pdf.Value, id string) (stringCrypt, bool) {
 	if !userKeyMatches(key, u, id, revision) {
 		return stringCrypt{}, false
 	}
-	return stringCrypt{key: key, aes: useAES, streams: enc.Key("V").Int64() != 4 || enc.Key("StmF").Name() == enc.Key("StrF").Name()}, true
+	return stringCrypt{key: key, aes: useAES, stream: streamCrypt(enc, key)}, true
+}
+
+// streamCrypt returns how enc's streams are decrypted under key, the file
+// key: with RC4 at versions 1 and 2, and under crypt filters (V=4) by the
+// method of the filter /StmF names, whatever /StrF names. /Identity, which
+// /StmF is when it is absent, and a filter of no method leave streams
+// unencrypted, and so does AES-128 under a file key that is not 16 bytes,
+// which no AES-128 file has: each is nil. Deciding by whether /StmF and /StrF
+// named the same filter left every object stream encrypted in a file whose
+// two filters are alike under two names.
+func streamCrypt(enc pdf.Value, key []byte) *stringCrypt {
+	if enc.Key("V").Int64() != 4 {
+		return &stringCrypt{key: key}
+	}
+	switch enc.Key("CF").Key(enc.Key("StmF").Name()).Key("CFM").Name() {
+	case "AESV2":
+		if len(key) == aes.BlockSize {
+			return &stringCrypt{key: key, aes: true}
+		}
+	case "V2":
+		return &stringCrypt{key: key}
+	}
+	return nil
 }
 
 // stringCipher says how enc encrypts strings: with AES-128 or not, and with a
@@ -369,9 +391,9 @@ func (h hiddenEncryption) dict() (enc pdf.Value, from int64) {
 
 // selfDecrypting opens d for the outline walk with its encryption hidden from
 // the reader: the walk decrypts the strings it is handed, and the view shows
-// the reader each object stream decrypted, when streams are encrypted as
-// strings are. It returns no reader for a file hideEncryption does not open,
-// or whose strings standardCrypt does not decrypt.
+// the reader each object stream decrypted, when streams are encrypted. It
+// returns no reader for a file hideEncryption does not open, or whose strings
+// standardCrypt does not decrypt.
 func selfDecrypting(d document) outlineSource {
 	h, ok := hideEncryption(d)
 	if !ok {
@@ -382,9 +404,7 @@ func selfDecrypting(d document) outlineSource {
 	if !ok {
 		return outlineSource{}
 	}
-	if c.streams {
-		h.view.crypt = &c
-	}
+	h.view.crypt = c.stream
 	return outlineSource{r: h.r, strs: c.decrypt, view: h.view}
 }
 
