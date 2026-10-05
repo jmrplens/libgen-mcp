@@ -65,6 +65,10 @@ type readServer struct {
 	*server
 	cmd     *exec.Cmd
 	stopped chan error
+	// exited closes once the process has been reaped, whoever consumed its
+	// exit status from stopped. The cleanup waits on it, so the temp
+	// directory and the mirror outlive the process however the test ended.
+	exited chan struct{}
 }
 
 // startReadServer starts the binary serving read (fetching is on) against m,
@@ -90,9 +94,16 @@ func startReadServer(t *testing.T, m *mirror, tmp string) *readServer {
 		server:  &server{baseURL: "http://" + addr, logs: func() string { return "" }},
 		cmd:     cmd,
 		stopped: make(chan error, 1),
+		exited:  make(chan struct{}),
 	}
-	go func() { rs.stopped <- cmd.Wait() }()
-	t.Cleanup(func() { _ = cmd.Process.Kill() })
+	go func() {
+		rs.stopped <- cmd.Wait()
+		close(rs.exited)
+	}()
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		<-rs.exited
+	})
 	waitHealthy(t, rs.server)
 	return rs
 }
