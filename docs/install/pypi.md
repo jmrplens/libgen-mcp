@@ -46,7 +46,7 @@ With `pip`, install into a virtual environment, so the command lands in one you 
 
 ```bash
 libgen-mcp --version
-# libgen-mcp 2.2.0 (commit <commit>)
+# libgen-mcp 2.2.1 (commit <commit>)
 ```
 
 ## Verify what you installed
@@ -106,13 +106,13 @@ A client that already has the server running keeps the old process until it rest
 ## Pin a version
 
 ```bash
-uvx libgen-mcp@2.2.0
-uv tool install libgen-mcp==2.2.0
-pipx install libgen-mcp==2.2.0
-pip install libgen-mcp==2.2.0
+uvx libgen-mcp@2.2.1
+uv tool install libgen-mcp==2.2.1
+pipx install libgen-mcp==2.2.1
+pip install libgen-mcp==2.2.1
 ```
 
-In a client's configuration that is `"args": ["libgen-mcp@2.2.0"]` under `uvx`.
+In a client's configuration that is `"args": ["libgen-mcp@2.2.1"]` under `uvx`.
 
 ## Uninstall
 

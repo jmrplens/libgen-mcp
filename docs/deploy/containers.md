@@ -30,7 +30,7 @@ health check reports it as running, because an instance serving stdio has no lis
 while the published port refuses every connection. Measured with the default command:
 
 ```text
-$ docker run -d -i -p 127.0.0.1:8080:8080 ghcr.io/jmrplens/libgen-mcp:2.2.0
+$ docker run -d -i -p 127.0.0.1:8080:8080 ghcr.io/jmrplens/libgen-mcp:2.2.1
 $ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/health
 000
 $ docker exec <container> libgen-mcp --healthcheck
@@ -45,7 +45,7 @@ Why the image decides from stdin, and how `auto` reads it, is in
 ```yaml
 services:
   libgen-mcp:
-    image: ghcr.io/jmrplens/libgen-mcp:2.2.0
+    image: ghcr.io/jmrplens/libgen-mcp:2.2.1
     command:
       - --http=0.0.0.0:8080
       - --public-url=https://mcp.example.org
@@ -119,7 +119,7 @@ published:
 ```yaml
 services:
   libgen-mcp:
-    image: ghcr.io/jmrplens/libgen-mcp:2.2.0
+    image: ghcr.io/jmrplens/libgen-mcp:2.2.1
     # 101 is the nginx group in the official nginx images. The socket is created
     # 0660 with this process's group, so nginx's workers can open it as they are.
     user: "10001:101"
@@ -244,7 +244,7 @@ with one that names no listener:
 ```yaml
 services:
   libgen-mcp:
-    image: ghcr.io/jmrplens/libgen-mcp:2.2.0
+    image: ghcr.io/jmrplens/libgen-mcp:2.2.1
     command: ["--transport", "http"]
     environment:
       LIBGEN_MCP_HTTP_ADDR: "0.0.0.0:8080"
@@ -333,7 +333,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: libgen-mcp
-          image: ghcr.io/jmrplens/libgen-mcp:2.2.0
+          image: ghcr.io/jmrplens/libgen-mcp:2.2.1
           # Replaces the image's default command, whose --http would otherwise
           # win over LIBGEN_MCP_HTTP_ADDR.
           args: ["--transport=http"]

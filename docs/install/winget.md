@@ -68,7 +68,7 @@ A client that already has the server running keeps the old process until it rest
 ## Pin a version
 
 ```powershell
-winget install --id jmrplens.libgen-mcp -e --version 2.2.0
+winget install --id jmrplens.libgen-mcp -e --version 2.2.1
 winget pin add --id jmrplens.libgen-mcp
 ```
 
