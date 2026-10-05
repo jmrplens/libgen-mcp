@@ -27,17 +27,19 @@ const fetchDirPattern = "fetch-*"
 
 // legacyFetchPrefix names a fetch directory made loose in the temp directory,
 // the layout every fetch had up to 2.2.0. A process whose temp directory has
-// no working lock goes back to it (see readRoot.unlocked), because the sweep
-// never matches this prefix, so no other process can take such a directory
-// for abandoned while this one still reads from it.
+// no lock every process sharing it would see goes back to it (see
+// readRoot.unlocked), because the sweep never matches this prefix, so no
+// other process can take such a directory for abandoned while this one still
+// reads from it.
 const legacyFetchPrefix = "libgen-read-"
 
 // errLockHeld is what tryLockFile answers when another open file holds the
 // lock. Every other error it returns means the lock could not be tried at all.
 var errLockHeld = errors.New("the lock is held by another open file")
 
-// errLocksUnusable marks a lock that could not be tried at all, as opposed to
-// one another file holds (see holdReadRootLock).
+// errLocksUnusable marks a temp directory whose lock cannot be relied on: one
+// that could not be tried at all, as opposed to one another file holds (see
+// holdReadRootLock), or one only this host would see (see networkFilesystem).
 var errLocksUnusable = errors.New("file locks do not work here")
 
 // readRootLockGrace is how long a read root that holds no fetch directory
@@ -85,14 +87,15 @@ type readRoot struct {
 	dir  string
 	lock *os.File
 
-	// unlocked is set, for the rest of the process's life, once taking a new
-	// root's lock failed for any reason but another holder: the temp
-	// directory's filesystem has no lock that works (NFS without lockd, a
-	// cluster filesystem mounted without flock, a FUSE mount that refuses
-	// it). An unlocked root is the one thing this must not make, because
-	// another process's sweep could take its free lock and remove it
-	// mid-read. Each fetch's directory is made loose in the temp directory
-	// instead, as up to 2.2.0, which the sweep never matches.
+	// unlocked is set, for the rest of the process's life, once the temp
+	// directory is found unable to hold a lock every process sharing it would
+	// see: it is on a network filesystem where the lock stays on this host
+	// (see networkFilesystem), or taking a new root's lock failed for any
+	// reason but another holder (a cluster filesystem mounted without flock,
+	// a platform with no lock at all). An unlocked root is the one thing this
+	// must not make, because another process's sweep could take its free lock
+	// and remove it mid-read. Each fetch's directory is made loose in the temp
+	// directory instead, as up to 2.2.0, which the sweep never matches.
 	unlocked bool
 }
 
@@ -138,34 +141,38 @@ func (r *readRoot) makeFetchDirLocked() (string, error) {
 // The caller holds r.mu.
 //
 // The first creation also sweeps the roots dead processes left behind, so a
-// server that never fetches a file never touches the temp directory. A failure
-// is returned and not remembered, so a temp directory that comes back serves
-// the next read rather than failing every read for the life of the process.
+// server that never fetches a file never touches the temp directory. The sweep
+// runs only once this process's own root holds its lock, which keeps it from
+// running at all where the temp directory cannot hold a lock other processes
+// see: on a network filesystem the sweep is the danger, because another
+// host's live root looks dead to it. A failure is returned and not
+// remembered, so a temp directory that comes back serves the next read rather
+// than failing every read for the life of the process.
 func (r *readRoot) pathLocked() (string, error) {
 	if r.dir != "" || r.unlocked {
 		return r.dir, nil
-	}
-	tmp := os.TempDir()
-	if n := sweepReadRoots(tmp); n > 0 {
-		slog.Info("removed read files left by servers that did not exit cleanly", "directories", n, "dir", tmp)
 	}
 	dir, err := os.MkdirTemp("", readRootPrefix+"*")
 	if err != nil {
 		return "", err
 	}
+	tmp := filepath.Dir(dir)
 	lock, err := holdReadRootLock(dir)
-	if err == nil {
-		r.dir, r.lock = dir, lock
-		return dir, nil
+	if err != nil {
+		_ = os.RemoveAll(dir)
+		if !errors.Is(err, errLocksUnusable) {
+			return "", err
+		}
+		r.unlocked = true
+		slog.Warn("the temp directory cannot hold a lock every server using it would see, so read files a killed server leaves there will not be cleaned up automatically",
+			"dir", tmp, "error", err)
+		return "", nil
 	}
-	_ = os.RemoveAll(dir)
-	if !errors.Is(err, errLocksUnusable) {
-		return "", err
+	r.dir, r.lock = dir, lock
+	if n := sweepReadRoots(tmp); n > 0 {
+		slog.Info("removed read files left by servers that did not exit cleanly", "directories", n, "dir", tmp)
 	}
-	r.unlocked = true
-	slog.Warn("file locks do not work in the temp directory, so read files a killed server leaves there will not be cleaned up automatically",
-		"dir", tmp, "error", err)
-	return "", nil
+	return dir, nil
 }
 
 // close removes the read root with everything under it and gives up its lock.
@@ -194,11 +201,24 @@ func (r *readRoot) dropLocked() {
 // What that file is depends on the platform (see openReadRootLock).
 //
 // Only errLockHeld means another file holds the lock. Any other failure to
-// take it (ENOLCK on NFSv3 without lockd, ENOSYS on a cluster filesystem
-// mounted without flock, ENOTSUP, a platform with no lock at all) is wrapped
-// in errLocksUnusable, because there it says nothing about who holds what:
-// the lock cannot be relied on, here or in any other process's sweep.
+// take it (ENOSYS on a cluster filesystem mounted without flock, ENOLCK,
+// ENOTSUP, a platform with no lock at all) is wrapped in errLocksUnusable,
+// because there it says nothing about who holds what: the lock cannot be
+// relied on, here or in any other process's sweep.
+//
+// So is a root on a network filesystem that keeps a lock on a directory to
+// this host (see networkFilesystem), which is asked first. There the lock
+// would be taken without a word, and only another host's sweep would find out
+// that it never saw it.
 func holdReadRootLock(dir string) (*os.File, error) {
+	netfs, err := networkFilesystem(dir)
+	if err != nil {
+		return nil, err
+	}
+	if netfs != "" {
+		return nil, fmt.Errorf("%w: the temp directory is on %s, where a lock on a directory is seen only by the host that took it",
+			errLocksUnusable, netfs)
+	}
 	f, err := openReadRootLock(dir)
 	if err != nil {
 		return nil, err

@@ -1756,12 +1756,20 @@ in the same change. Two things about it are easy to get wrong:
     `O_DIRECTORY|O_NOFOLLOW|O_NOCTTY|O_NONBLOCK`, because `/tmp` is shared and
     anything under the prefix may have been planted there.
 
-  The sweep relies on `flock` being coherent across every process that shares
-  `TMPDIR`, so one `TMPDIR` must not be shared across hosts on a filesystem
-  whose locks stay host-local (NFS mounted `nolock` or `local_lock`, some FUSE
-  filesystems). The loose prefix, `libgen-read-*`, is deliberately never swept:
-  nothing marks which process made one, and a server of those versions, or one
-  whose temp directory cannot lock, may still be using it.
+  The sweep relies on the lock being coherent across every process that shares
+  `TMPDIR`, and on Linux a *directory's* `flock` never is across hosts on NFS,
+  SMB, FUSE, 9p or AFS, whatever the mount options: their directory
+  `file_operations` have no `.flock`, so `flock(2)` takes a local VFS lock and
+  succeeds (a regular file there would have been locked on the server). So
+  `holdReadRootLock` asks `networkFilesystem` (the temp directory's `statfs`
+  type) before it locks, and a root on one of those is `errLocksUnusable`,
+  which sends the process to the loose fallback; the sweep runs only after the
+  process's own root is locked, so such a host never sweeps either. Do not
+  "simplify" that into trying the lock and reading the error: there is none.
+  Other platforms do not check. The loose prefix, `libgen-read-*`, is
+  deliberately never swept: nothing marks which process made one, and a server
+  of those versions, or one whose temp directory cannot lock, may still be
+  using it.
 - **Root binaries.** `go build ./cmd/<x>` drops the binary in the repo root
   (e.g. `./gen_eval_pages`). These are gitignored, but **never** `git add -A` —
   stage files explicitly so a stray binary or `.env` is never committed. Prefer

@@ -10,7 +10,7 @@ datePublished: "2026-10-05"
 # Traducción de PRIVACY.md. El digest de abajo fija la versión del original de la
 # que procede: scripts/sync-privacy.mjs --check falla cuando el original cambia y
 # esta traducción se queda atrás.
-privacySource: "9161a409e76fb4c9"
+privacySource: "4b527c8088efd530"
 head:
   - tag: script
     attrs:
@@ -323,9 +323,11 @@ es igualmente opcional y está sin definir por defecto.
   servidor que muere de golpe los deja hasta que el siguiente servidor que
   descargue un fichero para `read` (un libro o artículo identificado por `md5` o
   `doi`) en el mismo directorio temporal los borra, por poco tiempo que haya
-  pasado desde que murió. Si ese directorio no admite candados de fichero, el
-  servidor lo indica en su registro y los ficheros de un servidor que muere de
-  golpe se quedan hasta que alguien los borre. Una descarga interrumpida deja igualmente un fichero
+  pasado desde que murió. Si ese directorio no admite un candado de fichero que
+  vean todos los servidores que lo usan (en Linux, un directorio en NFS, SMB,
+  9p, AFS o un sistema FUSE), el servidor lo indica en su registro y los
+  ficheros de un servidor que muere de golpe se quedan hasta que alguien los
+  borre. Una descarga interrumpida deja igualmente un fichero
   `.part` en el directorio de destino para que una llamada posterior pueda
   reanudarla.
 

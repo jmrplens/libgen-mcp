@@ -467,14 +467,17 @@ ago, which may belong to a server that has made it and not yet locked it, and on
 directory another user owns. A directory removed from under a running server, by hand or by a
 temp cleaner, is noticed on its next fetch and made again.
 
-That sweep relies on the lock being seen by every process that shares the temporary directory,
-so do not share one `TMPDIR` between hosts on a filesystem whose locks stay local to each host
-(NFS mounted with `nolock` or `local_lock`, some FUSE filesystems). Where the temporary
-directory cannot take the lock at all (NFS with server-side locks, where an exclusive lock
-needs a file open for writing and a directory cannot be, is one), the server logs a warning
-once and makes each fetch's directory loose in the temporary directory as `libgen-read-*`
-instead, which a clean exit still removes and a killed server leaves behind. Up to 2.2.0 every
-fetch's directory sat loose there under that name and outlived every process that fetched it.
+That sweep relies on the lock being seen by every process that shares the temporary directory.
+On Linux a lock on a directory on NFS, SMB, 9p, AFS or a FUSE filesystem (sshfs and virtiofs
+among them) stays on the host that took it, whatever the mount options, so another host
+sharing the directory would take a live server's directory for a dead one's. A server whose
+temporary directory is on one of those therefore makes no `libgen-mcp-read-*` directory and
+sweeps nothing: it logs a warning once and makes each fetch's directory loose in the temporary
+directory as `libgen-read-*` instead, which a clean exit still removes and a killed server
+leaves behind. It does the same where the temporary directory cannot take the lock at all. On
+other systems the server does not check, so do not share one temporary directory between
+hosts on a network filesystem there. Up to 2.2.0 every fetch's directory sat loose in the
+temporary directory under the `libgen-read-*` name and outlived every process that fetched it.
 The sweep never touches that prefix, because nothing says which process made one, so those
 directories can be deleted by hand once no server that might be using one is running.
 

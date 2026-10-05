@@ -8,7 +8,7 @@ mentions:
     wikidata: Q121746046
 datePublished: "2026-10-05"
 # Generated from PRIVACY.md by scripts/sync-privacy.mjs — do not edit by hand.
-privacySource: "9161a409e76fb4c9"
+privacySource: "4b527c8088efd530"
 head:
   - tag: script
     attrs:
@@ -307,8 +307,10 @@ optional, and unset by default.
   when the server exits. A server that is killed instead leaves them until the
   next server to fetch a file for `read` (a book or paper named by `md5` or
   `doi`) from the same temporary directory removes them, however soon after the
-  kill that is. Where that directory cannot hold a file lock, the server says so
-  in its log and a killed server's files stay until someone deletes them. An
+  kill that is. Where that directory cannot hold a file lock every server using
+  it would see (on Linux, a directory on NFS, SMB, 9p, AFS or a FUSE
+  filesystem), the server says so in its log and a killed server's files stay
+  until someone deletes them. An
   interrupted `download` likewise leaves a `.part` file in the destination
   directory so a later call can resume it.
 

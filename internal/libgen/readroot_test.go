@@ -323,8 +323,8 @@ func TestReadRoot_AHeldLockLeavesNoRootAndIsNotRemembered(t *testing.T) {
 }
 
 // TestReadRoot_UnusableLocksFallBackToLooseFetchDirectories covers a temp
-// directory on a filesystem whose locks fail outright (ENOLCK on NFSv3 without
-// lockd, ENOSYS on a cluster filesystem mounted without flock). An unlocked
+// directory on a filesystem whose locks fail outright (ENOSYS on a cluster
+// filesystem mounted without flock, a platform with none). An unlocked
 // root would be one any other process's sweep could take and remove mid-read,
 // so none is kept: each fetch gets a loose directory under the prefix the
 // sweep never matches, the operator is told once, and the lock is not tried
@@ -452,6 +452,25 @@ func TestHoldReadRootLock(t *testing.T) {
 				t.Errorf("returned a file alongside error %v", err)
 			}
 		})
+	}
+}
+
+// TestHoldReadRootLock_ARootThatCannotBeOpened covers a root whose
+// filesystem answers but whose lock cannot be opened, here because a regular
+// file stands where the directory should be. It is an ordinary error: nobody
+// holds anything, and nothing says locks do not work.
+func TestHoldReadRootLock_ARootThatCannotBeOpened(t *testing.T) {
+	path := filepath.Join(t.TempDir(), readRootPrefix+"file")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f, err := holdReadRootLock(path)
+	if f != nil {
+		_ = f.Close()
+		t.Error("returned a file for a root that is a regular file")
+	}
+	if err == nil || errors.Is(err, errLockHeld) {
+		t.Errorf("error = %v, want one that does not say the lock is held", err)
 	}
 }
 
