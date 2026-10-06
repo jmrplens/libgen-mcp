@@ -10,41 +10,41 @@ field. This page has one complete entry per client, in two forms:
   over standard input and output. This is the full server: all four tools, and `download`
   saves the file to your disk.
 - **Remote, over streamable HTTP.** The client connects to a server somebody already runs —
-  the public endpoint at `https://mcp.jmrp.io/libgen`, or your own `--http` deployment. Nothing
+  the public endpoint at `https://mcp.example.invalid/personal-library-mcp`, or your own `--http` deployment. Nothing
   is installed, but `download` returns a link instead of a file, and `read` is present only
   where the operator has turned it on, as the public endpoint has.
   [What changes on a remote server](#what-changes-on-a-remote-server) says why.
 
-Every entry below names the server `libgen`. The name is yours to choose; it only changes
+Every entry below names the server `personal-library-mcp`. The name is yours to choose; it only changes
 how the client labels the tools.
 
 ## What every entry has in common
 
 ### The local command
 
-The entries below start the server with **`npx -y @jmrp.io/libgen-mcp`**, which needs Node 18
+The entries below start the server with **`npx -y @jmrp.io/personal_library-mcp`**, which needs Node 18
 or newer and nothing else: npm fetches the launcher and the one prebuilt binary that matches
 your platform, and `-y` answers the "install this package?" question a client cannot answer
 for you. Any other channel works the same way, and only the `command` and `args` change:
 
 | Channel        | `command`                      | `args`                                                        | Page                                  |
 | -------------- | ------------------------------ | ------------------------------------------------------------- | ------------------------------------- |
-| npm            | `npx`                          | `["-y", "@jmrp.io/libgen-mcp"]`                               | [npm](install/npm.md)                 |
-| PyPI           | `uvx`                          | `["libgen-mcp"]`                                              | [PyPI](install/pypi.md)               |
-| NuGet          | `dnx`                          | `["libgen-mcp"]`                                              | [NuGet](install/nuget.md)             |
-| Docker         | `docker`                       | `["run", "-i", "--rm", "ghcr.io/jmrplens/libgen-mcp:latest"]` | [Docker](install/docker.md)           |
-| Homebrew       | `libgen-mcp`                   | none                                                          | [Homebrew](install/homebrew.md)       |
-| Release binary | `/absolute/path/to/libgen-mcp` | none                                                          | [Release binaries](install/binary.md) |
+| npm            | `npx`                          | `["-y", "@jmrp.io/personal_library-mcp"]`                               | [npm](install/npm.md)                 |
+| PyPI           | `uvx`                          | `["personal-library-mcp"]`                                              | [PyPI](install/pypi.md)               |
+| NuGet          | `dnx`                          | `["personal-library-mcp"]`                                              | [NuGet](install/nuget.md)             |
+| Docker         | `docker`                       | `["run", "-i", "--rm", "ghcr.io/gfade/personal-library-mcp:latest"]` | [Docker](install/docker.md)           |
+| Homebrew       | `personal-library-mcp`                   | none                                                          | [Homebrew](install/homebrew.md)       |
+| Release binary | `/absolute/path/to/personal-library-mcp` | none                                                          | [Release binaries](install/binary.md) |
 
 Three things about those commands are worth knowing before you paste one:
 
 - **A desktop client does not read your shell's `PATH`.** Claude Desktop, and most editors
   started from a dock or a start menu, launch the server with a minimal environment, so a
-  bare `npx` or `libgen-mcp` that works in your terminal can fail with "command not found"
-  there. Give the absolute path (`which npx`, `which libgen-mcp`, or `where` on Windows).
+  bare `npx` or `personal-library-mcp` that works in your terminal can fail with "command not found"
+  there. Give the absolute path (`which npx`, `which personal-library-mcp`, or `where` on Windows).
 - **On Windows, `npx` is a batch file**, and a client that starts processes without a shell
   cannot run it directly. Wrap it: `"command": "cmd"` with
-  `"args": ["/c", "npx", "-y", "@jmrp.io/libgen-mcp"]`.
+  `"args": ["/c", "npx", "-y", "@jmrp.io/personal_library-mcp"]`.
 - **Docker needs `-i`.** The image decides its transport from what standard input is: with
   `-i` it gets the client's pipe and speaks stdio, without it it starts an HTTP listener on
   port 8080 and the client hears nothing. Do not publish a port in this mode. Downloads land
@@ -52,7 +52,7 @@ Three things about those commands are worth knowing before you paste one:
   volume recipe.
 
 With `dnx`, arguments for the server itself go after a `--`, because everything before it
-belongs to `dnx`: `["libgen-mcp", "--", "--env-file", "/absolute/path/libgen.env"]`.
+belongs to `dnx`: `["personal-library-mcp", "--", "--env-file", "/absolute/path/personal-library-mcp.env"]`.
 
 ### Keys and other settings
 
@@ -62,10 +62,10 @@ or rationed:
 
 | Variable                     | What it enables                                                                                   |
 | ---------------------------- | ------------------------------------------------------------------------------------------------- |
-| `LIBGEN_MCP_UNPAYWALL_EMAIL` | the `unpaywall` source, which needs a contact address on every lookup                             |
-| `LIBGEN_MCP_CORE_KEY`        | the `core` source, with a free API key from core.ac.uk                                            |
-| `LIBGEN_MCP_ANNAS_KEY`       | Anna's Archive member downloads, with a paid membership's secret key                              |
-| `LIBGEN_MCP_OPENALEX_KEY`    | a larger daily OpenAlex allowance for search and related works, with a free key from openalex.org |
+| `PL_MCP_UNPAYWALL_EMAIL` | the `unpaywall` source, which needs a contact address on every lookup                             |
+| `PL_MCP_CORE_KEY`        | the `core` source, with a free API key from core.ac.uk                                            |
+| `PL_MCP_ANNAS_KEY`       | AA member downloads, with a paid membership's secret key                              |
+| `PL_MCP_OPENALEX_KEY`    | a larger daily OpenAlex allowance for search and related works, with a free key from openalex.org |
 
 They have no command-line flags, on purpose: a secret in an argument is visible to every
 user on the machine through `ps`. Give them to the server in one of three ways, highest
@@ -73,11 +73,11 @@ precedence first:
 
 1. **The client's `env` block** (each client's spelling is below). The client passes it to
    the process it starts, and nothing else sees it.
-2. **A dotenv file you name** with `--env-file /absolute/path/libgen.env` in `args`, or with
-   `LIBGEN_MCP_ENV_FILE` in the `env` block. Give an absolute path: a relative one is resolved
+2. **A dotenv file you name** with `--env-file /absolute/path/personal-library-mcp.env` in `args`, or with
+   `PL_MCP_ENV_FILE` in the `env` block. Give an absolute path: a relative one is resolved
    against the working directory, which the client chooses and changes with every workspace
    you open.
-3. **`~/.libgen-mcp.env`** in your home directory, which every local server reads without
+3. **`~/.personal-library-mcp.env`** in your home directory, which every local server reads without
    being told.
 
 A `.env` in the working directory is **never** loaded. A client sets the working directory
@@ -86,7 +86,7 @@ from you; the server names it at startup and carries on without it. The full pre
 rules, and every other variable, are in [Configuration](configuration.md).
 
 With Docker, the container does not see the client's environment until you pass it through:
-add `"-e", "LIBGEN_MCP_UNPAYWALL_EMAIL"` (the name alone, no value) to `args` before the image
+add `"-e", "PL_MCP_UNPAYWALL_EMAIL"` (the name alone, no value) to `args` before the image
 name, and put the value in the `env` block. Docker then copies it from the environment the
 client gave it, and the value never appears in an argument list.
 
@@ -103,17 +103,17 @@ server not being on your machine:
 - **`download` returns a link** — a `resource_link` plus a `resolved` object — instead of
   writing a file, and your client or browser fetches the bytes. That holds on every remote
   deployment, whatever it is configured with: the server cannot write to your disk.
-- **`read` is absent by default.** `LIBGEN_MCP_SERVER_FETCH` is off by default on an HTTP
+- **`read` is absent by default.** `PL_MCP_SERVER_FETCH` is off by default on an HTTP
   deployment, so that the server's shared egress address never carries file bodies, and with
   it off `read` is not registered: it is absent from `tools/list` rather than present and
   failing, and the client sees three tools. An operator who sets it to `1` brings `read` back
   — `download` stays link-only — and the public endpoint does: it serves all four tools, with
   `read` taking an `md5` or a `doi` but no `path`.
 
-See [`LIBGEN_MCP_SERVER_FETCH`](configuration.md#libgen_mcp_server_fetch) and
+See [`PL_MCP_SERVER_FETCH`](configuration.md#personal-library-mcp_mcp_server_fetch) and
 [Where the file goes](tools.md#where-the-file-goes-local-vs-remote).
 
-The URL is the endpoint itself: `https://mcp.jmrp.io/libgen` for the public instance
+The URL is the endpoint itself: `https://mcp.example.invalid/personal-library-mcp` for the public instance
 ([Hosted endpoint](hosted.md) describes it), or the address your own deployment serves, where
 the mount and its `/mcp` alias are the same endpoint. Running one is covered in
 [HTTP server mode](http-server-mode.md). The transport is stateless streamable HTTP; a
@@ -124,11 +124,11 @@ client offering only the older SSE transport cannot connect.
 Four clients accept an install link, and the README carries a button for each. Every button
 registers the Docker form of the local entry, so the only prerequisite is Docker itself:
 
-[![Install in VS Code](https://img.shields.io/badge/Install_in-VS_Code-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=libgen&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22ghcr.io%2Fjmrplens%2Flibgen-mcp%3Alatest%22%5D%7D)
-[![Install in VS Code Insiders](https://img.shields.io/badge/Install_in-VS_Code_Insiders-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=libgen&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22ghcr.io%2Fjmrplens%2Flibgen-mcp%3Alatest%22%5D%7D&quality=insiders)
-[![Install in Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=libgen&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCJnaGNyLmlvL2ptcnBsZW5zL2xpYmdlbi1tY3A6bGF0ZXN0Il19)
-[![Add to LM Studio](https://files.lmstudio.ai/deeplink/mcp-install-dark.svg)](https://lmstudio.ai/install-mcp?name=libgen&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCJnaGNyLmlvL2ptcnBsZW5zL2xpYmdlbi1tY3A6bGF0ZXN0Il19)
-[![Add to Kiro](https://kiro.dev/images/add-to-kiro.svg)](https://kiro.dev/launch/mcp/add?name=libgen&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22ghcr.io%2Fjmrplens%2Flibgen-mcp%3Alatest%22%5D%7D)
+[![Install in VS Code](https://img.shields.io/badge/Install_in-VS_Code-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=personal-library-mcp&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22ghcr.io%2Fjmrplens%2Fpersonal-library-mcp%3Alatest%22%5D%7D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/Install_in-VS_Code_Insiders-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=personal-library-mcp&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22ghcr.io%2Fjmrplens%2Fpersonal-library-mcp%3Alatest%22%5D%7D&quality=insiders)
+[![Install in Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=personal-library-mcp&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCJnaGNyLmlvL2ptcnBsZW5zL2xpYmdlbi1tY3A6bGF0ZXN0Il19)
+[![Add to LM Studio](https://files.lmstudio.ai/deeplink/mcp-install-dark.svg)](https://lmstudio.ai/install-mcp?name=personal-library-mcp&config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCJnaGNyLmlvL2ptcnBsZW5zL2xpYmdlbi1tY3A6bGF0ZXN0Il19)
+[![Add to Kiro](https://kiro.dev/images/add-to-kiro.svg)](https://kiro.dev/launch/mcp/add?name=personal-library-mcp&config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22ghcr.io%2Fjmrplens%2Fpersonal-library-mcp%3Alatest%22%5D%7D)
 
 Claude Desktop has its own one-click path, the `.mcpb` extension, below. A button's
 configuration travels encoded inside its URL, where no review can read it, so
@@ -165,13 +165,13 @@ The `claude mcp add` command writes the entry for you. Everything after `--` is 
 the client runs:
 
 ```bash
-claude mcp add libgen -- npx -y @jmrp.io/libgen-mcp
+claude mcp add personal-library-mcp -- npx -y @jmrp.io/personal_library-mcp
 ```
 
 With a key, put `--env` before the `--`, once per variable:
 
 ```bash
-claude mcp add libgen --env LIBGEN_MCP_UNPAYWALL_EMAIL=you@example.com -- npx -y @jmrp.io/libgen-mcp
+claude mcp add personal-library-mcp --env PL_MCP_UNPAYWALL_EMAIL=you@example.com -- npx -y @jmrp.io/personal_library-mcp
 ```
 
 The entry goes to `~/.claude.json` for the current project by default. `--scope user` makes it
@@ -181,12 +181,12 @@ where it can be committed for everybody who works there:
 ```json
 {
   "mcpServers": {
-    "libgen": {
+    "personal-library-mcp": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@jmrp.io/libgen-mcp"],
+      "args": ["-y", "@jmrp.io/personal_library-mcp"],
       "env": {
-        "LIBGEN_MCP_UNPAYWALL_EMAIL": "you@example.com"
+        "PL_MCP_UNPAYWALL_EMAIL": "you@example.com"
       }
     }
   }
@@ -194,12 +194,12 @@ where it can be committed for everybody who works there:
 ```
 
 A committed `.mcp.json` should not carry a key; leave `env` out of it and keep the key in
-`~/.libgen-mcp.env`. On native Windows, wrap the command: `-- cmd /c npx -y @jmrp.io/libgen-mcp`.
+`~/.personal-library-mcp.env`. On native Windows, wrap the command: `-- cmd /c npx -y @jmrp.io/personal_library-mcp`.
 
 **Remote:**
 
 ```bash
-claude mcp add --transport http libgen https://mcp.jmrp.io/libgen
+claude mcp add --transport http personal-library-mcp https://mcp.example.invalid/personal-library-mcp
 ```
 
 or, in `.mcp.json`:
@@ -207,7 +207,7 @@ or, in `.mcp.json`:
 ```json
 {
   "mcpServers": {
-    "libgen": { "type": "http", "url": "https://mcp.jmrp.io/libgen" }
+    "personal-library-mcp": { "type": "http", "url": "https://mcp.example.invalid/personal-library-mcp" }
   }
 }
 ```
@@ -218,7 +218,7 @@ connected. Reference: [Claude Code MCP documentation](https://code.claude.com/do
 ## Claude Desktop
 
 The easiest path is the **`.mcpb` extension**: download the bundle for your system from the
-[latest release](https://github.com/jmrplens/libgen-mcp/releases/latest), open it with Claude
+[latest release](https://github.com/gfade/personal-library-mcp/releases/latest), open it with Claude
 Desktop and confirm the settings, where the Unpaywall address, the CORE key and a settings file
 have their own fields. It carries the binary itself, so it needs neither Node nor Docker.
 [Claude Desktop extension](install/claude-desktop.md) has the details, including the Linux
@@ -234,11 +234,11 @@ To wire it up by hand instead, open **Settings > Developer > Edit Config**, whic
 ```json
 {
   "mcpServers": {
-    "libgen": {
+    "personal-library-mcp": {
       "command": "/absolute/path/to/npx",
-      "args": ["-y", "@jmrp.io/libgen-mcp"],
+      "args": ["-y", "@jmrp.io/personal_library-mcp"],
       "env": {
-        "LIBGEN_MCP_DOWNLOAD_DIR": "/absolute/path/to/downloads"
+        "PL_MCP_DOWNLOAD_DIR": "/absolute/path/to/downloads"
       }
     }
   }
@@ -247,11 +247,11 @@ To wire it up by hand instead, open **Settings > Developer > Edit Config**, whic
 
 Use an absolute `command`: Claude Desktop does not inherit your shell's `PATH`. Quit the app
 completely and start it again to load the change. The server's stderr is written to
-`mcp-server-libgen.log` in Claude's log directory (`~/Library/Logs/Claude` on macOS,
+`mcp-server-personal-library-mcp.log` in Claude's log directory (`~/Library/Logs/Claude` on macOS,
 `%APPDATA%\Claude\logs` on Windows), which is the first place to look when it does not start.
 
 **Remote:** `claude_desktop_config.json` holds local servers only. Add
-`https://mcp.jmrp.io/libgen` as a **custom connector** instead: on a Pro or Max plan under
+`https://mcp.example.invalid/personal-library-mcp` as a **custom connector** instead: on a Pro or Max plan under
 **Customize > Connectors**, with **+ Add** and then **Add custom connector**; on a Team or
 Enterprise plan an owner adds it under **Organization settings > Connectors**. Claude reaches a
 custom connector from Anthropic's cloud rather than from your machine, so a self-hosted URL has
@@ -269,12 +269,12 @@ VS Code reads `.vscode/mcp.json` in the workspace, and a user-level `mcp.json` t
 ```json
 {
   "servers": {
-    "libgen": {
+    "personal-library-mcp": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@jmrp.io/libgen-mcp"],
+      "args": ["-y", "@jmrp.io/personal_library-mcp"],
       "env": {
-        "LIBGEN_MCP_UNPAYWALL_EMAIL": "${input:unpaywall-email}"
+        "PL_MCP_UNPAYWALL_EMAIL": "${input:unpaywall-email}"
       }
     }
   },
@@ -298,7 +298,7 @@ server's environment.
 ```json
 {
   "servers": {
-    "libgen": { "type": "http", "url": "https://mcp.jmrp.io/libgen" }
+    "personal-library-mcp": { "type": "http", "url": "https://mcp.example.invalid/personal-library-mcp" }
   }
 }
 ```
@@ -313,12 +313,12 @@ Cursor reads `.cursor/mcp.json` in the project and `~/.cursor/mcp.json` for ever
 ```json
 {
   "mcpServers": {
-    "libgen": {
+    "personal-library-mcp": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@jmrp.io/libgen-mcp"],
+      "args": ["-y", "@jmrp.io/personal_library-mcp"],
       "env": {
-        "LIBGEN_MCP_UNPAYWALL_EMAIL": "${env:LIBGEN_MCP_UNPAYWALL_EMAIL}"
+        "PL_MCP_UNPAYWALL_EMAIL": "${env:PL_MCP_UNPAYWALL_EMAIL}"
       }
     }
   }
@@ -334,7 +334,7 @@ key out of it.
 ```json
 {
   "mcpServers": {
-    "libgen": { "url": "https://mcp.jmrp.io/libgen" }
+    "personal-library-mcp": { "url": "https://mcp.example.invalid/personal-library-mcp" }
   }
 }
 ```
@@ -352,18 +352,18 @@ agent. Both read the user-level `mcp_config.json`:
 - Windsurf builds from before the rename: `~/.codeium/windsurf/mcp_config.json`
 
 Devin Local also reads `.devin/mcp_config.json` in the project, and
-`devin mcp add libgen -- npx -y @jmrp.io/libgen-mcp` writes the entry for you. In Cascade, the
+`devin mcp add personal-library-mcp -- npx -y @jmrp.io/personal_library-mcp` writes the entry for you. In Cascade, the
 file opens from the **…** menu of the Cascade panel, under **Open MCP config file**.
 `${env:NAME}` copies a variable from the environment the app was started in:
 
 ```json
 {
   "mcpServers": {
-    "libgen": {
+    "personal-library-mcp": {
       "command": "npx",
-      "args": ["-y", "@jmrp.io/libgen-mcp"],
+      "args": ["-y", "@jmrp.io/personal_library-mcp"],
       "env": {
-        "LIBGEN_MCP_UNPAYWALL_EMAIL": "${env:LIBGEN_MCP_UNPAYWALL_EMAIL}"
+        "PL_MCP_UNPAYWALL_EMAIL": "${env:PL_MCP_UNPAYWALL_EMAIL}"
       }
     }
   }
@@ -375,7 +375,7 @@ file opens from the **…** menu of the Cascade panel, under **Open MCP config f
 ```json
 {
   "mcpServers": {
-    "libgen": { "url": "https://mcp.jmrp.io/libgen" }
+    "personal-library-mcp": { "url": "https://mcp.example.invalid/personal-library-mcp" }
   }
 }
 ```
@@ -397,9 +397,9 @@ Zed keeps its servers under `context_servers` in `settings.json`, which the
 ```json
 {
   "context_servers": {
-    "libgen": {
+    "personal-library-mcp": {
       "command": "npx",
-      "args": ["-y", "@jmrp.io/libgen-mcp"],
+      "args": ["-y", "@jmrp.io/personal_library-mcp"],
       "env": {}
     }
   }
@@ -411,7 +411,7 @@ Zed keeps its servers under `context_servers` in `settings.json`, which the
 ```json
 {
   "context_servers": {
-    "libgen": { "url": "https://mcp.jmrp.io/libgen" }
+    "personal-library-mcp": { "url": "https://mcp.example.invalid/personal-library-mcp" }
   }
 }
 ```
@@ -430,9 +430,9 @@ add a server, and paste the configuration as JSON:
 ```json
 {
   "mcpServers": {
-    "libgen": {
+    "personal-library-mcp": {
       "command": "npx",
-      "args": ["-y", "@jmrp.io/libgen-mcp"]
+      "args": ["-y", "@jmrp.io/personal_library-mcp"]
     }
   }
 }
@@ -451,7 +451,7 @@ the same `mcpServers` object, with an `env` object for keys.
 ```json
 {
   "mcpServers": {
-    "libgen": { "url": "https://mcp.jmrp.io/libgen" }
+    "personal-library-mcp": { "url": "https://mcp.example.invalid/personal-library-mcp" }
   }
 }
 ```
@@ -472,9 +472,9 @@ reconnects the server without a restart:
 ```json
 {
   "mcpServers": {
-    "libgen": {
+    "personal-library-mcp": {
       "command": "npx",
-      "args": ["-y", "@jmrp.io/libgen-mcp"],
+      "args": ["-y", "@jmrp.io/personal_library-mcp"],
       "env": {}
     }
   }
@@ -486,7 +486,7 @@ reconnects the server without a restart:
 ```json
 {
   "mcpServers": {
-    "libgen": { "url": "https://mcp.jmrp.io/libgen" }
+    "personal-library-mcp": { "url": "https://mcp.example.invalid/personal-library-mcp" }
   }
 }
 ```
@@ -502,9 +502,9 @@ Its key is `mcp`, the command is a single array, and variables go under `environ
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "libgen": {
+    "personal-library-mcp": {
       "type": "local",
-      "command": ["npx", "-y", "@jmrp.io/libgen-mcp"],
+      "command": ["npx", "-y", "@jmrp.io/personal_library-mcp"],
       "enabled": true,
       "environment": {}
     }
@@ -518,9 +518,9 @@ Its key is `mcp`, the command is a single array, and variables go under `environ
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "libgen": {
+    "personal-library-mcp": {
       "type": "remote",
-      "url": "https://mcp.jmrp.io/libgen",
+      "url": "https://mcp.example.invalid/personal-library-mcp",
       "enabled": true
     }
   }
@@ -544,9 +544,9 @@ moves its entries into the shared file on first start:
 ```json
 {
   "mcpServers": {
-    "libgen": {
+    "personal-library-mcp": {
       "command": "npx",
-      "args": ["-y", "@jmrp.io/libgen-mcp"],
+      "args": ["-y", "@jmrp.io/personal_library-mcp"],
       "env": {},
       "disabled": false
     }
@@ -559,9 +559,9 @@ moves its entries into the shared file on first start:
 ```json
 {
   "mcpServers": {
-    "libgen": {
+    "personal-library-mcp": {
       "type": "streamableHttp",
-      "url": "https://mcp.jmrp.io/libgen",
+      "url": "https://mcp.example.invalid/personal-library-mcp",
       "disabled": false
     }
   }
@@ -574,21 +574,21 @@ older SSE transport. Reference: [Cline MCP documentation](https://docs.cline.bot
 ## Continue
 
 Continue uses MCP in agent mode only. Put a block file in `.continue/mcpServers/` in the
-workspace — `libgen.yaml`, for instance:
+workspace — `personal-library-mcp.yaml`, for instance:
 
 ```yaml
-name: libgen
+name: personal-library-mcp
 version: 0.0.1
 schema: v1
 mcpServers:
-  - name: libgen
+  - name: personal-library-mcp
     type: stdio
     command: npx
     args:
       - "-y"
-      - "@jmrp.io/libgen-mcp"
+      - "@jmrp.io/personal_library-mcp"
     env:
-      LIBGEN_MCP_UNPAYWALL_EMAIL: ${{ secrets.LIBGEN_MCP_UNPAYWALL_EMAIL }}
+      PL_MCP_UNPAYWALL_EMAIL: ${{ secrets.PL_MCP_UNPAYWALL_EMAIL }}
 ```
 
 or add the same `mcpServers` list to `~/.continue/config.yaml`. `${{ secrets.NAME }}` reads a
@@ -598,9 +598,9 @@ secret Continue stores, so the file holds no value; drop `env` for the keyless s
 
 ```yaml
 mcpServers:
-  - name: libgen
+  - name: personal-library-mcp
     type: streamable-http
-    url: https://mcp.jmrp.io/libgen
+    url: https://mcp.example.invalid/personal-library-mcp
 ```
 
 Reference: [Continue MCP documentation](https://docs.continue.dev/customize/deep-dives/mcp).
@@ -612,9 +612,9 @@ In the **Program** tab, choose **Edit mcp.json**, which opens `~/.lmstudio/mcp.j
 ```json
 {
   "mcpServers": {
-    "libgen": {
+    "personal-library-mcp": {
       "command": "npx",
-      "args": ["-y", "@jmrp.io/libgen-mcp"],
+      "args": ["-y", "@jmrp.io/personal_library-mcp"],
       "env": {}
     }
   }
@@ -626,7 +626,7 @@ In the **Program** tab, choose **Edit mcp.json**, which opens `~/.lmstudio/mcp.j
 ```json
 {
   "mcpServers": {
-    "libgen": { "url": "https://mcp.jmrp.io/libgen" }
+    "personal-library-mcp": { "url": "https://mcp.example.invalid/personal-library-mcp" }
   }
 }
 ```
@@ -641,11 +641,11 @@ Gemini CLI reads `.gemini/settings.json` in the project and `~/.gemini/settings.
 ```json
 {
   "mcpServers": {
-    "libgen": {
+    "personal-library-mcp": {
       "command": "npx",
-      "args": ["-y", "@jmrp.io/libgen-mcp"],
+      "args": ["-y", "@jmrp.io/personal_library-mcp"],
       "env": {
-        "LIBGEN_MCP_UNPAYWALL_EMAIL": "$LIBGEN_MCP_UNPAYWALL_EMAIL"
+        "PL_MCP_UNPAYWALL_EMAIL": "$PL_MCP_UNPAYWALL_EMAIL"
       }
     }
   }
@@ -661,12 +661,12 @@ your shell.
 ```json
 {
   "mcpServers": {
-    "libgen": { "httpUrl": "https://mcp.jmrp.io/libgen" }
+    "personal-library-mcp": { "httpUrl": "https://mcp.example.invalid/personal-library-mcp" }
   }
 }
 ```
 
-or, from a shell, `gemini mcp add --transport http libgen https://mcp.jmrp.io/libgen`, which
+or, from a shell, `gemini mcp add --transport http personal-library-mcp https://mcp.example.invalid/personal-library-mcp`, which
 writes to the project's settings unless you pass `--scope user`. Reference:
 [Gemini CLI MCP servers](https://geminicli.com/docs/tools/mcp-server/).
 
@@ -675,24 +675,24 @@ writes to the project's settings unless you pass `--scope user`. Reference:
 Codex reads `~/.codex/config.toml`, shared by the CLI, the IDE extension and the desktop app:
 
 ```toml
-[mcp_servers.libgen]
+[mcp_servers.personal-library-mcp]
 command = "npx"
-args = ["-y", "@jmrp.io/libgen-mcp"]
+args = ["-y", "@jmrp.io/personal_library-mcp"]
 startup_timeout_sec = 60
 
-[mcp_servers.libgen.env]
-LIBGEN_MCP_UNPAYWALL_EMAIL = "you@example.com"
+[mcp_servers.personal-library-mcp.env]
+PL_MCP_UNPAYWALL_EMAIL = "you@example.com"
 ```
 
-`codex mcp add libgen -- npx -y @jmrp.io/libgen-mcp` writes the first table for you, with
+`codex mcp add personal-library-mcp -- npx -y @jmrp.io/personal_library-mcp` writes the first table for you, with
 `--env NAME=value` before the `--` for a key. The first start fetches the npm package, so the
 longer startup timeout keeps a slow connection from being reported as a server that failed.
 
 **Remote:**
 
 ```toml
-[mcp_servers.libgen]
-url = "https://mcp.jmrp.io/libgen"
+[mcp_servers.personal-library-mcp]
+url = "https://mcp.example.invalid/personal-library-mcp"
 ```
 
 Reference: [Codex MCP documentation](https://developers.openai.com/codex/mcp).
@@ -704,12 +704,12 @@ Goose calls servers extensions. `goose configure` adds one interactively; the re
 
 ```yaml
 extensions:
-  libgen:
+  personal-library-mcp:
     type: stdio
-    name: libgen
+    name: personal-library-mcp
     enabled: true
     cmd: npx
-    args: ["-y", "@jmrp.io/libgen-mcp"]
+    args: ["-y", "@jmrp.io/personal_library-mcp"]
     envs: {}
     env_keys: []
     timeout: 300
@@ -719,11 +719,11 @@ extensions:
 
 ```yaml
 extensions:
-  libgen:
+  personal-library-mcp:
     type: streamable_http
-    name: libgen
+    name: personal-library-mcp
     enabled: true
-    uri: https://mcp.jmrp.io/libgen
+    uri: https://mcp.example.invalid/personal-library-mcp
     headers: {}
     envs: {}
     env_keys: []
@@ -742,9 +742,9 @@ as [`mcp-remote`](https://github.com/geelen/mcp-remote):
 ```json
 {
   "mcpServers": {
-    "libgen": {
+    "personal-library-mcp": {
       "command": "npx",
-      "args": ["-y", "mcp-remote", "https://mcp.jmrp.io/libgen"]
+      "args": ["-y", "mcp-remote", "https://mcp.example.invalid/personal-library-mcp"]
     }
   }
 }
