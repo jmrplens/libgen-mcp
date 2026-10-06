@@ -161,59 +161,40 @@ disagrees with this page. The shapes here were checked against those pages in Oc
 
 ## Claude Code
 
-The `claude mcp add` command writes the entry for you. Everything after `--` is the command
-the client runs:
+Install the server from the `gfade/lgen-mcp` checkout:
 
 ```bash
-claude mcp add personal-library-mcp -- npx -y @jmrp.io/personal_library-mcp
+git clone https://github.com/gfade/lgen-mcp.git
+cd lgen-mcp
+go install ./cmd/server
 ```
 
-With a key, put `--env` before the `--`, once per variable:
+Make sure `$(go env GOPATH)/bin` (or `GOBIN`) is on your `PATH`, then register it:
 
 ```bash
-claude mcp add personal-library-mcp --env PL_MCP_UNPAYWALL_EMAIL=you@example.com -- npx -y @jmrp.io/personal_library-mcp
+claude mcp add personal-library-mcp -- server
 ```
 
-The entry goes to `~/.claude.json` for the current project by default. `--scope user` makes it
-available in every project, and `--scope project` writes it to `.mcp.json` in the project root,
-where it can be committed for everybody who works there:
+If it is not on your `PATH`, use the absolute executable path:
+
+```bash
+claude mcp add personal-library-mcp -- /absolute/path/to/server
+```
+
+For a project-local `.mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "personal-library-mcp": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@jmrp.io/personal_library-mcp"],
-      "env": {
-        "PL_MCP_UNPAYWALL_EMAIL": "you@example.com"
-      }
+      "command": "/absolute/path/to/server"
     }
   }
 }
 ```
 
-A committed `.mcp.json` should not carry a key; leave `env` out of it and keep the key in
-`~/.personal-library-mcp.env`. On native Windows, wrap the command: `-- cmd /c npx -y @jmrp.io/personal_library-mcp`.
-
-**Remote:**
-
-```bash
-claude mcp add --transport http personal-library-mcp https://mcp.example.invalid/personal-library-mcp
-```
-
-or, in `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "personal-library-mcp": { "type": "http", "url": "https://mcp.example.invalid/personal-library-mcp" }
-  }
-}
-```
-
-Run `/mcp` inside a session, or `claude mcp list` from a shell, to see whether the server
-connected. Reference: [Claude Code MCP documentation](https://code.claude.com/docs/en/mcp).
+Run `claude mcp list` or `/mcp` in Claude Code to verify the connection.
 
 ## Claude Desktop
 
