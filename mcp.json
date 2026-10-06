@@ -1,13 +1,9 @@
 {
     "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
     "mcpServers": {
-        "personal_library": {
+        "personal-library-mcp": {
             "type": "stdio",
-            "command": "npx",
-            "args": [
-                "-y",
-                "@jmrp.io/personal_library-mcp"
-            ]
+            "command": "server"
         }
     }
 }
