@@ -2,19 +2,19 @@
 
 **How-to guide** — for anyone who wants the executable itself, or to build it from source.
 
-Every [GitHub release](https://github.com/jmrplens/libgen-mcp/releases) carries the server as a single executable per platform. It is the file every package manager on the other pages delivers; downloading it yourself skips the package manager and leaves nothing installed but that file.
+Every [GitHub release](https://github.com/gfade/personal-library-mcp/releases) carries the server as a single executable per platform. It is the file every package manager on the other pages delivers; downloading it yourself skips the package manager and leaves nothing installed but that file.
 
 ## What you get
 
 | Asset                          | For                                                            |
 | ------------------------------ | -------------------------------------------------------------- |
-| `libgen-mcp-linux-amd64`       | Linux x86_64, glibc or musl                                    |
-| `libgen-mcp-linux-arm64`       | Linux aarch64, glibc or musl                                   |
-| `libgen-mcp-darwin-arm64`      | macOS on Apple Silicon                                         |
-| `libgen-mcp-darwin-amd64`      | macOS on Intel                                                 |
-| `libgen-mcp-darwin-all`        | macOS, both architectures in one universal binary              |
-| `libgen-mcp-windows-amd64.exe` | Windows x64                                                    |
-| `libgen-mcp-windows-arm64.exe` | Windows on Arm                                                 |
+| `personal-library-mcp-linux-amd64`       | Linux x86_64, glibc or musl                                    |
+| `personal-library-mcp-linux-arm64`       | Linux aarch64, glibc or musl                                   |
+| `personal-library-mcp-darwin-arm64`      | macOS on Apple Silicon                                         |
+| `personal-library-mcp-darwin-amd64`      | macOS on Intel                                                 |
+| `personal-library-mcp-darwin-all`        | macOS, both architectures in one universal binary              |
+| `personal-library-mcp-windows-amd64.exe` | Windows x64                                                    |
+| `personal-library-mcp-windows-arm64.exe` | Windows on Arm                                                 |
 | `<asset>.sbom.json`            | The SBOM of each binary                                        |
 | `THIRD_PARTY_NOTICES`          | The licence texts of the modules the binary links (from 2.1.0) |
 | `checksums.txt`                | SHA256 of every file above                                     |
@@ -32,31 +32,31 @@ None to run it. To follow the steps below: `curl` (or a browser), and for verifi
 
 The `releases/latest/download/` address always serves the newest release's file under the same name.
 
-**Linux** (on arm64, download `libgen-mcp-linux-arm64`; without root, `~/.local/bin` works as well, if it is on your `PATH`):
+**Linux** (on arm64, download `personal-library-mcp-linux-arm64`; without root, `~/.local/bin` works as well, if it is on your `PATH`):
 
 ```bash
-curl -fL -o libgen-mcp \
-  https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp-linux-amd64
-chmod +x libgen-mcp
-sudo mv libgen-mcp /usr/local/bin/
+curl -fL -o personal-library-mcp \
+  https://github.com/gfade/personal-library-mcp/releases/latest/download/personal-library-mcp-linux-amd64
+chmod +x personal-library-mcp
+sudo mv personal-library-mcp /usr/local/bin/
 ```
 
-**macOS** (`libgen-mcp-darwin-all` runs on both architectures; `-darwin-arm64` and `-darwin-amd64` are the same program at about half the size):
+**macOS** (`personal-library-mcp-darwin-all` runs on both architectures; `-darwin-arm64` and `-darwin-amd64` are the same program at about half the size):
 
 ```bash
-curl -fL -o libgen-mcp \
-  https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp-darwin-all
-chmod +x libgen-mcp
-sudo mv libgen-mcp /usr/local/bin/
+curl -fL -o personal-library-mcp \
+  https://github.com/gfade/personal-library-mcp/releases/latest/download/personal-library-mcp-darwin-all
+chmod +x personal-library-mcp
+sudo mv personal-library-mcp /usr/local/bin/
 ```
 
-**Windows** (on Windows on Arm, download `libgen-mcp-windows-arm64.exe`):
+**Windows** (on Windows on Arm, download `personal-library-mcp-windows-arm64.exe`):
 
 ```powershell
-$dir = "$env:LOCALAPPDATA\Programs\libgen-mcp"
+$dir = "$env:LOCALAPPDATA\Programs\personal-library-mcp"
 New-Item -ItemType Directory -Force $dir | Out-Null
-Invoke-WebRequest -OutFile "$dir\libgen-mcp.exe" `
-  https://github.com/jmrplens/libgen-mcp/releases/latest/download/libgen-mcp-windows-amd64.exe
+Invoke-WebRequest -OutFile "$dir\personal-library-mcp.exe" `
+  https://github.com/gfade/personal-library-mcp/releases/latest/download/personal-library-mcp-windows-amd64.exe
 # put the directory on your user PATH, for new terminals
 [Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";$dir", "User")
 ```
@@ -64,8 +64,8 @@ Invoke-WebRequest -OutFile "$dir\libgen-mcp.exe" `
 Then:
 
 ```bash
-libgen-mcp --version
-# libgen-mcp 2.2.0 (commit <commit>)
+personal-library-mcp --version
+# personal-library-mcp 2.2.0 (commit <commit>)
 ```
 
 ## Verify what you installed
@@ -74,30 +74,30 @@ Check the signature first, then the file against the manifest it signs:
 
 ```bash
 cd "$(mktemp -d)"
-gh release download --repo jmrplens/libgen-mcp \
+gh release download --repo gfade/personal-library-mcp \
   --pattern 'checksums.txt' --pattern 'checksums.txt.sigstore.json' \
-  --pattern 'libgen-mcp-linux-amd64'
+  --pattern 'personal-library-mcp-linux-amd64'
 
 # 1. The manifest was signed by this repository's release workflow.
 cosign verify-blob \
   --bundle checksums.txt.sigstore.json \
-  --certificate-identity-regexp '^https://github.com/jmrplens/libgen-mcp/' \
+  --certificate-identity-regexp '^https://github.com/gfade/personal-library-mcp/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   checksums.txt
 # Verified OK
 
 # 2. The file you downloaded is the one that manifest names.
 sha256sum --ignore-missing -c checksums.txt
-# libgen-mcp-linux-amd64: OK
+# personal-library-mcp-linux-amd64: OK
 ```
 
-On macOS use `shasum -a 256 --ignore-missing -c checksums.txt`; on Windows, compare `(Get-FileHash libgen-mcp.exe).Hash` with the line in `checksums.txt`. `gh release download` is a convenience: any download of the three files works, and `--pattern` takes the name of the asset you want. Why the first step is the one that matters is on the [installation overview](overview.md#verifying-what-you-install).
+On macOS use `shasum -a 256 --ignore-missing -c checksums.txt`; on Windows, compare `(Get-FileHash personal-library-mcp.exe).Hash` with the line in `checksums.txt`. `gh release download` is a convenience: any download of the three files works, and `--pattern` takes the name of the asset you want. Why the first step is the one that matters is on the [installation overview](overview.md#verifying-what-you-install).
 
 Every binary also carries SLSA build provenance in GitHub's attestation store, which answers which commit and which workflow run produced it:
 
 ```bash
-gh attestation verify libgen-mcp-linux-amd64 -R jmrplens/libgen-mcp \
-  --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml \
+gh attestation verify personal-library-mcp-linux-amd64 -R gfade/personal-library-mcp \
+  --signer-workflow gfade/personal-library-mcp/.github/workflows/release.yml \
   --source-ref refs/tags/v2.2.0
 ```
 
@@ -114,19 +114,19 @@ Wherever you put it: the binary is the whole installation. The usual places are 
 ```json
 {
   "mcpServers": {
-    "libgen": { "command": "/usr/local/bin/libgen-mcp" }
+    "libgen": { "command": "/usr/local/bin/personal-library-mcp" }
   }
 }
 ```
 
-Use the full path: a desktop client does not always inherit your shell's `PATH`. On Windows, escape the backslashes, `"C:\\Users\\you\\AppData\\Local\\Programs\\libgen-mcp\\libgen-mcp.exe"`. Where each client keeps this file is on [Connect a client](../clients.md).
+Use the full path: a desktop client does not always inherit your shell's `PATH`. On Windows, escape the backslashes, `"C:\\Users\\you\\AppData\\Local\\Programs\\personal-library-mcp\\personal-library-mcp.exe"`. Where each client keeps this file is on [Connect a client](../clients.md).
 
 ## Upgrade
 
 Download the new file over the old one, and verify it the same way. If a client already has the server running, ask it to stop first, or the old process keeps its download slots and, in HTTP mode, its listener:
 
 ```bash
-libgen-mcp --shutdown
+personal-library-mcp --shutdown
 ```
 
 `--shutdown` asks every other instance of this binary on the machine to exit, and kills what is left after five seconds. The client starts the new one on its next call.
@@ -136,8 +136,8 @@ libgen-mcp --shutdown
 Every release keeps its files at a fixed address. Replace `latest/download` with `download/v<version>`:
 
 ```bash
-curl -fL -o libgen-mcp \
-  https://github.com/jmrplens/libgen-mcp/releases/download/v2.2.0/libgen-mcp-linux-amd64
+curl -fL -o personal-library-mcp \
+  https://github.com/gfade/personal-library-mcp/releases/download/v2.2.0/personal-library-mcp-linux-amd64
 ```
 
 A downloaded binary never updates itself, so it stays pinned until you replace it.
@@ -151,27 +151,27 @@ Delete the file. Nothing else was installed; settings, caches and downloads are 
 `go install` compiles the server with your own toolchain, from the module's source. It needs **Go 1.27.1 or newer**, the version `go.mod` names; an older Go from 1.21 on downloads that toolchain by itself unless `GOTOOLCHAIN=local` is set.
 
 ```bash
-go install github.com/jmrplens/libgen-mcp/v2/cmd/server@latest
+go install github.com/gfade/personal-library-mcp/v2/cmd/server@latest
 ```
 
 > **The command is named `server`.** `go install` names a binary after its
 > package directory, so this produces `$(go env GOPATH)/bin/server`, not
-> `libgen-mcp`. Rename it, or build it with an explicit name:
+> `personal-library-mcp`. Rename it, or build it with an explicit name:
 >
 > ```bash
-> git clone https://github.com/jmrplens/libgen-mcp
-> cd libgen-mcp
-> go build -o libgen-mcp ./cmd/server
+> git clone https://github.com/gfade/personal-library-mcp
+> cd personal-library-mcp
+> go build -o personal-library-mcp ./cmd/server
 > ```
 
 The `/v2` in the path is required: from major version 2, Go resolves a module only under its suffixed path, and the unsuffixed one stops at the last 1.x release. Pin a version with `@v2.2.0` in place of `@latest`; upgrade by running the command again; uninstall by deleting the file from `$(go env GOPATH)/bin`.
 
-**Verify.** The Go toolchain checks every module it downloads against the public checksum database. That verifies the **source** it built from, not a binary this project published: the result is your build, which is why it carries no release signature. A `go install` build reports its version from the module (`libgen-mcp 2.2.0 (commit none)`), since no commit is stamped into it.
+**Verify.** The Go toolchain checks every module it downloads against the public checksum database. That verifies the **source** it built from, not a binary this project published: the result is your build, which is why it carries no release signature. A `go install` build reports its version from the module (`personal-library-mcp 2.2.0 (commit none)`), since no commit is stamped into it.
 
 ## Platform notes
 
-- **macOS quarantine.** A file downloaded with a browser gets the quarantine attribute, and Gatekeeper then refuses to run a binary that is not notarized. `curl` sets no such attribute. For a browser download, `xattr -d com.apple.quarantine /usr/local/bin/libgen-mcp` clears it.
-- **Windows SmartScreen** can warn about an executable downloaded with a browser. `Unblock-File "$env:LOCALAPPDATA\Programs\libgen-mcp\libgen-mcp.exe"` clears the mark; `Invoke-WebRequest` does not set it.
+- **macOS quarantine.** A file downloaded with a browser gets the quarantine attribute, and Gatekeeper then refuses to run a binary that is not notarized. `curl` sets no such attribute. For a browser download, `xattr -d com.apple.quarantine /usr/local/bin/personal-library-mcp` clears it.
+- **Windows SmartScreen** can warn about an executable downloaded with a browser. `Unblock-File "$env:LOCALAPPDATA\Programs\personal-library-mcp\personal-library-mcp.exe"` clears the mark; `Invoke-WebRequest` does not set it.
 - **Any other platform** (FreeBSD, 32-bit, Linux on another architecture) has no prebuilt file. [Build from source](#build-from-source) with `GOOS` and `GOARCH` set.
 
 ## Common problems
@@ -182,6 +182,6 @@ The `/v2` in the path is required: from major version 2, Go resolves a module on
 
 **`sha256sum: checksums.txt: no file was verified`.** No file in the directory has a name `checksums.txt` lists. Keep the asset's own name until the check is done, and rename it afterwards.
 
-**`go install` reports `libgen-mcp 1.7.3`, or fails with `unknown revision cmd/server/v2.2.0`.** The `/v2` is missing from the path: without it `@latest` resolves the last 1.x release, and a 2.x version is not found at all.
+**`go install` reports `personal-library-mcp 1.7.3`, or fails with `unknown revision cmd/server/v2.2.0`.** The `/v2` is missing from the path: without it `@latest` resolves the last 1.x release, and a 2.x version is not found at all.
 
 Other channels are compared on the [installation overview](overview.md).
