@@ -38,17 +38,28 @@ You talk to your AI assistant; it does the searching and fetching. You don't nee
 
 ## Quick start
 
-If you already have Node 18 or newer, nothing needs installing: your client starts the server through `npx`, which fetches a thin launcher over the prebuilt binary for your platform.
+This fork is maintained under the `gfade` GitHub account and runs locally as a stdio MCP server.
+
+```bash
+git clone https://github.com/gfade/lgen-mcp.git
+cd lgen-mcp
+go install ./cmd/server
+```
+
+Make sure `$(go env GOPATH)/bin` (or `GOBIN`) is on your `PATH`. Then add it to Claude Code:
 
 ```bash
 claude mcp add personal-library-mcp -- server
 ```
 
-Then just ask your assistant: _"Search for the Rust book."_ The [Getting started](docs/getting-started.md) tutorial walks through installing, connecting a client, a first search and a first `read`.
+If `server` is not on your `PATH`, use its absolute path instead:
 
-**Try it without installing anything.** A public instance runs at **`https://mcp.jmrp.io/LBN`**, with no account and no key; point any HTTP-capable MCP client at it (`{"type": "http", "url": "https://mcp.jmrp.io/LBN"}`). A local server is still the better way to keep using it: your queries never leave your computer, and `download` saves the file instead of returning a link. [Hosted endpoint](docs/hosted.md) says what it serves, limits and logs.
+```bash
+claude mcp add personal-library-mcp -- /absolute/path/to/server
+```
 
 ## Install
+
 
 Every channel delivers the same static binary; nothing is compiled and no script runs at install time.
 
