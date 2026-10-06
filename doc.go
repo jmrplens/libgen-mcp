@@ -1,4 +1,4 @@
-// Package libgenmcp exists for one reason: it is the only package that can read
+// Package personal_library_mcp exists for one reason: it is the only package that can read
 // the repository's VERSION file at compile time.
 //
 // A go:embed directive cannot reach outside its own package directory, and VERSION
@@ -12,4 +12,4 @@
 // nobody notices a plausible wrong version. Now the number is compiled in from the
 // same file the manifests are checked against, so an unstamped `go run`, a test
 // and a released binary all report the same thing.
-package libgenmcp
+package personal_library_mcp
