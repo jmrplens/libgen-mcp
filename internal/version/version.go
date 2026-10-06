@@ -1,6 +1,6 @@
 package version
 
-import libgenmcp "github.com/gfade/personal_library-mcp/v2"
+import libgenmcp "github.com/jmrplens/libgen-mcp/v2"
 
 // current is the version this binary reports. It starts as the number compiled in
 // from the repository's VERSION file — the same file the release manifests are
