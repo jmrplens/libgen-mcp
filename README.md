@@ -1,25 +1,25 @@
 <p align="center">
-  <img src="assets/banner.png" alt="personal_library-mcp" width="100%">
+  <img src="assets/banner.png" alt="personal-library-mcp" width="100%">
 </p>
 
 <p align="center">
 
-[![GitHub Release](https://img.shields.io/github/v/release/jmrplens/personal_library-mcp?style=flat&logo=github&label=Release)](https://github.com/jmrplens/personal_library-mcp/releases/latest)
-[![npm](https://img.shields.io/npm/v/%40jmrp.io%2Fpersonal_library-mcp?style=flat&logo=npm&label=npm)](https://www.npmjs.com/package/@jmrp.io/personal_library-mcp)
+[![GitHub Release](https://img.shields.io/github/v/release/gfade/personal-library-mcp?style=flat&logo=github&label=Release)](https://github.com/gfade/lgen-mcp/releases/latest)
+[![npm](https://img.shields.io/npm/v/%40jmrp.io%2Fpersonal-library-mcp?style=flat&logo=npm&label=npm)](https://www.npmjs.com/package/@jmrp.io/personal-library-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/Windows%20%7C%20Linux%20%7C%20macOS-amd64%20%26%20arm64-lightgrey?style=flat&logo=windows-terminal&logoColor=white)
-[![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=jmrplens_personal_library-mcp2&metric=alert_status)](https://sonarcloud.io/summary/overall?id=jmrplens_personal_library-mcp2)
-[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=jmrplens_personal_library-mcp2&metric=coverage)](https://sonarcloud.io/summary/overall?id=jmrplens_personal_library-mcp2)
-[![Go Reference](https://pkg.go.dev/badge/github.com/jmrplens/personal_library-mcp/v2.svg)](https://pkg.go.dev/github.com/jmrplens/personal_library-mcp/v2)
+[![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=jmrplens_personal-library-mcp2&metric=alert_status)](https://sonarcloud.io/summary/overall?id=jmrplens_personal-library-mcp2)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=jmrplens_personal-library-mcp2&metric=coverage)](https://sonarcloud.io/summary/overall?id=jmrplens_personal-library-mcp2)
+[![Go Reference](https://pkg.go.dev/badge/github.com/gfade/personal-library-mcp/v2.svg)](https://pkg.go.dev/github.com/gfade/personal-library-mcp/v2)
 
 </p>
 
 <p align="center">
 
-[![Cursor Directory](https://img.shields.io/badge/Cursor-Directory-1f9cf0?style=flat&logo=cursor&logoColor=white)](https://cursor.directory/plugins/personal_library-mcp)
-[![personal_library-mcp MCP server](https://glama.ai/mcp/servers/jmrplens/personal_library-mcp/badges/score.svg)](https://glama.ai/mcp/servers/jmrplens/personal_library-mcp)
-[![MCP Badge](https://lobehub.com/badge/mcp/jmrplens-personal_library-mcp)](https://lobehub.com/mcp/jmrplens-personal_library-mcp)
-[![MCP Toplist](https://mcptoplist.com/badge/io.github.jmrplens%2Fpersonal_library-mcp.svg)](https://mcptoplist.com/server/io.github.jmrplens%2Fpersonal_library-mcp)
+[![Cursor Directory](https://img.shields.io/badge/Cursor-Directory-1f9cf0?style=flat&logo=cursor&logoColor=white)](https://cursor.directory/plugins/personal-library-mcp)
+[![personal-library-mcp MCP server](https://glama.ai/mcp/servers/gfade/personal-library-mcp/badges/score.svg)](https://glama.ai/mcp/servers/gfade/personal-library-mcp)
+[![MCP Badge](https://lobehub.com/badge/mcp/jmrplens-personal-library-mcp)](https://lobehub.com/mcp/jmrplens-personal-library-mcp)
+[![MCP Toplist](https://mcptoplist.com/badge/io.github.jmrplens%2Fpersonal-library-mcp.svg)](https://mcptoplist.com/server/io.github.jmrplens%2Fpersonal-library-mcp)
 [![Hosted endpoint](https://img.shields.io/badge/Hosted-mcp.jmrp.io%2Flibgen-6366f1?style=flat&logo=icloud&logoColor=white)](https://mcp.jmrp.io/)
 
 </p>
@@ -32,7 +32,7 @@ You talk to your AI assistant; it does the searching and fetching. You don't nee
 
 > "Find me the latest edition of _Clean Code_." · "Download that paper by its DOI." · "Search comics for _Watchmen_ and grab the CBR." · "Read the first chapter and summarize it."
 
-**📖 Full documentation, install guides & configuration reference → [jmrp.io/docs/personal_library-mcp](https://jmrp.io/docs/personal_library-mcp/)** (also in [Español](https://jmrp.io/docs/personal_library-mcp/es/)). Light context footprint: the four tools add **~6,800 tokens** to a request (`make audit-tokens`), and no account, API key, or token is required. It's also verified against a **real LLM** — see the [eval results](https://jmrp.io/docs/personal_library-mcp/eval-results/).
+**📖 Full documentation, install guides & configuration reference → [jmrp.io/docs/personal-library-mcp](https://jmrp.io/docs/personal-library-mcp/)** (also in [Español](https://jmrp.io/docs/personal-library-mcp/es/)). Light context footprint: the four tools add **~6,800 tokens** to a request (`make audit-tokens`), and no account, API key, or token is required. It's also verified against a **real LLM** — see the [eval results](https://jmrp.io/docs/personal-library-mcp/eval-results/).
 
 ---
 
@@ -41,7 +41,7 @@ You talk to your AI assistant; it does the searching and fetching. You don't nee
 If you already have Node 18 or newer, nothing needs installing: your client starts the server through `npx`, which fetches a thin launcher over the prebuilt binary for your platform.
 
 ```bash
-claude mcp add LBN -- npx -y @jmrp.io/personal_library-mcp
+claude mcp add personal-library-mcp -- server
 ```
 
 Then just ask your assistant: _"Search for the Rust book."_ The [Getting started](docs/getting-started.md) tutorial walks through installing, connecting a client, a first search and a first `read`.
@@ -54,12 +54,12 @@ Every channel delivers the same static binary; nothing is compiled and no script
 
 | Channel                      | Command                                                                                                    | Guide                                                    |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| npm                          | `npx -y @jmrp.io/personal_library-mcp`, or `npm install -g @jmrp.io/personal_library-mcp`                                      | [install/npm](docs/install/npm.md)                       |
-| PyPI                         | `uvx personal_library-mcp`, or `pipx install personal_library-mcp`                                                             | [install/pypi](docs/install/pypi.md)                     |
-| NuGet                        | `dnx personal_library-mcp`, or `dotnet tool install -g personal_library-mcp`                                                   | [install/nuget](docs/install/nuget.md)                   |
-| Homebrew                     | `brew install jmrplens/tap/personal_library-mcp`                                                                     | [install/homebrew](docs/install/homebrew.md)             |
-| Docker                       | `docker run -i --rm ghcr.io/jmrplens/personal_library-mcp:latest`                                                    | [install/docker](docs/install/docker.md)                 |
-| Release binary, `go install` | [`personal_library-mcp-<os>-<arch>`](https://github.com/jmrplens/personal_library-mcp/releases/latest), signed `checksums.txt` | [install/binary](docs/install/binary.md)                 |
+| npm                          | `npx -y @jmrp.io/personal-library-mcp`, or `npm install -g @jmrp.io/personal-library-mcp`                                      | [install/npm](docs/install/npm.md)                       |
+| PyPI                         | `uvx personal-library-mcp`, or `pipx install personal-library-mcp`                                                             | [install/pypi](docs/install/pypi.md)                     |
+| NuGet                        | `dnx personal-library-mcp`, or `dotnet tool install -g personal-library-mcp`                                                   | [install/nuget](docs/install/nuget.md)                   |
+| Homebrew                     | `brew install gfade/tap/personal-library-mcp`                                                                     | [install/homebrew](docs/install/homebrew.md)             |
+| Docker                       | `docker run -i --rm ghcr.io/gfade/personal-library-mcp:latest`                                                    | [install/docker](docs/install/docker.md)                 |
+| Release binary, `go install` | [`personal-library-mcp-<os>-<arch>`](https://github.com/gfade/lgen-mcp/releases/latest), signed `checksums.txt` | [install/binary](docs/install/binary.md)                 |
 | Claude Desktop               | the one-click `.mcpb` bundle                                                                               | [install/claude-desktop](docs/install/claude-desktop.md) |
 | Agent plugin                 | your host's plugin installer                                                                               | [install/agent-plugin](docs/install/agent-plugin.md)     |
 
@@ -71,23 +71,23 @@ Every channel delivers the same static binary; nothing is compiled and no script
 
 <table>
   <tr>
-    <td><a href="https://insiders.vscode.dev/redirect/mcp/install?name=LBN&amp;config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22ghcr.io%2Fjmrplens%2Fpersonal_library-mcp%3Alatest%22%5D%7D"><img alt="Install in VS Code" src="https://img.shields.io/badge/Install_in-VS_Code-0098FF?style=flat-square&amp;logo=visualstudiocode&amp;logoColor=white" /></a></td>
-    <td><a href="https://insiders.vscode.dev/redirect/mcp/install?name=LBN&amp;config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22ghcr.io%2Fjmrplens%2Fpersonal_library-mcp%3Alatest%22%5D%7D&amp;quality=insiders"><img alt="Install in VS Code Insiders" src="https://img.shields.io/badge/Install_in-VS_Code_Insiders-24bfa5?style=flat-square&amp;logo=visualstudiocode&amp;logoColor=white" /></a></td>
+    <td><a href="https://insiders.vscode.dev/redirect/mcp/install?name=LBN&amp;config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22ghcr.io%2Fjmrplens%2Fpersonal-library-mcp%3Alatest%22%5D%7D"><img alt="Install in VS Code" src="https://img.shields.io/badge/Install_in-VS_Code-0098FF?style=flat-square&amp;logo=visualstudiocode&amp;logoColor=white" /></a></td>
+    <td><a href="https://insiders.vscode.dev/redirect/mcp/install?name=LBN&amp;config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22ghcr.io%2Fjmrplens%2Fpersonal-library-mcp%3Alatest%22%5D%7D&amp;quality=insiders"><img alt="Install in VS Code Insiders" src="https://img.shields.io/badge/Install_in-VS_Code_Insiders-24bfa5?style=flat-square&amp;logo=visualstudiocode&amp;logoColor=white" /></a></td>
   </tr>
   <tr>
     <td><a href="https://cursor.com/install-mcp?name=LBN&amp;config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCJnaGNyLmlvL2ptcnBsZW5zL2xpYmdlbi1tY3A6bGF0ZXN0Il19"><img alt="Install in Cursor" src="https://cursor.com/deeplink/mcp-install-dark.svg" height="28" /></a></td>
     <td><a href="https://lmstudio.ai/install-mcp?name=LBN&amp;config=eyJjb21tYW5kIjoiZG9ja2VyIiwiYXJncyI6WyJydW4iLCItaSIsIi0tcm0iLCJnaGNyLmlvL2ptcnBsZW5zL2xpYmdlbi1tY3A6bGF0ZXN0Il19"><img alt="Add to LM Studio" src="https://files.lmstudio.ai/deeplink/mcp-install-dark.svg" height="28" /></a></td>
   </tr>
   <tr>
-    <td><a href="https://kiro.dev/launch/mcp/add?name=LBN&amp;config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22ghcr.io%2Fjmrplens%2Fpersonal_library-mcp%3Alatest%22%5D%7D"><img alt="Add to Kiro" src="https://kiro.dev/images/add-to-kiro.svg" height="28" /></a></td>
-    <td><a href="https://github.com/jmrplens/personal_library-mcp/releases/latest/download/personal_library-mcp.mcpb"><img alt="Download .mcpb extension for Claude Desktop" src="https://img.shields.io/badge/Claude_Desktop-.mcpb-d97757?style=flat-square&amp;logo=claude&amp;logoColor=white" /></a></td>
+    <td><a href="https://kiro.dev/launch/mcp/add?name=LBN&amp;config=%7B%22command%22%3A%22docker%22%2C%22args%22%3A%5B%22run%22%2C%22-i%22%2C%22--rm%22%2C%22ghcr.io%2Fjmrplens%2Fpersonal-library-mcp%3Alatest%22%5D%7D"><img alt="Add to Kiro" src="https://kiro.dev/images/add-to-kiro.svg" height="28" /></a></td>
+    <td><a href="https://github.com/gfade/lgen-mcp/releases/latest/download/personal-library-mcp.mcpb"><img alt="Download .mcpb extension for Claude Desktop" src="https://img.shields.io/badge/Claude_Desktop-.mcpb-d97757?style=flat-square&amp;logo=claude&amp;logoColor=white" /></a></td>
   </tr>
 </table>
 
 Or register it by hand. In Claude Code that is one command:
 
 ```bash
-claude mcp add LBN -- npx -y @jmrp.io/personal_library-mcp
+claude mcp add personal-library-mcp -- server
 ```
 
 Most other clients take the same entry in an `mcpServers` object:
@@ -95,7 +95,7 @@ Most other clients take the same entry in an `mcpServers` object:
 ```json
 {
   "mcpServers": {
-    "LBN": { "command": "npx", "args": ["-y", "@jmrp.io/personal_library-mcp"] }
+    "personal-library-mcp": { "command": "server" }
   }
 }
 ```
@@ -104,7 +104,7 @@ Most other clients take the same entry in an `mcpServers` object:
 
 ## Tools
 
-Every result is returned on two channels: the structured JSON output (fields below) and a human-readable Markdown rendering in the text content — for `search`, a results table with each result's clickable download links. The structured output leads with a `next_steps` guidance list; the Markdown rendering closes with the same guidance under a _Next steps_ heading. Full reference with every field: [docs/tools.md](docs/tools.md) (also [on the site](https://jmrp.io/docs/personal_library-mcp/tools/)).
+Every result is returned on two channels: the structured JSON output (fields below) and a human-readable Markdown rendering in the text content — for `search`, a results table with each result's clickable download links. The structured output leads with a `next_steps` guidance list; the Markdown rendering closes with the same guidance under a _Next steps_ heading. Full reference with every field: [docs/tools.md](docs/tools.md) (also [on the site](https://jmrp.io/docs/personal-library-mcp/tools/)).
 
 <details>
 <summary><code>search</code> — federated search for books, papers, comics, magazines &amp; standards</summary>
@@ -234,9 +234,9 @@ See the [tools reference](docs/tools.md#prompts) for full argument tables.
 - **Always return a link instead of saving:** `PL_MCP_REMOTE_DOWNLOADS=true` — makes `download` return a `resource_link` instead of writing a file, for a hosted or remote stdio deployment whose disk the client can't reach (`--http` implies it).
 - **Let a hosted server fetch files itself:** `PL_MCP_SERVER_FETCH=true` — off by default on a remote deployment, which therefore does **not** register the `read` tool: reading text means pulling the whole file over an egress IP shared by all its users, and one caller's transfers can get that address blocked for everyone. Turn it on to accept that cost and get `read` back. On a local stdio server it is on by default; set it to `false` there to stop the server fetching files at all.
 
-Every other setting — download location, mirror pinning, source allow-list, rate limits, retry/stall schedules, Sci-Hub hosts, `read` limits, cache sizing, the enrichment kill-switch, whether downloads ask before saving — is a tuning knob with a sensible default. See the full **[configuration reference](https://jmrp.io/docs/personal_library-mcp/configuration/)** (also in [docs/configuration.md](docs/configuration.md)).
+Every other setting — download location, mirror pinning, source allow-list, rate limits, retry/stall schedules, Sci-Hub hosts, `read` limits, cache sizing, the enrichment kill-switch, whether downloads ask before saving — is a tuning knob with a sensible default. See the full **[configuration reference](https://jmrp.io/docs/personal-library-mcp/configuration/)** (also in [docs/configuration.md](docs/configuration.md)).
 
-**Where settings come from.** A non-blank value in the process environment (what your client passed) wins, then the file `PL_MCP_ENV_FILE` names, then `~/.personal_library-mcp.env`; a variable passed blank is filled from the files. **A `.env` in the working directory is never loaded** — the server names it at startup and carries on without it, because a stdio server's working directory is whatever workspace the client opened, so that file arrives with a cloned repository rather than from you. To have one configure the server, name it: `--env-file /abs/path/.env`.
+**Where settings come from.** A non-blank value in the process environment (what your client passed) wins, then the file `PL_MCP_ENV_FILE` names, then `~/.personal-library-mcp.env`; a variable passed blank is filled from the files. **A `.env` in the working directory is never loaded** — the server names it at startup and carries on without it, because a stdio server's working directory is whatever workspace the client opened, so that file arrives with a cloned repository rather than from you. To have one configure the server, name it: `--env-file /abs/path/.env`.
 
 A few settings also have flags, written into their variables only when you type them: `--log-level`, `--download-dir`, `--mirror`, `--sources`, `--allow-private-addresses`, `--pprof-addr`, `--env-file`. The four credential-shaped ones above deliberately have none — a secret on a command line is visible through `ps` and lands in your shell history.
 
@@ -296,7 +296,7 @@ You can restrict which sources participate with `PL_MCP_SOURCES`; the chain orde
 ## Documentation
 
 - Every page lives in [`docs/`](docs/README.md), indexed by kind: the getting-started tutorial, one page per install channel, client set-up, deployment recipes, and the tools, configuration, flag and source references.
-- Full documentation site (bilingual EN/ES): <https://jmrp.io/docs/personal_library-mcp/>
+- Full documentation site (bilingual EN/ES): <https://jmrp.io/docs/personal-library-mcp/>
 - Changing the code? [`docs/development/`](docs/development/) has the gate record and the testing reference.
 
 ## By the numbers
@@ -332,13 +332,13 @@ by registering the tools and prompts for real and walking the tree, and
 Install the binary with Go:
 
 ```bash
-go install github.com/jmrplens/personal_library-mcp/v2/cmd/server@latest
+go install github.com/gfade/lgen-mcp
 ```
 
-This produces a binary named `server` in `$(go env GOPATH)/bin`. Rename it to `personal_library-mcp` (or build with an explicit name) and put it on your `PATH`:
+This produces a binary named `server` in `$(go env GOPATH)/bin`. Rename it to `personal-library-mcp` (or build with an explicit name) and put it on your `PATH`:
 
 ```bash
-go build -o personal_library-mcp ./cmd/server
+go build -o personal-library-mcp ./cmd/server
 ```
 
 Common developer tasks are wrapped by the `Makefile` (`make help` lists them all):
@@ -352,7 +352,7 @@ make format-md-tables  # normalize Markdown pipe tables
 
 ## Deploying over HTTP
 
-By default the server speaks MCP over **stdio**. `personal_library-mcp --http :8080` (or a unix socket path) serves stateless streamable HTTP instead, with `GET /health` beside it; there `download` returns a link rather than saving a file, and `read` is off unless the operator turns it on. A deployment other people reach needs two more flags than you would guess — `--public-url` or `--trusted-proxies` for the name clients use, and `--trusted-proxies` with `--trusted-proxy-header` so each caller is charged as itself rather than as the proxy:
+By default the server speaks MCP over **stdio**. `personal-library-mcp --http :8080` (or a unix socket path) serves stateless streamable HTTP instead, with `GET /health` beside it; there `download` returns a link rather than saving a file, and `read` is off unless the operator turns it on. A deployment other people reach needs two more flags than you would guess — `--public-url` or `--trusted-proxies` for the name clients use, and `--trusted-proxies` with `--trusted-proxy-header` so each caller is charged as itself rather than as the proxy:
 
 | For                                                                | See                                                       |
 | ------------------------------------------------------------------ | --------------------------------------------------------- |
