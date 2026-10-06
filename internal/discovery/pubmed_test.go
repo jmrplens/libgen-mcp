@@ -362,8 +362,8 @@ func TestPubMed_RequestParameters(t *testing.T) {
 	if got := search.Get("sort"); got != "relevance" {
 		t.Errorf("esearch sort = %q, want relevance", got)
 	}
-	if got := search.Get("tool"); got != "libgen-mcp" {
-		t.Errorf("esearch tool = %q, want libgen-mcp", got)
+	if got := search.Get("tool"); got != "personal-library-mcp" {
+		t.Errorf("esearch tool = %q, want personal-library-mcp", got)
 	}
 
 	summary := stub.summaryQuery
@@ -373,8 +373,8 @@ func TestPubMed_RequestParameters(t *testing.T) {
 	if got := summary.Get("db"); got != "pubmed" {
 		t.Errorf("esummary db = %q, want pubmed", got)
 	}
-	if got := summary.Get("tool"); got != "libgen-mcp" {
-		t.Errorf("esummary tool = %q, want libgen-mcp", got)
+	if got := summary.Get("tool"); got != "personal-library-mcp" {
+		t.Errorf("esummary tool = %q, want personal-library-mcp", got)
 	}
 }
 

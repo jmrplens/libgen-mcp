@@ -84,8 +84,8 @@ func handshakeCapabilities(t *testing.T) *mcp.ServerCapabilities {
 // TestServerCardIdentity checks the card names this server and the build serving it.
 func TestServerCardIdentity(t *testing.T) {
 	card := buildTestCard(t)
-	if card.ServerInfo.Name != "libgen-mcp" {
-		t.Errorf("serverInfo.name = %q, want libgen-mcp", card.ServerInfo.Name)
+	if card.ServerInfo.Name != "personal-library-mcp" {
+		t.Errorf("serverInfo.name = %q, want personal-library-mcp", card.ServerInfo.Name)
 	}
 	if card.ServerInfo.Version != buildversion.Current() || card.ServerInfo.Version == "" {
 		t.Errorf("serverInfo.version = %q, want %q", card.ServerInfo.Version, buildversion.Current())

@@ -196,7 +196,7 @@ func TestTransport_VersionFlagExitsWithoutServing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("--version exited with %v. Output:\n%s", err, out)
 	}
-	if !strings.Contains(out, "libgen-mcp") {
+	if !strings.Contains(out, "personal-library-mcp") {
 		t.Errorf("output does not name the binary:\n%s", out)
 	}
 	if !strings.Contains(out, "commit") {

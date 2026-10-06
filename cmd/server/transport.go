@@ -236,7 +236,7 @@ func transportName(useHTTP bool) string {
 // reserved for a machine would be a defect waiting for somebody to widen the
 // guard above it.
 func writeTerminalGuidance(out io.Writer, version string) {
-	fmt.Fprintf(out, `libgen-mcp %s is a Model Context Protocol server, not an interactive program.
+	fmt.Fprintf(out, `personal-library-mcp %s is a Model Context Protocol server, not an interactive program.
 It is waiting for JSON-RPC on standard input, which is what an MCP client sends;
 started from a terminal it will simply sit here. To serve over HTTP instead, pass
 --http (for example --http 127.0.0.1:8080). Setup for each client is at

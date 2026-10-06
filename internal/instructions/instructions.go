@@ -18,12 +18,12 @@ import (
 // semicolon. A sentence that wanted one is split rather than given a
 // substitute, because a hyphen where a dash was reads as a range.
 const (
-	opening = "libgen-mcp searches, retrieves and reads books, papers, comics, magazines and standards." +
+	opening = "personal-library-mcp searches, retrieves and reads books, papers, comics, magazines and standards." +
 		" No tool needs an account or an API key."
 	// openingNoFetch is the opening for a deployment that does not fetch
 	// files: it still searches and retrieves, but reading a file's text is
 	// the client's to do.
-	openingNoFetch = "libgen-mcp searches and retrieves books, papers, comics, magazines and standards." +
+	openingNoFetch = "personal-library-mcp searches and retrieves books, papers, comics, magazines and standards." +
 		" No tool needs an account or an API key."
 
 	workflow = "WORKFLOW: the tools chain by identifier. search returns each record's md5 (books)" +

@@ -33,7 +33,7 @@ const pubmedRPS = 3
 
 // pubmedTool is the value NCBI's etiquette asks callers to send as the tool
 // parameter, so traffic can be attributed to the application generating it.
-const pubmedTool = "libgen-mcp"
+const pubmedTool = "personal-library-mcp"
 
 // pubmedDOIType is the articleids idtype marking the DOI among the several
 // identifiers PubMed lists for a record (pubmed, pmc, pmcid, pii, doi).

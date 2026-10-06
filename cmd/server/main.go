@@ -282,7 +282,7 @@ type utilityFlags struct {
 func runUtility(f utilityFlags) (code int, handled bool) {
 	switch {
 	case f.version:
-		fmt.Printf("libgen-mcp %s (commit %s)\n", buildversion.Current(), commit)
+		fmt.Printf("personal-library-mcp %s (commit %s)\n", buildversion.Current(), commit)
 		return 0, true
 	case f.healthcheck:
 		return runHealthcheck(context.Background(), flag.Args(), f.tlsCert,
@@ -379,7 +379,7 @@ func isCleanShutdown(err error) bool {
 // that would allow everything.
 func newMCPServer(handshakeText string, records *clientRecords, ceiling heavyCeiling, spans mcpotel.Options) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
-		Name:        "libgen-mcp",
+		Name:        "personal-library-mcp",
 		Title:       implementationTitle,
 		Description: implementationDescription,
 		Version:     buildversion.Current(),
@@ -991,7 +991,7 @@ func run(ctx context.Context, spec listenSpec, opts transport.Options, decision 
 // exit status a supervisor reads, and would catch the day it changes.
 func serveStdio(ctx context.Context, server *mcp.Server, cfg *config.Config) error {
 	reader, writer := resilientStdio(os.Stdin, os.Stdout, cfg.StdioMaxLineBytes)
-	fmt.Fprintf(os.Stderr, "libgen-mcp %s (commit %s) serving on stdio\n", buildversion.Current(), commit)
+	fmt.Fprintf(os.Stderr, "personal-library-mcp %s (commit %s) serving on stdio\n", buildversion.Current(), commit)
 	return server.Run(ctx, &mcp.IOTransport{
 		Reader:        reader,
 		Writer:        writer,
@@ -1182,7 +1182,7 @@ func serveHTTPOn(ctx context.Context, server *mcp.Server, ln net.Listener, opts 
 		processGate(ceilings, opts.Stateless, carriedMCPHandler(charge,
 			mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, transport.StreamableHTTP(opts)),
 		))))
-	log.Printf("libgen-mcp %s (commit %s) listening on %s (streamable HTTP, stateless=%t, json-response=%t)",
+	log.Printf("personal-library-mcp %s (commit %s) listening on %s (streamable HTTP, stateless=%t, json-response=%t)",
 		buildversion.Current(), commit, describeListener(ln, opts.ServesTLS), opts.Stateless, opts.JSONResponse)
 	if !opts.Stateless {
 		log.Print("stateless mode is off: legacy compatibility transport, clients negotiate MCP protocol 2025-11-25 or older")

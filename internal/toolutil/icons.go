@@ -33,7 +33,7 @@ var webpFS embed.FS
 // currentColor render doesn't already give. The light/dark WebP fallbacks
 // [icon] adds are a different trade: they are 16×16 rasters of a few hundred
 // bytes each, and they buy an icon in clients that reject SVG outright.
-const svgBrand = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="libgen-mcp"><path fill="currentColor" d="M28 8 h8 v14 h8 L32 36 20 22 h8 z M32 39 C22 34 12 34 6 38 L6 51 C12 47 22 47 32 52 Z M32 39 C42 34 52 34 58 38 L58 51 C52 47 42 47 32 52 Z"/></svg>`
+const svgBrand = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="personal-library-mcp"><path fill="currentColor" d="M28 8 h8 v14 h8 L32 36 20 22 h8 z M32 39 C22 34 12 34 6 38 L6 51 C12 47 22 47 32 52 Z M32 39 C42 34 52 34 58 38 L58 51 C52 47 42 47 32 52 Z"/></svg>`
 
 // Feature icons: one per tool and one per prompt, each a single-color
 // currentColor SVG so its SVG entry renders correctly against any client

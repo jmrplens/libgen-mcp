@@ -37,7 +37,7 @@ const (
 
 // DefaultServiceName is what this server calls itself to a collector when
 // OTEL_SERVICE_NAME says nothing.
-const DefaultServiceName = "libgen-mcp"
+const DefaultServiceName = "personal-library-mcp"
 
 // shutdownTimeout bounds the final flush.
 //
