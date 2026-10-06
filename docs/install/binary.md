@@ -148,25 +148,33 @@ Delete the file. Nothing else was installed; settings, caches and downloads are 
 
 ## Build from source
 
-`go install` compiles the server with your own toolchain, from the module's source. It needs **Go 1.27.1 or newer**, the version `go.mod` names; an older Go from 1.21 on downloads that toolchain by itself unless `GOTOOLCHAIN=local` is set.
+This fork is maintained under the `gfade` GitHub account. Build from the checkout so you install the code in this repository:
 
 ```bash
-go install github.com/gfade/personal-library-mcp/v2/cmd/server@latest
+git clone https://github.com/gfade/lgen-mcp.git
+cd lgen-mcp
+go install ./cmd/server
 ```
 
-> **The command is named `server`.** `go install` names a binary after its
-> package directory, so this produces `$(go env GOPATH)/bin/server`, not
-> `personal-library-mcp`. Rename it, or build it with an explicit name:
->
-> ```bash
-> git clone https://github.com/gfade/personal-library-mcp
-> cd personal-library-mcp
-> go build -o personal-library-mcp ./cmd/server
-> ```
+Go installs the `server` executable into `$(go env GOPATH)/bin` (or `GOBIN`). Put that directory on your `PATH`.
 
-The `/v2` in the path is required: from major version 2, Go resolves a module only under its suffixed path, and the unsuffixed one stops at the last 1.x release. Pin a version with `@v2.2.0` in place of `@latest`; upgrade by running the command again; uninstall by deleting the file from `$(go env GOPATH)/bin`.
+To build a descriptive executable instead:
 
-**Verify.** The Go toolchain checks every module it downloads against the public checksum database. That verifies the **source** it built from, not a binary this project published: the result is your build, which is why it carries no release signature. A `go install` build reports its version from the module (`personal-library-mcp 2.2.0 (commit none)`), since no commit is stamped into it.
+```bash
+go build -o personal-library-mcp ./cmd/server
+```
+
+Claude Code can launch either form:
+
+```bash
+claude mcp add personal-library-mcp -- server
+```
+
+or:
+
+```bash
+claude mcp add personal-library-mcp -- /absolute/path/to/personal-library-mcp
+```
 
 ## Platform notes
 
