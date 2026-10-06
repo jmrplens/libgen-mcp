@@ -1,0 +1,51 @@
+{
+  "name": "@jmrp.io/personal_library-mcp",
+  "version": "2.2.0",
+  "mcpName": "io.github.jmrplens/personal_library-mcp",
+  "description": "Model Context Protocol (MCP) server for federated search, citation and reading of books and papers across the primary catalog and open-access sources. Runs as a local binary over stdio or HTTP.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "LBN",
+    "primary-library",
+    "open-access",
+    "arxiv",
+    "crossref",
+    "doi",
+    "ai",
+    "llm",
+    "claude",
+    "stdio",
+    "cli"
+  ],
+  "homepage": "https://jmrp.io/docs/personal_library-mcp",
+  "bugs": "https://github.com/jmrplens/personal_library-mcp/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jmrplens/personal_library-mcp.git",
+    "directory": "npm/personal_library-mcp"
+  },
+  "license": "MIT",
+  "author": "José M. Requena Plens",
+  "type": "commonjs",
+  "bin": {
+    "personal_library-mcp": "cli.js"
+  },
+  "files": [
+    "cli.js",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES"
+  ],
+  "optionalDependencies": {
+    "@jmrp.io/personal_library-mcp-linux-x64": "2.2.0",
+    "@jmrp.io/personal_library-mcp-linux-arm64": "2.2.0",
+    "@jmrp.io/personal_library-mcp-darwin-x64": "2.2.0",
+    "@jmrp.io/personal_library-mcp-darwin-arm64": "2.2.0",
+    "@jmrp.io/personal_library-mcp-win32-x64": "2.2.0",
+    "@jmrp.io/personal_library-mcp-win32-arm64": "2.2.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

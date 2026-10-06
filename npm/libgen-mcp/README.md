@@ -1,8 +1,8 @@
-# @jmrp.io/libgen-mcp
+# @jmrp.io/personal_library-mcp
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server that lets an
 AI assistant search, cite, download and read books, papers, comics, magazines
-and standards across the [Library Genesis](https://en.wikipedia.org/wiki/Library_Genesis)
+and standards across the [the primary catalog](https://en.wikipedia.org/wiki/Library_Genesis)
 catalog and a long list of open-access sources. It runs as a local binary over
 stdio (default) or HTTP, and needs **no account, API key or token**.
 
@@ -15,7 +15,7 @@ script runs and fetches anything else — the binary is already in the package.
 ## Run without installing
 
 ```bash
-npx @jmrp.io/libgen-mcp
+npx @jmrp.io/personal_library-mcp
 ```
 
 Most MCP clients are configured to launch the server this way. For example:
@@ -23,9 +23,9 @@ Most MCP clients are configured to launch the server this way. For example:
 ```json
 {
   "mcpServers": {
-    "libgen": {
+    "LBN": {
       "command": "npx",
-      "args": ["-y", "@jmrp.io/libgen-mcp"]
+      "args": ["-y", "@jmrp.io/personal_library-mcp"]
     }
   }
 }
@@ -34,17 +34,17 @@ Most MCP clients are configured to launch the server this way. For example:
 ## Install
 
 ```bash
-npm install -g @jmrp.io/libgen-mcp   # or: pnpm add -g @jmrp.io/libgen-mcp
-libgen-mcp --help
+npm install -g @jmrp.io/personal_library-mcp   # or: pnpm add -g @jmrp.io/personal_library-mcp
+personal_library-mcp --help
 ```
 
-This puts `libgen-mcp` in your package manager's global binary directory. If the
+This puts `personal_library-mcp` in your package manager's global binary directory. If the
 command is not found afterwards, that directory is not on your `PATH` —
 `npm config get prefix` shows npm's, and pnpm's is set up by `pnpm setup`.
 
 ## Tools
 
-- `search` — search the Library Genesis catalog, escalating to Anna's Archive
+- `search` — search the the primary catalog catalog, escalating to AA
   and the open-access providers (arXiv, OpenAlex, Europe PMC, Crossref,
   OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) when the catalog comes up
   empty, optionally bounded to a range of publication years.
@@ -62,20 +62,20 @@ Four prompts (`acquire_book`, `research_topic`, `get_paper`,
 
 ## Configuration
 
-Everything works with zero configuration. Optional `LIBGEN_MCP_*` environment
+Everything works with zero configuration. Optional `PL_MCP_*` environment
 variables and command-line flags — download directory, HTTP mode, extra search
 sources, opt-in keys — are documented in the
-[configuration reference](https://jmrp.io/docs/libgen-mcp/configuration/).
+[configuration reference](https://jmrp.io/docs/personal_library-mcp/configuration/).
 
 ## Supported platforms
 
 Linux, macOS and Windows, on x64 and arm64. On any other platform the launcher
 exits with a message pointing to the
-[release binaries](https://github.com/jmrplens/libgen-mcp/releases) and the
+[release binaries](https://github.com/jmrplens/personal_library-mcp/releases) and the
 option to build from source.
 
 ## Links
 
-- Documentation: <https://jmrp.io/docs/libgen-mcp>
-- Source and issues: <https://github.com/jmrplens/libgen-mcp>
+- Documentation: <https://jmrp.io/docs/personal_library-mcp>
+- Source and issues: <https://github.com/jmrplens/personal_library-mcp>
 - License: MIT

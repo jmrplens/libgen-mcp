@@ -1,25 +1,25 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.jmrplens/libgen-mcp",
+  "name": "io.github.jmrplens/personal_library-mcp",
   "title": "Books & Papers MCP Server",
   "description": "Federated search of books and papers, formatted citations, open-access retrieval and reading.",
   "version": "2.2.0",
-  "websiteUrl": "https://jmrp.io/docs/libgen-mcp",
+  "websiteUrl": "https://jmrp.io/docs/personal_library-mcp",
   "repository": {
-    "url": "https://github.com/jmrplens/libgen-mcp",
+    "url": "https://github.com/jmrplens/personal_library-mcp",
     "source": "github",
     "id": "1304827801"
   },
   "icons": [
     {
-      "src": "https://raw.githubusercontent.com/jmrplens/libgen-mcp/main/site/public/favicon.svg",
+      "src": "https://raw.githubusercontent.com/jmrplens/personal_library-mcp/main/site/public/favicon.svg",
       "mimeType": "image/svg+xml",
       "sizes": [
         "any"
       ]
     },
     {
-      "src": "https://raw.githubusercontent.com/jmrplens/libgen-mcp/main/mcpb/icon.png",
+      "src": "https://raw.githubusercontent.com/jmrplens/personal_library-mcp/main/mcpb/icon.png",
       "mimeType": "image/png",
       "sizes": [
         "512x512"
@@ -29,13 +29,13 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://mcp.jmrp.io/libgen"
+      "url": "https://mcp.jmrp.io/LBN"
     }
   ],
   "packages": [
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v2.2.0/libgen-mcp-darwin.mcpb",
+      "identifier": "https://github.com/jmrplens/personal_library-mcp/releases/download/v2.2.0/personal_library-mcp-darwin.mcpb",
       "version": "2.2.0",
       "fileSha256": "4985ad945c1d4dd1311daf16f7b74d965ec1315f2b9e4506aa9f1e9d45ad60d6",
       "transport": {
@@ -43,19 +43,19 @@
       },
       "environmentVariables": [
         {
-          "name": "LIBGEN_MIRROR",
-          "description": "Force a specific libgen mirror base URL (default: auto-discovered, preferred https://libgen.li)",
+          "name": "LBN_MIRROR",
+          "description": "Force a specific LBN mirror base URL (default: auto-discovered, preferred https://LBN.li)",
           "isRequired": false,
-          "placeholder": "https://libgen.li"
+          "placeholder": "https://LBN.li"
         },
         {
-          "name": "LIBGEN_MCP_DOWNLOAD_DIR",
+          "name": "PL_MCP_DOWNLOAD_DIR",
           "description": "Directory where the download tool saves files (default: ~/Downloads)",
           "isRequired": false,
           "placeholder": "~/Downloads"
         },
         {
-          "name": "LIBGEN_MCP_TIMEOUT",
+          "name": "PL_MCP_TIMEOUT",
           "description": "Per-request HTTP timeout (default: 10s)",
           "isRequired": false,
           "default": "10s"
@@ -64,7 +64,7 @@
     },
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v2.2.0/libgen-mcp-windows.mcpb",
+      "identifier": "https://github.com/jmrplens/personal_library-mcp/releases/download/v2.2.0/personal_library-mcp-windows.mcpb",
       "version": "2.2.0",
       "fileSha256": "2358b47a959bde863e825c02ac26f6fd4234e00600edd3d88c3edbd330819aa6",
       "transport": {
@@ -72,19 +72,19 @@
       },
       "environmentVariables": [
         {
-          "name": "LIBGEN_MIRROR",
-          "description": "Force a specific libgen mirror base URL (default: auto-discovered, preferred https://libgen.li)",
+          "name": "LBN_MIRROR",
+          "description": "Force a specific LBN mirror base URL (default: auto-discovered, preferred https://LBN.li)",
           "isRequired": false,
-          "placeholder": "https://libgen.li"
+          "placeholder": "https://LBN.li"
         },
         {
-          "name": "LIBGEN_MCP_DOWNLOAD_DIR",
+          "name": "PL_MCP_DOWNLOAD_DIR",
           "description": "Directory where the download tool saves files (default: ~/Downloads)",
           "isRequired": false,
           "placeholder": "~/Downloads"
         },
         {
-          "name": "LIBGEN_MCP_TIMEOUT",
+          "name": "PL_MCP_TIMEOUT",
           "description": "Per-request HTTP timeout (default: 10s)",
           "isRequired": false,
           "default": "10s"
@@ -93,7 +93,7 @@
     },
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/jmrplens/libgen-mcp/releases/download/v2.2.0/libgen-mcp-linux.mcpb",
+      "identifier": "https://github.com/jmrplens/personal_library-mcp/releases/download/v2.2.0/personal_library-mcp-linux.mcpb",
       "version": "2.2.0",
       "fileSha256": "5caedb6d716be3e5361b7867bd368bef5c940e18ad5df27de029b138a9747c3b",
       "transport": {
@@ -101,19 +101,19 @@
       },
       "environmentVariables": [
         {
-          "name": "LIBGEN_MIRROR",
-          "description": "Force a specific libgen mirror base URL (default: auto-discovered, preferred https://libgen.li)",
+          "name": "LBN_MIRROR",
+          "description": "Force a specific LBN mirror base URL (default: auto-discovered, preferred https://LBN.li)",
           "isRequired": false,
-          "placeholder": "https://libgen.li"
+          "placeholder": "https://LBN.li"
         },
         {
-          "name": "LIBGEN_MCP_DOWNLOAD_DIR",
+          "name": "PL_MCP_DOWNLOAD_DIR",
           "description": "Directory where the download tool saves files (default: ~/Downloads)",
           "isRequired": false,
           "placeholder": "~/Downloads"
         },
         {
-          "name": "LIBGEN_MCP_TIMEOUT",
+          "name": "PL_MCP_TIMEOUT",
           "description": "Per-request HTTP timeout (default: 10s)",
           "isRequired": false,
           "default": "10s"
@@ -122,25 +122,25 @@
     },
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/jmrplens/libgen-mcp:2.2.0@sha256:150400bcb4b20a26b2a14d342a48dd314736e71390a096ba8a8c01b9b77a5a0e",
+      "identifier": "ghcr.io/jmrplens/personal_library-mcp:2.2.0@sha256:150400bcb4b20a26b2a14d342a48dd314736e71390a096ba8a8c01b9b77a5a0e",
       "transport": {
         "type": "stdio"
       },
       "environmentVariables": [
         {
-          "name": "LIBGEN_MIRROR",
-          "description": "Force a specific libgen mirror base URL (default: auto-discovered, preferred https://libgen.li)",
+          "name": "LBN_MIRROR",
+          "description": "Force a specific LBN mirror base URL (default: auto-discovered, preferred https://LBN.li)",
           "isRequired": false,
-          "placeholder": "https://libgen.li"
+          "placeholder": "https://LBN.li"
         },
         {
-          "name": "LIBGEN_MCP_DOWNLOAD_DIR",
+          "name": "PL_MCP_DOWNLOAD_DIR",
           "description": "Directory where the download tool saves files (default: ~/Downloads)",
           "isRequired": false,
           "placeholder": "~/Downloads"
         },
         {
-          "name": "LIBGEN_MCP_TIMEOUT",
+          "name": "PL_MCP_TIMEOUT",
           "description": "Per-request HTTP timeout (default: 10s)",
           "isRequired": false,
           "default": "10s"
@@ -149,25 +149,25 @@
     },
     {
       "registryType": "oci",
-      "identifier": "docker.io/jmrplens/libgen-mcp:2.2.0@sha256:150400bcb4b20a26b2a14d342a48dd314736e71390a096ba8a8c01b9b77a5a0e",
+      "identifier": "docker.io/jmrplens/personal_library-mcp:2.2.0@sha256:150400bcb4b20a26b2a14d342a48dd314736e71390a096ba8a8c01b9b77a5a0e",
       "transport": {
         "type": "stdio"
       },
       "environmentVariables": [
         {
-          "name": "LIBGEN_MIRROR",
-          "description": "Force a specific libgen mirror base URL (default: auto-discovered, preferred https://libgen.li)",
+          "name": "LBN_MIRROR",
+          "description": "Force a specific LBN mirror base URL (default: auto-discovered, preferred https://LBN.li)",
           "isRequired": false,
-          "placeholder": "https://libgen.li"
+          "placeholder": "https://LBN.li"
         },
         {
-          "name": "LIBGEN_MCP_DOWNLOAD_DIR",
+          "name": "PL_MCP_DOWNLOAD_DIR",
           "description": "Directory where the download tool saves files (default: ~/Downloads)",
           "isRequired": false,
           "placeholder": "~/Downloads"
         },
         {
-          "name": "LIBGEN_MCP_TIMEOUT",
+          "name": "PL_MCP_TIMEOUT",
           "description": "Per-request HTTP timeout (default: 10s)",
           "isRequired": false,
           "default": "10s"
@@ -176,7 +176,7 @@
     },
     {
       "registryType": "npm",
-      "identifier": "@jmrp.io/libgen-mcp",
+      "identifier": "@jmrp.io/personal_library-mcp",
       "version": "2.2.0",
       "runtimeHint": "npx",
       "transport": {
@@ -184,19 +184,19 @@
       },
       "environmentVariables": [
         {
-          "name": "LIBGEN_MIRROR",
-          "description": "Force a specific libgen mirror base URL (default: auto-discovered, preferred https://libgen.li)",
+          "name": "LBN_MIRROR",
+          "description": "Force a specific LBN mirror base URL (default: auto-discovered, preferred https://LBN.li)",
           "isRequired": false,
-          "placeholder": "https://libgen.li"
+          "placeholder": "https://LBN.li"
         },
         {
-          "name": "LIBGEN_MCP_DOWNLOAD_DIR",
+          "name": "PL_MCP_DOWNLOAD_DIR",
           "description": "Directory where the download tool saves files (default: ~/Downloads)",
           "isRequired": false,
           "placeholder": "~/Downloads"
         },
         {
-          "name": "LIBGEN_MCP_TIMEOUT",
+          "name": "PL_MCP_TIMEOUT",
           "description": "Per-request HTTP timeout (default: 10s)",
           "isRequired": false,
           "default": "10s"
@@ -205,7 +205,7 @@
     },
     {
       "registryType": "pypi",
-      "identifier": "libgen-mcp",
+      "identifier": "personal_library-mcp",
       "version": "2.2.0",
       "runtimeHint": "uvx",
       "registryBaseUrl": "https://pypi.org",
@@ -214,19 +214,19 @@
       },
       "environmentVariables": [
         {
-          "name": "LIBGEN_MIRROR",
-          "description": "Force a specific libgen mirror base URL (default: auto-discovered, preferred https://libgen.li)",
+          "name": "LBN_MIRROR",
+          "description": "Force a specific LBN mirror base URL (default: auto-discovered, preferred https://LBN.li)",
           "isRequired": false,
-          "placeholder": "https://libgen.li"
+          "placeholder": "https://LBN.li"
         },
         {
-          "name": "LIBGEN_MCP_DOWNLOAD_DIR",
+          "name": "PL_MCP_DOWNLOAD_DIR",
           "description": "Directory where the download tool saves files (default: ~/Downloads)",
           "isRequired": false,
           "placeholder": "~/Downloads"
         },
         {
-          "name": "LIBGEN_MCP_TIMEOUT",
+          "name": "PL_MCP_TIMEOUT",
           "description": "Per-request HTTP timeout (default: 10s)",
           "isRequired": false,
           "default": "10s"
@@ -235,7 +235,7 @@
     },
     {
       "registryType": "nuget",
-      "identifier": "libgen-mcp",
+      "identifier": "personal_library-mcp",
       "version": "2.2.0",
       "runtimeHint": "dnx",
       "registryBaseUrl": "https://api.nuget.org/v3/index.json",
@@ -244,19 +244,19 @@
       },
       "environmentVariables": [
         {
-          "name": "LIBGEN_MIRROR",
-          "description": "Force a specific libgen mirror base URL (default: auto-discovered, preferred https://libgen.li)",
+          "name": "LBN_MIRROR",
+          "description": "Force a specific LBN mirror base URL (default: auto-discovered, preferred https://LBN.li)",
           "isRequired": false,
-          "placeholder": "https://libgen.li"
+          "placeholder": "https://LBN.li"
         },
         {
-          "name": "LIBGEN_MCP_DOWNLOAD_DIR",
+          "name": "PL_MCP_DOWNLOAD_DIR",
           "description": "Directory where the download tool saves files (default: ~/Downloads)",
           "isRequired": false,
           "placeholder": "~/Downloads"
         },
         {
-          "name": "LIBGEN_MCP_TIMEOUT",
+          "name": "PL_MCP_TIMEOUT",
           "description": "Per-request HTTP timeout (default: 10s)",
           "isRequired": false,
           "default": "10s"

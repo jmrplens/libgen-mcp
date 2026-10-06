@@ -1,4 +1,4 @@
-package libgenmcp
+package personal_library_mcp
 
 import (
 	_ "embed"
