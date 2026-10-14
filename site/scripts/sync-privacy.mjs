@@ -31,14 +31,14 @@ const digest = createHash("sha256").update(source).digest("hex").slice(0, 16);
 // Drop the H1 and the "Last updated" line: Starlight renders the title from
 // frontmatter, and the date belongs in the frontmatter too.
 const lastUpdated = /^Last updated:\s*(\S+)/m.exec(source)?.[1] ?? "";
-// A link to the documentation is written with the jmrp.io address in the repo,
-// which is where a reader of PRIVACY.md on GitHub should land. On the site
-// itself that address is a redirect to the page next door, so it becomes a
-// site-relative link and a reader, or a crawler, takes no hop to get there.
+// A link to the documentation is written as an absolute docs.jmrp.io URL in the
+// repo, which is where a reader of PRIVACY.md on GitHub should land. On the site
+// itself it becomes a site-relative link, like every other link between pages,
+// so a local or preview build keeps the reader on the build they are reading.
 const body = source
 	.replace(/^#\s+.*\n/, "")
 	.replace(/^Last updated:.*\n/m, "")
-	.replaceAll("https://jmrp.io/docs/libgen-mcp/", "/libgen-mcp/")
+	.replaceAll("https://docs.jmrp.io/libgen-mcp/", "/libgen-mcp/")
 	.trim();
 
 // The description carries a colon, so it has to be quoted to stay valid YAML.
@@ -122,7 +122,7 @@ const enPage = `${frontmatter(
 		source,
 		"Frequently asked questions",
 		"en",
-		"https://jmrplens.github.io/libgen-mcp/privacy/",
+		"https://docs.jmrp.io/libgen-mcp/privacy/",
 	),
 )}
 ${body}
@@ -141,7 +141,7 @@ function expectedEsPage() {
 		esBody,
 		"Preguntas frecuentes",
 		"es",
-		"https://jmrplens.github.io/libgen-mcp/es/privacy/",
+		"https://docs.jmrp.io/libgen-mcp/es/privacy/",
 	);
 	return `${page.slice(0, head + 1)}${block}${page.slice(end + 1)}`;
 }

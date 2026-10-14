@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 import { answerText, faqNode, serialize } from "../src/lib/faq-schema.mjs";
 
 const docsDir = fileURLToPath(new URL("../src/content/docs", import.meta.url));
-const SITE = "https://jmrplens.github.io";
+const SITE = "https://docs.jmrp.io";
 const BASE = "/libgen-mcp";
 
 /**

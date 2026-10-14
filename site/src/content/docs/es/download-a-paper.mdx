@@ -30,12 +30,12 @@ head:
       {
         "@context": "https://schema.org",
         "@type": "HowTo",
-        "@id": "https://jmrplens.github.io/libgen-mcp/es/download-a-paper/#howto",
+        "@id": "https://docs.jmrp.io/libgen-mcp/es/download-a-paper/#howto",
         "name": "Cómo descargar un artículo por DOI con Claude y libgen-mcp",
         "description": "Registra libgen-mcp en Claude, pide un artículo por su DOI y deja que la herramienta download pruebe los proveedores de acceso abierto antes que cualquier shadow library de reserva. No hace falta cuenta, clave de API ni token.",
         "inLanguage": "es",
         "totalTime": "PT5M",
-        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/es/download-a-paper/#article" },
+        "isPartOf": { "@id": "https://docs.jmrp.io/libgen-mcp/es/download-a-paper/#article" },
         "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
         "tool": [
           {
@@ -53,28 +53,28 @@ head:
             "position": 1,
             "name": "Registra el servidor en tu cliente",
             "text": "Añade libgen-mcp a tu cliente MCP. En Claude Code es un solo comando: claude mcp add libgen -- /usr/local/bin/libgen-mcp, cambiando la ruta por lo que arranque el servidor en tu máquina. Claude Desktop, Cursor y VS Code llevan el mismo comando en un archivo de configuración. Reinicia el cliente para que recoja el servidor.",
-            "url": "https://jmrplens.github.io/libgen-mcp/es/download-a-paper/#pasos"
+            "url": "https://docs.jmrp.io/libgen-mcp/es/download-a-paper/#pasos"
           },
           {
             "@type": "HowToStep",
             "position": 2,
             "name": "Pide el artículo por su DOI",
             "text": "Pídelo en lenguaje natural y da el DOI, por ejemplo: Descarga el artículo con DOI 10.1371/journal.pone.0000308. La herramienta download acepta un DOI directamente, así que no hace falta buscar antes.",
-            "url": "https://jmrplens.github.io/libgen-mcp/es/download-a-paper/#pasos"
+            "url": "https://docs.jmrp.io/libgen-mcp/es/download-a-paper/#pasos"
           },
           {
             "@type": "HowToStep",
             "position": 3,
             "name": "Deja que el modelo llame a download",
             "text": "El modelo llama a download con el DOI. El servidor lo ofrece a los proveedores de acceso abierto que pueden servirlo, después al enlace que depositó la propia editorial y a OAPEN, y solo al final a Sci-Hub y SciDB, pasando de una fuente a la siguiente cuando una falla. En un servidor local el archivo se guarda en el directorio de descargas y el resultado da su ruta, con verified a false porque un DOI no trae ningún digest con el que comprobar los bytes.",
-            "url": "https://jmrplens.github.io/libgen-mcp/es/download-a-paper/#pasos"
+            "url": "https://docs.jmrp.io/libgen-mcp/es/download-a-paper/#pasos"
           },
           {
             "@type": "HowToStep",
             "position": 4,
             "name": "Lee o resume el archivo guardado",
             "text": "Pide al asistente que lea o resuma el artículo. La herramienta read acepta la ruta que devolvió download y lee el archivo guardado desde el disco sin volver a descargarlo. Devuelve el texto unas páginas cada vez, los pasajes que contienen una frase con find, o el índice con outline.",
-            "url": "https://jmrplens.github.io/libgen-mcp/es/download-a-paper/#pasos"
+            "url": "https://docs.jmrp.io/libgen-mcp/es/download-a-paper/#pasos"
           }
         ]
       }
@@ -85,9 +85,9 @@ head:
       {
         "@context": "https://schema.org",
         "@type": "FAQPage",
-        "@id": "https://jmrplens.github.io/libgen-mcp/es/download-a-paper/#faq",
+        "@id": "https://docs.jmrp.io/libgen-mcp/es/download-a-paper/#faq",
         "inLanguage": "es",
-        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/es/download-a-paper/#article" },
+        "isPartOf": { "@id": "https://docs.jmrp.io/libgen-mcp/es/download-a-paper/#article" },
         "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
         "mainEntity": [
           {

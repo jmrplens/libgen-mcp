@@ -59,7 +59,7 @@ function dedent(text) {
  * that do not resolve a relative link: `](/libgen-mcp/tools/)` reaches them as a
  * path with no host, and `](#search)` as a fragment of nothing.
  */
-export const SITE_ROOT = "https://jmrplens.github.io/libgen-mcp/";
+export const SITE_ROOT = "https://docs.jmrp.io/libgen-mcp/";
 
 /** The path every page and asset is served under, as the MDX sources write it. */
 const BASE_PATH = "/libgen-mcp/";

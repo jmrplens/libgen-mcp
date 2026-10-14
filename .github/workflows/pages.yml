@@ -1,8 +1,10 @@
 # Build and deploy the Astro Starlight documentation site to GitHub Pages.
 #
 # Pages is already enabled on the repo (build_type: workflow). This publishes
-# site/ to https://jmrplens.github.io/libgen-mcp/ on pushes that touch site/,
-# and on demand.
+# site/ to https://docs.jmrp.io/libgen-mcp/ on pushes that touch site/,
+# and on demand. docs.jmrp.io is the custom domain of the account's user site
+# (the jmrplens/jmrplens.github.io repository); GitHub serves every project
+# site under it and 301s the old jmrplens.github.io/libgen-mcp/ URLs there.
 
 name: Pages
 
@@ -96,10 +98,11 @@ jobs:
 
   # Tell the IndexNow engines (Bing, Yandex, Seznam, Naver share one endpoint)
   # that the pages changed, instead of waiting for them to re-crawl on their own
-  # schedule. GitHub Pages cannot host a key at the domain root — jmrplens.github.io
-  # is a shared user page — but the protocol allows a key in a subdirectory as long
-  # as the payload declares keyLocation and every submitted URL sits under it,
-  # which is exactly the /libgen-mcp/ case.
+  # schedule. This repository cannot host a key at the domain root: docs.jmrp.io
+  # is the custom domain of the shared user site, whose root belongs to the
+  # jmrplens/jmrplens.github.io repository. The protocol allows a key in a
+  # subdirectory as long as the payload declares keyLocation and every submitted
+  # URL sits under it, which is exactly the /libgen-mcp/ case.
   #
   # The key is public by design: it is a token proving control of the path it is
   # served from, not a secret, so it lives in site/public/ rather than in Actions
@@ -113,7 +116,7 @@ jobs:
     continue-on-error: true
     env:
       INDEXNOW_KEY: d60ead3ca4a20806cd8836da6bc70b36
-      SITE: https://jmrplens.github.io
+      SITE: https://docs.jmrp.io
       BASE: /libgen-mcp
     steps:
       - name: Submit sitemap URLs to IndexNow
@@ -129,7 +132,7 @@ jobs:
           # Guard against a malformed sitemap silently submitting nothing.
           test -s urls.txt
           jq -n \
-            --arg host "jmrplens.github.io" \
+            --arg host "docs.jmrp.io" \
             --arg key "$INDEXNOW_KEY" \
             --arg keyLocation "${SITE}${BASE}/${INDEXNOW_KEY}.txt" \
             --rawfile urls urls.txt \

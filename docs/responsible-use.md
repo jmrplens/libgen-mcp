@@ -99,7 +99,7 @@ still serve a copy of the same paper, so check the article's retraction notice b
 relying on a file.
 
 Two of the licence refusals are also checked by the
-[evaluation suite](https://jmrplens.github.io/libgen-mcp/eval-results/) against the live
+[evaluation suite](https://docs.jmrp.io/libgen-mcp/eval-results/) against the live
 services, not only by unit tests: scenario S53 asserts that OAPEN refuses an identifier it
 does not hold cleanly, and S55 that a lending-restricted Internet Archive book is refused
 rather than served.

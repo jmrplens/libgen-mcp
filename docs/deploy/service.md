@@ -20,7 +20,7 @@ from [Behind a reverse proxy](reverse-proxy.md). What each server flag does is i
 ```ini
 [Unit]
 Description=libgen-mcp MCP server (streamable HTTP)
-Documentation=https://jmrp.io/docs/libgen-mcp/deploy/service/
+Documentation=https://docs.jmrp.io/libgen-mcp/deploy/service/
 Wants=network-online.target
 After=network-online.target
 

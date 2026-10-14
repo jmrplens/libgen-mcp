@@ -177,7 +177,7 @@ def build_metadata(version, readme, license_files):
     headers += [("License-File", name) for name in license_files]
     headers += [
         ("Project-URL", "Homepage, https://github.com/jmrplens/libgen-mcp"),
-        ("Project-URL", "Documentation, https://jmrp.io/docs/libgen-mcp/"),
+        ("Project-URL", "Documentation, https://docs.jmrp.io/libgen-mcp/"),
         ("Project-URL", "Repository, https://github.com/jmrplens/libgen-mcp"),
         ("Project-URL", "Changelog, https://github.com/jmrplens/libgen-mcp/releases"),
         # "Issues" and "Security" are labels the well-known project URLs

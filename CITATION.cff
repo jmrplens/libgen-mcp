@@ -13,7 +13,7 @@ authors:
     orcid: "https://orcid.org/0000-0003-1250-6212"
     website: "https://jmrp.io/"
 repository-code: "https://github.com/jmrplens/libgen-mcp"
-url: "https://jmrp.io/docs/libgen-mcp/"
+url: "https://docs.jmrp.io/libgen-mcp/"
 license: MIT
 version: 2.2.1
 date-released: 2026-10-06

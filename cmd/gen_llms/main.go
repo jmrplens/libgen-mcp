@@ -45,13 +45,12 @@ const (
 	llmsDocsFileName      = "llms-docs.txt"
 	llmsSummaryItemFormat = "- %s: %s\n"
 	llmsBoldTitleFormat   = "**%s**\n\n"
-	// The personal domain, not the Pages host it 301s to, matching the repo
-	// homepage, server.json and the rest of the repository markdown. These
-	// files are the surface a model is pointed at from outside the site, so
-	// they carry the durable address; the site's own canonical URLs and
-	// JSON-LD @ids stay on the deployment host, since a canonical that
-	// redirects away contradicts itself.
-	docsSiteURL = "https://jmrp.io/docs/libgen-mcp/"
+	// The documentation site's own address, matching the repo homepage,
+	// server.json, the rest of the repository markdown and the site's
+	// canonical URLs and JSON-LD @ids. docs.jmrp.io is both where the pages
+	// are served and where they are advertised, so these files, the surface
+	// a model is pointed at from outside the site, name no redirect.
+	docsSiteURL = "https://docs.jmrp.io/libgen-mcp/"
 	repoBlobURL = "https://github.com/jmrplens/libgen-mcp/blob/main/"
 )
 

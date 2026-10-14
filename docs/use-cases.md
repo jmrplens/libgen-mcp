@@ -59,7 +59,7 @@ One call is enough:
 `download` offers the DOI to the open-access sources first (OpenAlex, Europe PMC, bioRxiv,
 Zenodo and the rest), then the fallbacks, and saves the first copy one of them serves. Every
 step of this, what to set up and what to do on a miss, is in
-[Download a paper by DOI](https://jmrp.io/docs/libgen-mcp/download-a-paper/). To try one
+[Download a paper by DOI](https://docs.jmrp.io/libgen-mcp/download-a-paper/). To try one
 source and no other, name it, such as `"source": "openalex"`. The `get_paper` prompt takes
 the same DOI, or a free-text citation instead.
 
@@ -110,7 +110,7 @@ The record carries a `citations` field with a `bibtex` entry and a `ris` record,
 is left out of the entries rather than pasted into a reference it may not belong to. The
 Markdown answer shows only the BibTeX, so ask for the RIS explicitly when you want it. Which
 identifier gives the fullest entry, and why a DOI goes missing, is in
-[Citations](https://jmrp.io/docs/libgen-mcp/citations/).
+[Citations](https://docs.jmrp.io/libgen-mcp/citations/).
 
 A bibliography in a house style is one argument more:
 

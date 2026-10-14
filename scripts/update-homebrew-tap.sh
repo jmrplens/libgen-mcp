@@ -79,7 +79,7 @@ cat >"$TAP_DIR/Formula/libgen-mcp.rb" <<EOF
 # https://github.com/jmrplens/libgen-mcp — do not edit by hand.
 class LibgenMcp < Formula
   desc "MCP server for books and papers: Library Genesis and open-access search, download and reading"
-  homepage "https://jmrp.io/docs/libgen-mcp"
+  homepage "https://docs.jmrp.io/libgen-mcp"
   version "${VERSION}"
   license "MIT"
 
@@ -134,7 +134,7 @@ class LibgenMcp < Formula
         command: #{HOMEBREW_PREFIX}/bin/libgen-mcp
 
       Per-client JSON and where settings go:
-        https://jmrp.io/docs/libgen-mcp/clients/
+        https://docs.jmrp.io/libgen-mcp/clients/
     EOS
   end
 

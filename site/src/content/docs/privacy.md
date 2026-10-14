@@ -8,7 +8,7 @@ mentions:
     wikidata: Q121746046
 datePublished: "2026-10-05"
 # Generated from PRIVACY.md by scripts/sync-privacy.mjs — do not edit by hand.
-privacySource: "91cd1025eaf5ce8d"
+privacySource: "f54f4e18dae47aeb"
 head:
   - tag: script
     attrs:
@@ -17,10 +17,10 @@ head:
       {
         "@context": "https://schema.org",
         "@type": "FAQPage",
-        "@id": "https://jmrplens.github.io/libgen-mcp/privacy/#faq",
+        "@id": "https://docs.jmrp.io/libgen-mcp/privacy/#faq",
         "inLanguage": "en",
         "isPartOf": {
-          "@id": "https://jmrplens.github.io/libgen-mcp/privacy/"
+          "@id": "https://docs.jmrp.io/libgen-mcp/privacy/"
         },
         "mainEntity": [
           {

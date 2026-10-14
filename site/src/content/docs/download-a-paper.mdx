@@ -30,12 +30,12 @@ head:
       {
         "@context": "https://schema.org",
         "@type": "HowTo",
-        "@id": "https://jmrplens.github.io/libgen-mcp/download-a-paper/#howto",
+        "@id": "https://docs.jmrp.io/libgen-mcp/download-a-paper/#howto",
         "name": "How to download a paper by DOI with Claude and libgen-mcp",
         "description": "Register libgen-mcp with Claude, ask for a paper by its DOI, and let the download tool try the open-access providers before any shadow-library fallback. No account, API key or token is required.",
         "inLanguage": "en",
         "totalTime": "PT5M",
-        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/download-a-paper/#article" },
+        "isPartOf": { "@id": "https://docs.jmrp.io/libgen-mcp/download-a-paper/#article" },
         "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
         "tool": [
           {
@@ -53,28 +53,28 @@ head:
             "position": 1,
             "name": "Register the server with your client",
             "text": "Add libgen-mcp to your MCP client. In Claude Code it is one command: claude mcp add libgen -- /usr/local/bin/libgen-mcp, with the path replaced by whatever starts the server on your machine. Claude Desktop, Cursor and VS Code take the same command in a configuration file. Restart the client so it picks up the server.",
-            "url": "https://jmrplens.github.io/libgen-mcp/download-a-paper/#steps"
+            "url": "https://docs.jmrp.io/libgen-mcp/download-a-paper/#steps"
           },
           {
             "@type": "HowToStep",
             "position": 2,
             "name": "Ask for the paper by its DOI",
             "text": "Ask in plain language and give the DOI, for example: Download the paper with DOI 10.1371/journal.pone.0000308. The download tool accepts a DOI directly, so there is no need to search first.",
-            "url": "https://jmrplens.github.io/libgen-mcp/download-a-paper/#steps"
+            "url": "https://docs.jmrp.io/libgen-mcp/download-a-paper/#steps"
           },
           {
             "@type": "HowToStep",
             "position": 3,
             "name": "Let the model call download",
             "text": "The model calls download with the DOI. The server offers it to the open-access providers that can serve it, then to the publisher's own deposited link and OAPEN, and only then to Sci-Hub and SciDB, failing over from one to the next. On a local server the file is saved to the download directory and the result gives its path, with verified set to false because a DOI carries no digest to check the bytes against.",
-            "url": "https://jmrplens.github.io/libgen-mcp/download-a-paper/#steps"
+            "url": "https://docs.jmrp.io/libgen-mcp/download-a-paper/#steps"
           },
           {
             "@type": "HowToStep",
             "position": 4,
             "name": "Read or summarize the saved file",
             "text": "Ask the assistant to read or summarize the paper. The read tool takes the path download returned and reads the saved file from disk without fetching it again. It returns the text a few pages at a time, the passages matching a phrase with find, or the table of contents with outline.",
-            "url": "https://jmrplens.github.io/libgen-mcp/download-a-paper/#steps"
+            "url": "https://docs.jmrp.io/libgen-mcp/download-a-paper/#steps"
           }
         ]
       }
@@ -85,9 +85,9 @@ head:
       {
         "@context": "https://schema.org",
         "@type": "FAQPage",
-        "@id": "https://jmrplens.github.io/libgen-mcp/download-a-paper/#faq",
+        "@id": "https://docs.jmrp.io/libgen-mcp/download-a-paper/#faq",
         "inLanguage": "en",
-        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/download-a-paper/#article" },
+        "isPartOf": { "@id": "https://docs.jmrp.io/libgen-mcp/download-a-paper/#article" },
         "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
         "mainEntity": [
           {

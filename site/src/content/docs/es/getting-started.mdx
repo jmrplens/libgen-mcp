@@ -18,12 +18,12 @@ head:
       {
         "@context": "https://schema.org",
         "@type": "HowTo",
-        "@id": "https://jmrplens.github.io/libgen-mcp/es/getting-started/#howto",
+        "@id": "https://docs.jmrp.io/libgen-mcp/es/getting-started/#howto",
         "name": "Cómo instalar libgen-mcp y conectarlo a un asistente de IA",
         "description": "Instala el servidor libgen-mcp, regístralo en un cliente MCP como Claude Code, Claude Desktop o VS Code, y ejecuta una primera búsqueda. Ningún paso requiere cuenta, clave de API ni token.",
         "inLanguage": "es",
         "totalTime": "PT5M",
-        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/es/getting-started/#article" },
+        "isPartOf": { "@id": "https://docs.jmrp.io/libgen-mcp/es/getting-started/#article" },
         "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
         "tool": [
           {
@@ -37,28 +37,28 @@ head:
             "position": 1,
             "name": "Instala el servidor",
             "text": "Usa el gestor de paquetes que ya tengas: npx @jmrp.io/libgen-mcp en npm, uvx libgen-mcp en PyPI, brew install jmrplens/tap/libgen-mcp en Homebrew, o dnx libgen-mcp en NuGet. Si no, descarga el binario estático precompilado para tu plataforma desde la página de releases de GitHub, márcalo como ejecutable y ponlo en tu PATH: es un único ejecutable completamente estático sin nada más que instalar. También puedes descargar la imagen Docker multiarquitectura ghcr.io/jmrplens/libgen-mcp:latest, o compilar desde el código con go install si tienes Go 1.27.2 o superior.",
-            "url": "https://jmrplens.github.io/libgen-mcp/es/getting-started/#instalación"
+            "url": "https://docs.jmrp.io/libgen-mcp/es/getting-started/#instalación"
           },
           {
             "@type": "HowToStep",
             "position": 2,
             "name": "Regístralo en tu cliente MCP",
             "text": "Añade el servidor a la configuración MCP de tu cliente. Claude Code, Claude Desktop y Cursor usan una clave mcpServers cuya entrada apunta command a la ruta absoluta del binario; VS Code y GitHub Copilot usan una clave servers y además fijan type a stdio. Para Claude Code todo el paso es un único comando: claude mcp add libgen -- /usr/local/bin/libgen-mcp.",
-            "url": "https://jmrplens.github.io/libgen-mcp/es/getting-started/#configurar-un-cliente-mcp"
+            "url": "https://docs.jmrp.io/libgen-mcp/es/getting-started/#configurar-un-cliente-mcp"
           },
           {
             "@type": "HowToStep",
             "position": 3,
             "name": "Ejecuta tu primera búsqueda",
             "text": "Reinicia el cliente para que recoja el servidor nuevo y pídele en lenguaje natural que busque un título en Library Genesis. El modelo llama a la herramienta search, y los resultados vuelven con metadatos y hashes MD5 por registro que puede pasar a get_details o download.",
-            "url": "https://jmrplens.github.io/libgen-mcp/es/getting-started/#tu-primera-búsqueda"
+            "url": "https://docs.jmrp.io/libgen-mcp/es/getting-started/#tu-primera-búsqueda"
           },
           {
             "@type": "HowToStep",
             "position": 4,
             "name": "Lee un documento sin descargarlo",
             "text": "Pide al asistente que lea o resuma un resultado en lugar de descargarlo. La herramienta read extrae y pagina el texto de un PDF, EPUB o TXT, de modo que el modelo puede resumir un artículo, buscar dentro de un libro o producir su índice sin traerse el fichero entero.",
-            "url": "https://jmrplens.github.io/libgen-mcp/es/getting-started/#leer-y-resumir"
+            "url": "https://docs.jmrp.io/libgen-mcp/es/getting-started/#leer-y-resumir"
           }
         ]
       }
@@ -69,9 +69,9 @@ head:
       {
         "@context": "https://schema.org",
         "@type": "FAQPage",
-        "@id": "https://jmrplens.github.io/libgen-mcp/es/getting-started/#faq",
+        "@id": "https://docs.jmrp.io/libgen-mcp/es/getting-started/#faq",
         "inLanguage": "es",
-        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/es/getting-started/#article" },
+        "isPartOf": { "@id": "https://docs.jmrp.io/libgen-mcp/es/getting-started/#article" },
         "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
         "mainEntity": [
           {

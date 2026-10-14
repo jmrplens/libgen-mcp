@@ -64,7 +64,7 @@ default nor a step anything takes for you.
 
 The full detail, including what each signal carries and the four traps in the
 standard `OTEL_*` variables, is in the
-[telemetry guide](https://jmrp.io/docs/libgen-mcp/telemetry/).
+[telemetry guide](https://docs.jmrp.io/libgen-mcp/telemetry/).
 
 ## Data flows
 

@@ -65,7 +65,7 @@ Four prompts (`acquire_book`, `research_topic`, `get_paper`,
 Everything works with zero configuration. Optional `LIBGEN_MCP_*` environment
 variables and command-line flags — download directory, HTTP mode, extra search
 sources, opt-in keys — are documented in the
-[configuration reference](https://jmrp.io/docs/libgen-mcp/configuration/).
+[configuration reference](https://docs.jmrp.io/libgen-mcp/configuration/).
 
 ## Supported platforms
 
@@ -76,6 +76,6 @@ option to build from source.
 
 ## Links
 
-- Documentation: <https://jmrp.io/docs/libgen-mcp>
+- Documentation: <https://docs.jmrp.io/libgen-mcp>
 - Source and issues: <https://github.com/jmrplens/libgen-mcp>
 - License: MIT

@@ -18,7 +18,7 @@
     "stdio",
     "cli"
   ],
-  "homepage": "https://jmrp.io/docs/libgen-mcp",
+  "homepage": "https://docs.jmrp.io/libgen-mcp",
   "bugs": "https://github.com/jmrplens/libgen-mcp/issues",
   "repository": {
     "type": "git",
