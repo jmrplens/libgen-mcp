@@ -16,8 +16,15 @@ minimumReleaseAge: 0
 # the fixed release on the same major, and the version mermaid already loads
 # through dagre-d3-es, so the override leaves one copy in the tree rather than
 # introducing a new one. Drop it once chevrotain releases with the fix.
+#
+# serve 14.2.6, its latest release, pins compression to exactly 1.8.1, which
+# GHSA-vc2v-76pw-4v95 rates high (memory leak when a client closes the response
+# early). 1.8.2 is the fixed release, a patch on the same minor whose only
+# dependency change is adding destroy 1.2.0. Drop it once serve releases with
+# compression 1.8.2 or later.
 overrides:
   lodash-es@4.17.23: 4.18.1
+  compression@1.8.1: 1.8.2
 
 # Advisories judged and accepted, each with its reason. This is the only place
 # pnpm reads them from: a `pnpm` field in package.json is ignored with a
