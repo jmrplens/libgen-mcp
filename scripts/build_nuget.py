@@ -128,7 +128,7 @@ dotnet tool install -g libgen-mcp
 dnx libgen-mcp
 ```
 
-Documentation: https://jmrp.io/docs/libgen-mcp/
+Documentation: https://docs.jmrp.io/libgen-mcp/
 """
 
 
@@ -154,7 +154,7 @@ def nuspec(pkg_id, version, description, package_types, readme=True, icon=False)
         # provide a better experience for older clients" — the 400 names
         # https://aka.ms/invalidNuGetLicenseUrl.
         "    <licenseUrl>https://licenses.nuget.org/MIT</licenseUrl>\n"
-        "    <projectUrl>https://jmrp.io/docs/libgen-mcp/</projectUrl>\n"
+        "    <projectUrl>https://docs.jmrp.io/libgen-mcp/</projectUrl>\n"
         '    <repository type="git" url="https://github.com/jmrplens/libgen-mcp" />\n'
         "{optional}"
         "    <tags>mcp mcp-server model-context-protocol libgen open-access books papers ai dotnet-tool</tags>\n"

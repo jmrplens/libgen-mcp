@@ -52,15 +52,15 @@ gh attestation verify ~/.nuget/packages/libgen-mcp.linux-x64/<version>/tools/any
   -R jmrplens/libgen-mcp --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
 ```
 
-From 2.1.0, releases also attest the packages themselves, as they were before nuget.org added its repository signature: remove `.signature.p7s` from a downloaded copy with `zip -d` and run the same `gh attestation verify` on what is left. The steps are in the [NuGet installation guide](https://jmrp.io/docs/libgen-mcp/install/nuget/).
+From 2.1.0, releases also attest the packages themselves, as they were before nuget.org added its repository signature: remove `.signature.p7s` from a downloaded copy with `zip -d` and run the same `gh attestation verify` on what is left. The steps are in the [NuGet installation guide](https://docs.jmrp.io/libgen-mcp/install/nuget/).
 
 ## Configuration
 
-Everything is optional. `LIBGEN_MCP_DOWNLOAD_DIR` chooses where downloads land, `LIBGEN_MCP_UNPAYWALL_EMAIL` enables the Unpaywall source, `LIBGEN_MCP_EXTRA_SOURCES` decides when the open-access searchers are consulted. The full list is in the [configuration reference](https://jmrp.io/docs/libgen-mcp/configuration/).
+Everything is optional. `LIBGEN_MCP_DOWNLOAD_DIR` chooses where downloads land, `LIBGEN_MCP_UNPAYWALL_EMAIL` enables the Unpaywall source, `LIBGEN_MCP_EXTRA_SOURCES` decides when the open-access searchers are consulted. The full list is in the [configuration reference](https://docs.jmrp.io/libgen-mcp/configuration/).
 
 ## Links
 
-- Documentation: <https://jmrp.io/docs/libgen-mcp/>
+- Documentation: <https://docs.jmrp.io/libgen-mcp/>
 - Source and releases: <https://github.com/jmrplens/libgen-mcp>
 - Issues: <https://github.com/jmrplens/libgen-mcp/issues>
 

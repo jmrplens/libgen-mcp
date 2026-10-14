@@ -35,40 +35,40 @@ head:
       {
         "@context": "https://schema.org",
         "@type": "ItemList",
-        "@id": "https://jmrplens.github.io/libgen-mcp/es/tools/#tool-list",
+        "@id": "https://docs.jmrp.io/libgen-mcp/es/tools/#tool-list",
         "name": "Herramientas MCP de libgen-mcp",
         "description": "Las cuatro herramientas MCP que expone libgen-mcp.",
         "itemListOrder": "https://schema.org/ItemListOrderAscending",
         "numberOfItems": 4,
-        "subjectOf": { "@id": "https://jmrplens.github.io/libgen-mcp/es/tools/#article" },
+        "subjectOf": { "@id": "https://docs.jmrp.io/libgen-mcp/es/tools/#article" },
         "itemListElement": [
           {
             "@type": "ListItem",
             "position": 1,
             "name": "search",
             "description": "Búsqueda federada de libros, artículos, cómics, revistas y normas sobre varios catálogos bibliográficos y fuentes de acceso abierto, devolviendo metadatos y hashes MD5 por resultado. El catálogo primario (Library Genesis) se consulta primero; escala a Anna's Archive y a los proveedores de acceso abierto sin clave (arXiv, OpenAlex, Europe PMC, Crossref, OpenLibrary, Project Gutenberg, dblp, PubMed, ERIC) según la política extra_sources. De solo lectura y de mundo abierto.",
-            "url": "https://jmrplens.github.io/libgen-mcp/es/tools/#search"
+            "url": "https://docs.jmrp.io/libgen-mcp/es/tools/#search"
           },
           {
             "@type": "ListItem",
             "position": 2,
             "name": "get_details",
             "description": "Obtiene los metadatos completos de un registro por md5, id de edición o fichero, DOI o una cita pegada en texto libre, con enriquecimiento opcional sin clave desde Crossref y OpenLibrary, citas BibTeX y RIS más APA, MLA, Chicago, Harvard, Vancouver, IEEE o CSL-JSON si se piden, y las referencias del registro o las obras que lo citan según OpenAlex. De solo lectura y de mundo abierto.",
-            "url": "https://jmrplens.github.io/libgen-mcp/es/tools/#get_details"
+            "url": "https://docs.jmrp.io/libgen-mcp/es/tools/#get_details"
           },
           {
             "@type": "ListItem",
             "position": 3,
             "name": "download",
             "description": "Resuelve y descarga un libro por MD5 o ISBN, o un artículo por DOI, mediante una cadena ordenada de fuentes que prueba los proveedores de acceso abierto antes que cualquier alternativa de shadow library. Guarda en un directorio local, o devuelve un resource_link cuando el servidor se ejecuta en remoto. Destructiva cuando guarda un fichero, no destructiva cuando devuelve un enlace; idempotente y de mundo abierto.",
-            "url": "https://jmrplens.github.io/libgen-mcp/es/tools/#download"
+            "url": "https://docs.jmrp.io/libgen-mcp/es/tools/#download"
           },
           {
             "@type": "ListItem",
             "position": 4,
             "name": "read",
             "description": "Extrae y pagina el texto de un PDF, EPUB o TXT sin descargar el fichero entero, busca dentro del documento, produce su índice y lee una entrada del índice como sección. De solo lectura y de mundo abierto.",
-            "url": "https://jmrplens.github.io/libgen-mcp/es/tools/#read"
+            "url": "https://docs.jmrp.io/libgen-mcp/es/tools/#read"
           }
         ]
       }
@@ -82,9 +82,9 @@ head:
       {
         "@context": "https://schema.org",
         "@type": "FAQPage",
-        "@id": "https://jmrplens.github.io/libgen-mcp/es/tools/#faq",
+        "@id": "https://docs.jmrp.io/libgen-mcp/es/tools/#faq",
         "inLanguage": "es",
-        "isPartOf": { "@id": "https://jmrplens.github.io/libgen-mcp/es/tools/#article" },
+        "isPartOf": { "@id": "https://docs.jmrp.io/libgen-mcp/es/tools/#article" },
         "about": { "@id": "https://github.com/jmrplens/libgen-mcp#software" },
         "mainEntity": [
           {

@@ -20,7 +20,7 @@ See
 A Digital Object Identifier, such as `10.1038/nature12373`: the persistent name a registration
 agency (Crossref for most journals) gives a paper or a book chapter. `download`, `read` and
 `get_details` take it as `doi`, and the [source chain](#source-chain) tries the open-access
-sources for it first. See [Download a paper by DOI](https://jmrp.io/docs/libgen-mcp/download-a-paper/).
+sources for it first. See [Download a paper by DOI](https://docs.jmrp.io/libgen-mcp/download-a-paper/).
 
 ### ISBN
 
@@ -101,7 +101,7 @@ all of them. See [Tools](tools.md#search-input).
 
 A collection that distributes copyrighted books and papers without the rightsholders'
 permission. Library Genesis, Anna's Archive and Sci-Hub are shadow libraries; arXiv, Crossref
-and OpenLibrary are not. See [Responsible use](https://jmrp.io/docs/libgen-mcp/responsible-use/).
+and OpenLibrary are not. See [Responsible use](https://docs.jmrp.io/libgen-mcp/responsible-use/).
 
 ### Open access
 

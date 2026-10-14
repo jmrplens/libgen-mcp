@@ -193,7 +193,7 @@ as of 2026-10-04, MIT license. [Repository](https://github.com/rookslog/zlibrary
 ### mwaraic/libgen-mcp
 
 An unrelated project that shares this project's name: see
-[Which libgen-mcp is this?](https://jmrplens.github.io/libgen-mcp/#which-libgen-mcp-is-this).
+[Which libgen-mcp is this?](https://docs.jmrp.io/libgen-mcp/#which-libgen-mcp-is-this).
 It is a TypeScript Cloudflare Worker with 4 tools that search Library Genesis by title or
 author and return the download links on the first mirror's page, without saving a file,
 served over SSE and streamable HTTP, with no stdio transport. Last commit 2025-06-01, no
@@ -249,7 +249,7 @@ sources. mwaraic/libgen-mcp is a TypeScript Cloudflare Worker that searches Libr
 and returns download links from a mirror's page without saving a file.
 
 The home page's
-[Which libgen-mcp is this?](https://jmrplens.github.io/libgen-mcp/#which-libgen-mcp-is-this)
+[Which libgen-mcp is this?](https://docs.jmrp.io/libgen-mcp/#which-libgen-mcp-is-this)
 section sets out how to tell this one apart.
 
 ### Which paper MCP servers produce BibTeX citations?

@@ -93,7 +93,7 @@ wanted:
 ### Out of scope
 
 - **The legality or content of anything the tool retrieves.** That is addressed
-  in [Responsible use](https://jmrp.io/docs/libgen-mcp/responsible-use/),
+  in [Responsible use](https://docs.jmrp.io/libgen-mcp/responsible-use/),
   not here. This project hosts nothing and can take nothing down.
 - **Vulnerabilities in the third-party services** libgen-mcp talks to — Library
   Genesis mirrors, Sci-Hub, Anna's Archive, the open-access providers. Report
@@ -112,7 +112,7 @@ wanted:
 - No analytics and no backend of its own, and telemetry is off by default: every
   network request is a direct consequence of a tool call. The opt-in
   OpenTelemetry export goes only to a collector the operator runs. See the
-  [privacy policy](https://jmrp.io/docs/libgen-mcp/privacy/).
+  [privacy policy](https://docs.jmrp.io/libgen-mcp/privacy/).
 - No credentials are required for any core capability. The two optional keys are
   opt-in, and a key supplied per call is used for that request and never stored.
 - A secret rides in a request header wherever the service accepts one, and where

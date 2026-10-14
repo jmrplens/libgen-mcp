@@ -48,15 +48,15 @@ gh attestation verify "$(command -v libgen-mcp)" -R jmrplens/libgen-mcp \
   --signer-workflow jmrplens/libgen-mcp/.github/workflows/release.yml
 ```
 
-Under `uvx` the binary sits in uv's cache, and `uvx --from libgen-mcp python -c 'import libgen_mcp as m; print(m.find_binary())'` prints its path. The details are in the [PyPI installation guide](https://jmrp.io/docs/libgen-mcp/install/pypi/).
+Under `uvx` the binary sits in uv's cache, and `uvx --from libgen-mcp python -c 'import libgen_mcp as m; print(m.find_binary())'` prints its path. The details are in the [PyPI installation guide](https://docs.jmrp.io/libgen-mcp/install/pypi/).
 
 ## Configuration
 
-Everything is optional. `LIBGEN_MCP_DOWNLOAD_DIR` chooses where downloads land, `LIBGEN_MCP_UNPAYWALL_EMAIL` enables the Unpaywall source, `LIBGEN_MCP_EXTRA_SOURCES` decides when the open-access searchers are consulted. The full list is in the [configuration reference](https://jmrp.io/docs/libgen-mcp/configuration/).
+Everything is optional. `LIBGEN_MCP_DOWNLOAD_DIR` chooses where downloads land, `LIBGEN_MCP_UNPAYWALL_EMAIL` enables the Unpaywall source, `LIBGEN_MCP_EXTRA_SOURCES` decides when the open-access searchers are consulted. The full list is in the [configuration reference](https://docs.jmrp.io/libgen-mcp/configuration/).
 
 ## Links
 
-- Documentation: <https://jmrp.io/docs/libgen-mcp/>
+- Documentation: <https://docs.jmrp.io/libgen-mcp/>
 - Source and releases: <https://github.com/jmrplens/libgen-mcp>
 - Issues: <https://github.com/jmrplens/libgen-mcp/issues>
 

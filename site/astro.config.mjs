@@ -18,7 +18,7 @@ const siteDescription =
 	"Open-source MCP server in Go to search, cite and read books and papers across the Library Genesis catalog and open-access sources. No account required.";
 
 // --- Identity, URLs and structured-data ids ------------------------------
-const siteUrl = "https://jmrplens.github.io";
+const siteUrl = "https://docs.jmrp.io";
 const basePath = "/libgen-mcp";
 const fullUrl = `${siteUrl}${basePath}`;
 const repositoryUrl = "https://github.com/jmrplens/libgen-mcp";
@@ -290,7 +290,7 @@ const jsonLd = JSON.stringify({
 			// node without inventing a property that does not belong to it.
 			url: repositoryUrl,
 			downloadUrl: releaseUrl,
-			installUrl: "https://jmrplens.github.io/libgen-mcp/getting-started/",
+			installUrl: `${fullUrl}/getting-started/`,
 			// Track the current release so this never lags behind softwareVersion.
 			releaseNotes: releaseUrl,
 			softwareHelp: {
@@ -388,7 +388,7 @@ const jsonLd = JSON.stringify({
 });
 
 export default defineConfig({
-	site: "https://jmrplens.github.io",
+	site: siteUrl,
 	base: "/libgen-mcp",
 	// Pages that moved. GitHub Pages cannot answer with a 301, so each old URL is
 	// built as a page that refreshes to the new one. A source is relative to
@@ -527,9 +527,10 @@ export default defineConfig({
 					},
 				},
 				// llms.txt is discovered at the *origin* root, which this project does
-				// not own — jmrplens.github.io is a shared user page. Without a link
-				// from the pages themselves, /libgen-mcp/llms.txt is unreachable
-				// except by guessing the base-path variant.
+				// not own: docs.jmrp.io is the custom domain of the shared user site,
+				// whose root belongs to the jmrplens/jmrplens.github.io repository.
+				// Without a link from the pages themselves, /libgen-mcp/llms.txt is
+				// unreachable except by guessing the base-path variant.
 				{
 					tag: "link",
 					attrs: {
@@ -583,7 +584,7 @@ export default defineConfig({
 					attrs: { name: "author", content: "José Manuel Requena Plens" },
 				},
 				// Search Console and Bing Webmaster ownership. Verifying the host
-				// root at jmrplens.github.io covers this sub-path, but a sub-path
+				// root at docs.jmrp.io covers this sub-path, but a sub-path
 				// registered as a property in its own right — which is what lets you
 				// see this project's queries and sitemap status separately — has to
 				// carry the tag itself. Same tokens as the hub and the sibling docs

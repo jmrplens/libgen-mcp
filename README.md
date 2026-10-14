@@ -32,7 +32,7 @@ You talk to your AI assistant; it does the searching and fetching. You don't nee
 
 > "Find me the latest edition of _Clean Code_." · "Download that paper by its DOI." · "Search comics for _Watchmen_ and grab the CBR." · "Read the first chapter and summarize it."
 
-**📖 Full documentation, install guides & configuration reference → [jmrp.io/docs/libgen-mcp](https://jmrp.io/docs/libgen-mcp/)** (also in [Español](https://jmrp.io/docs/libgen-mcp/es/)). Light context footprint: the four tools add **~6,800 tokens** to a request (`make audit-tokens`), and no account, API key, or token is required. It's also verified against a **real LLM** — see the [eval results](https://jmrp.io/docs/libgen-mcp/eval-results/).
+**📖 Full documentation, install guides & configuration reference → [docs.jmrp.io/libgen-mcp](https://docs.jmrp.io/libgen-mcp/)** (also in [Español](https://docs.jmrp.io/libgen-mcp/es/)). Light context footprint: the four tools add **~6,800 tokens** to a request (`make audit-tokens`), and no account, API key, or token is required. It's also verified against a **real LLM** — see the [eval results](https://docs.jmrp.io/libgen-mcp/eval-results/).
 
 ---
 
@@ -104,7 +104,7 @@ Most other clients take the same entry in an `mcpServers` object:
 
 ## Tools
 
-Every result is returned on two channels: the structured JSON output (fields below) and a human-readable Markdown rendering in the text content — for `search`, a results table with each result's clickable download links. The structured output leads with a `next_steps` guidance list; the Markdown rendering closes with the same guidance under a _Next steps_ heading. Full reference with every field: [docs/tools.md](docs/tools.md) (also [on the site](https://jmrp.io/docs/libgen-mcp/tools/)).
+Every result is returned on two channels: the structured JSON output (fields below) and a human-readable Markdown rendering in the text content — for `search`, a results table with each result's clickable download links. The structured output leads with a `next_steps` guidance list; the Markdown rendering closes with the same guidance under a _Next steps_ heading. Full reference with every field: [docs/tools.md](docs/tools.md) (also [on the site](https://docs.jmrp.io/libgen-mcp/tools/)).
 
 <details>
 <summary><code>search</code> — federated search for books, papers, comics, magazines &amp; standards</summary>
@@ -234,7 +234,7 @@ See the [tools reference](docs/tools.md#prompts) for full argument tables.
 - **Always return a link instead of saving:** `LIBGEN_MCP_REMOTE_DOWNLOADS=true` — makes `download` return a `resource_link` instead of writing a file, for a hosted or remote stdio deployment whose disk the client can't reach (`--http` implies it).
 - **Let a hosted server fetch files itself:** `LIBGEN_MCP_SERVER_FETCH=true` — off by default on a remote deployment, which therefore does **not** register the `read` tool: reading text means pulling the whole file over an egress IP shared by all its users, and one caller's transfers can get that address blocked for everyone. Turn it on to accept that cost and get `read` back. On a local stdio server it is on by default; set it to `false` there to stop the server fetching files at all.
 
-Every other setting — download location, mirror pinning, source allow-list, rate limits, retry/stall schedules, Sci-Hub hosts, `read` limits, cache sizing, the enrichment kill-switch, whether downloads ask before saving — is a tuning knob with a sensible default. See the full **[configuration reference](https://jmrp.io/docs/libgen-mcp/configuration/)** (also in [docs/configuration.md](docs/configuration.md)).
+Every other setting — download location, mirror pinning, source allow-list, rate limits, retry/stall schedules, Sci-Hub hosts, `read` limits, cache sizing, the enrichment kill-switch, whether downloads ask before saving — is a tuning knob with a sensible default. See the full **[configuration reference](https://docs.jmrp.io/libgen-mcp/configuration/)** (also in [docs/configuration.md](docs/configuration.md)).
 
 **Where settings come from.** A non-blank value in the process environment (what your client passed) wins, then the file `LIBGEN_MCP_ENV_FILE` names, then `~/.libgen-mcp.env`; a variable passed blank is filled from the files. **A `.env` in the working directory is never loaded** — the server names it at startup and carries on without it, because a stdio server's working directory is whatever workspace the client opened, so that file arrives with a cloned repository rather than from you. To have one configure the server, name it: `--env-file /abs/path/.env`.
 
@@ -296,7 +296,7 @@ You can restrict which sources participate with `LIBGEN_MCP_SOURCES`; the chain 
 ## Documentation
 
 - Every page lives in [`docs/`](docs/README.md), indexed by kind: the getting-started tutorial, one page per install channel, client set-up, deployment recipes, and the tools, configuration, flag and source references.
-- Full documentation site (bilingual EN/ES): <https://jmrp.io/docs/libgen-mcp/>
+- Full documentation site (bilingual EN/ES): <https://docs.jmrp.io/libgen-mcp/>
 - Changing the code? [`docs/development/`](docs/development/) has the gate record and the testing reference.
 
 ## By the numbers

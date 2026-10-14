@@ -162,7 +162,7 @@ user asks for the behavior:
 | `LIBGEN_MCP_REMOTE_DOWNLOADS` | `false`       | Set to `1` when hosting the stdio server remotely (e.g. behind `mcp-proxy`): `download` returns a link instead of saving a file to an unreachable disk. |
 | `LIBGEN_MCP_SERVER_FETCH`     | `true` locally, `false` on a remote server | Whether the server may fetch a file's bytes itself. Off, the `read` tool is not registered and `download` only returns links. A local stdio install (the one these instructions set up) has it on. |
 
-Full reference: <https://jmrp.io/docs/libgen-mcp/configuration/>
+Full reference: <https://docs.jmrp.io/libgen-mcp/configuration/>
 
 ## Step 3 — Verify the installation
 
@@ -191,4 +191,4 @@ Full reference: <https://jmrp.io/docs/libgen-mcp/configuration/>
 
 - Project README: <https://github.com/jmrplens/libgen-mcp>
 - Getting started (full client config): [docs/getting-started.md](docs/getting-started.md)
-- Docs site: <https://jmrp.io/docs/libgen-mcp/>
+- Docs site: <https://docs.jmrp.io/libgen-mcp/>

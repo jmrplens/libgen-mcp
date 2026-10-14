@@ -166,7 +166,7 @@ const (
 	// this to an end user, for whom the guides are more useful than a source
 	// tree or an API base URL. mcp.jmrp.io/libgen is the real endpoint this
 	// server answers as — that belongs in server.json's remotes, not here.
-	implementationWebsiteURL = "https://jmrp.io/docs/libgen-mcp"
+	implementationWebsiteURL = "https://docs.jmrp.io/libgen-mcp"
 )
 
 // serverInstructions renders the handshake Instructions for the surface this

@@ -313,7 +313,7 @@ func TestTerminalGuidanceSaysWhatTheSilenceMeans(t *testing.T) {
 		"Model Context Protocol",
 		"standard input",
 		"--http",
-		"docs/libgen-mcp/clients/",
+		"docs.jmrp.io/libgen-mcp/clients/",
 	} {
 		t.Run(want, func(t *testing.T) {
 			if !strings.Contains(text, want) {

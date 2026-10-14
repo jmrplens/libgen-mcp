@@ -10,7 +10,7 @@ datePublished: "2026-10-05"
 # Traducción de PRIVACY.md. El digest de abajo fija la versión del original de la
 # que procede: scripts/sync-privacy.mjs --check falla cuando el original cambia y
 # esta traducción se queda atrás.
-privacySource: "91cd1025eaf5ce8d"
+privacySource: "f54f4e18dae47aeb"
 head:
   - tag: script
     attrs:
@@ -19,10 +19,10 @@ head:
       {
         "@context": "https://schema.org",
         "@type": "FAQPage",
-        "@id": "https://jmrplens.github.io/libgen-mcp/es/privacy/#faq",
+        "@id": "https://docs.jmrp.io/libgen-mcp/es/privacy/#faq",
         "inLanguage": "es",
         "isPartOf": {
-          "@id": "https://jmrplens.github.io/libgen-mcp/es/privacy/"
+          "@id": "https://docs.jmrp.io/libgen-mcp/es/privacy/"
         },
         "mainEntity": [
           {

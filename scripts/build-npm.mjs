@@ -182,7 +182,7 @@ function writePlatformPackage(plat, version, binariesDir, outDir, checksums) {
     description: `libgen-mcp prebuilt binary for ${plat.os} ${plat.cpu}. Installed automatically as an optional dependency of @jmrp.io/libgen-mcp.`,
     license: "MIT",
     author: "José M. Requena Plens",
-    homepage: "https://jmrp.io/docs/libgen-mcp",
+    homepage: "https://docs.jmrp.io/libgen-mcp",
     repository: mainRepository,
     os: [plat.os],
     cpu: [plat.cpu],

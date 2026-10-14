@@ -1016,7 +1016,7 @@ declining just moves on), and `core` needs `LIBGEN_MCP_CORE_KEY`.
   LibGen digest for them.
 
 **How it works.** [Sources](sources.md) has each source's corpus, what it does not cover and
-the errors it reports, and [Download a paper](https://jmrp.io/docs/libgen-mcp/download-a-paper/) walks through the route.
+the errors it reports, and [Download a paper](https://docs.jmrp.io/libgen-mcp/download-a-paper/) walks through the route.
 
 ### Book not found by ISBN (open access only)
 
