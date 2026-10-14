@@ -148,7 +148,7 @@ Delete the file. Nothing else was installed; settings, caches and downloads are 
 
 ## Build from source
 
-`go install` compiles the server with your own toolchain, from the module's source. It needs **Go 1.27.1 or newer**, the version `go.mod` names; an older Go from 1.21 on downloads that toolchain by itself unless `GOTOOLCHAIN=local` is set.
+`go install` compiles the server with your own toolchain, from the module's source. It needs **Go 1.27.2 or newer**, the version `go.mod` names; an older Go from 1.21 on downloads that toolchain by itself unless `GOTOOLCHAIN=local` is set.
 
 ```bash
 go install github.com/jmrplens/libgen-mcp/v2/cmd/server@latest

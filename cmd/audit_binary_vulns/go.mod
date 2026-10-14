@@ -2,7 +2,7 @@
 // x/mod, x/telemetry) stay out of the server's go.mod. See doc.go.
 module github.com/jmrplens/libgen-mcp/v2/cmd/audit_binary_vulns
 
-go 1.27.1
+go 1.27.2
 
 require (
 	go.yaml.in/yaml/v3 v3.0.5

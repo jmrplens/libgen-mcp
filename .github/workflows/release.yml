@@ -30,7 +30,7 @@ on:
 permissions: {}
 
 env:
-  GO_VERSION: "1.27.1"
+  GO_VERSION: "1.27.2"
   # The switch every step reads. Its companion, RELEASE_TAG, is the version
   # whichever way the run started, so a step stamps, tags or compares against
   # one name; that one is a job-level variable fed from preflight's output

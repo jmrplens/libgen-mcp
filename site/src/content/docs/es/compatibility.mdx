@@ -55,7 +55,7 @@ Todos los canales salvo `go install` llevan el mismo binario de la release; ning
 | [Homebrew](/libgen-mcp/es/install/homebrew/) (`jmrplens/tap`)           | sí          | sí          | sí          | sí          | no            | no            | Homebrew                                    |
 | [Docker](/libgen-mcp/es/install/docker/) (`linux/amd64`, `linux/arm64`) | sí          | sí          | en una VM   | en una VM   | en una VM     | en una VM     | Cualquier runtime OCI                       |
 | [`.mcpb` de Claude Desktop](/libgen-mcp/es/install/claude-desktop/)     | sí          | sí          | sí          | sí          | sí            | emulado       | Claude Desktop (beta en Linux)              |
-| [`go install`](/libgen-mcp/es/install/binary/)                          | sí          | sí          | sí          | sí          | sí            | sí            | Go, que descarga 1.27.1 por sí mismo        |
+| [`go install`](/libgen-mcp/es/install/binary/)                          | sí          | sí          | sí          | sí          | sí            | sí            | Go, que descarga 1.27.2 por sí mismo        |
 | [winget](/libgen-mcp/es/install/winget/)                                | —           | —           | —           | —           | pendiente     | pendiente     | Aún no publicado                            |
 
 Lo que lleva cada canal por plataforma:
@@ -76,7 +76,7 @@ Notas que importan cuando una plataforma está en el límite:
 - **Windows on Arm y Claude Desktop.** El bundle `.mcpb` de Windows lleva el ejecutable amd64, que Windows on Arm ejecuta emulado. Todos los demás canales que sirven Windows tienen una compilación `arm64` nativa.
 - **Docker en macOS y Windows** ejecuta la imagen de Linux en la máquina virtual que proporciona Docker Desktop (o un equivalente), con la arquitectura de esa VM.
 - **El `.mcpb` de Linux.** El manifiesto de un bundle puede elegir un fichero por sistema operativo pero no por arquitectura, así que el bundle de Linux arranca un pequeño lanzador `/bin/sh` que elige el binario según `uname -m`. Los bundles por sistema se publican por primera vez con la 2.2.0. Para la 2.1.0 y anteriores, el universal `libgen-mcp.mcpb` es el que hay que descargar.
-- **`go install`** compila desde el código con tu cadena de herramientas. `go.mod` declara Go 1.27.1, y cualquier Go desde 1.21 descarga esa cadena por sí mismo salvo que `GOTOOLCHAIN=local` lo impida. El binario que produce se llama `server`, por el paquete `cmd/server`.
+- **`go install`** compila desde el código con tu cadena de herramientas. `go.mod` declara Go 1.27.2, y cualquier Go desde 1.21 descarga esa cadena por sí mismo salvo que `GOTOOLCHAIN=local` lo impida. El binario que produce se llama `server`, por el paquete `cmd/server`.
 - **winget** está pendiente de revisión en [microsoft/winget-pkgs#437507](https://github.com/microsoft/winget-pkgs/pull/437507).
 
 ## Transportes
@@ -156,4 +156,4 @@ La regla cubre la superficie servida, no los resultados: la salida de una herram
 
 ## Cadena de herramientas de Go
 
-El módulo es `github.com/jmrplens/libgen-mcp/v2` y necesita Go 1.27.1 para compilarse, que es la línea `go` de `go.mod`. El sufijo `/v2` es obligatorio: `go install github.com/jmrplens/libgen-mcp/cmd/server@latest` sin él resuelve la última release v1.
+El módulo es `github.com/jmrplens/libgen-mcp/v2` y necesita Go 1.27.2 para compilarse, que es la línea `go` de `go.mod`. El sufijo `/v2` es obligatorio: `go install github.com/jmrplens/libgen-mcp/cmd/server@latest` sin él resuelve la última release v1.
