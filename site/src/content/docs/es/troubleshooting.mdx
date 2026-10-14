@@ -1223,7 +1223,7 @@ Consulta [Binarios de la release](/libgen-mcp/es/install/binary/).
 ### `go install`
 
 - **Se instala una versión antigua, o `module contains a go.mod file, so major version must be compatible`.** La ruta del módulo lleva la versión mayor: `go install github.com/jmrplens/libgen-mcp/v2/cmd/server@latest`. Sin `/v2`, `@latest` resuelve en silencio la release 1.x más reciente, y un `@v2.x.y` se rechaza.
-- **`requires go >= 1.27.1`.** El toolchain es más antiguo de lo que necesita el módulo, y `GOTOOLCHAIN=local` impide que Go descargue uno más nuevo. Instala Go 1.27 o posterior, o deja que cambie de toolchain.
+- **`requires go >= 1.27.2`.** El toolchain es más antiguo de lo que necesita el módulo, y `GOTOOLCHAIN=local` impide que Go descargue uno más nuevo. Instala Go 1.27 o posterior, o deja que cambie de toolchain.
 - **La orden se llama `server`.** `go install` llama al binario como su paquete, `cmd/server`. Compílalo con `go build -o libgen-mcp ./cmd/server` desde un clon para tener el nombre habitual.
 - **`command not found` tras una instalación correcta.** `$(go env GOPATH)/bin` no está en tu `PATH`.
 
