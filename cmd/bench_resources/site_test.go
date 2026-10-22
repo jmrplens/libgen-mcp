@@ -28,17 +28,17 @@ func tempDestinations(t *testing.T) destinations {
 	// The command's own paths are relative to the module root, and a test runs
 	// in its package directory.
 	const moduleRoot = "../.."
-	for _, copy := range []struct{ from, to string }{
+	for _, seed := range []struct{ from, to string }{
 		{filepath.Join(moduleRoot, themeSheet), dest.ThemeSheet},
 		{filepath.Join(moduleRoot, sitePageEN), dest.SitePageEN},
 		{filepath.Join(moduleRoot, sitePageES), dest.SitePageES},
 	} {
-		body, err := os.ReadFile(copy.from) // #nosec G304 -- paths this command owns
+		body, err := os.ReadFile(seed.from) // #nosec G304 -- paths this command owns
 		if err != nil {
-			t.Fatalf("seed %s: %v", copy.from, err)
+			t.Fatalf("seed %s: %v", seed.from, err)
 		}
-		if wErr := os.WriteFile(copy.to, body, 0o600); wErr != nil {
-			t.Fatalf("seed %s: %v", copy.to, wErr)
+		if wErr := os.WriteFile(seed.to, body, 0o600); wErr != nil {
+			t.Fatalf("seed %s: %v", seed.to, wErr)
 		}
 	}
 	return dest
