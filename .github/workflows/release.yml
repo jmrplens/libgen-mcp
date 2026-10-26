@@ -249,7 +249,7 @@ jobs:
           install -m 0755 syft /usr/local/bin/syft
           rm -f "${TARBALL}" syft-checksums.txt syft-checksums.pem syft-checksums.decoded.pem syft-checksums.sig syft
           syft --version
-      - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7
         with:
           # Exact, not `latest` and not `~> v2`: this binary is downloaded at
           # run time into the job that mints this release's signature and holds
@@ -338,7 +338,7 @@ jobs:
       # immutable once it is published.
       - name: Take the OpenVEX document the vex job wrote
         if: env.VEX_STATEMENTS != '0'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: openvex
           path: dist
@@ -420,7 +420,7 @@ jobs:
           (cd dist && tar -cf "${RUNNER_TEMP}/rehearsal-assets.tar" checksums.txt THIRD_PARTY_NOTICES libgen-mcp.mcpb libgen-mcp-*)
           tar -tf "${RUNNER_TEMP}/rehearsal-assets.tar"
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: env.REHEARSAL == 'true'
         with:
           name: rehearsal-assets
@@ -458,7 +458,7 @@ jobs:
           cosign-release: ${{ env.COSIGN_VERSION }}
       - name: Take the rehearsal's own build
         if: env.REHEARSAL == 'true'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: rehearsal-assets
           path: ${{ runner.temp }}/rehearsal
@@ -483,7 +483,7 @@ jobs:
       # trusted publisher on npmjs.com must name this workflow file
       # (release.yml); this job declares no `environment:`, so that field stays
       # blank there.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "22"
           registry-url: https://registry.npmjs.org
@@ -536,7 +536,7 @@ jobs:
           cosign-release: ${{ env.COSIGN_VERSION }}
       - name: Take the rehearsal's own build
         if: env.REHEARSAL == 'true'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: rehearsal-assets
           path: ${{ runner.temp }}/rehearsal
@@ -589,7 +589,7 @@ jobs:
       # adding one would break both at once.
       - name: Publish to PyPI
         if: env.REHEARSAL != 'true'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
         with:
           packages-dir: pypi/dist
           skip-existing: true
@@ -619,7 +619,7 @@ jobs:
           cosign-release: ${{ env.COSIGN_VERSION }}
       - name: Take the rehearsal's own build
         if: env.REHEARSAL == 'true'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: rehearsal-assets
           path: ${{ runner.temp }}/rehearsal
@@ -755,7 +755,7 @@ jobs:
           cosign-release: ${{ env.COSIGN_VERSION }}
       - name: Take the rehearsal's own build
         if: env.REHEARSAL == 'true'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: rehearsal-assets
           path: ${{ runner.temp }}/rehearsal
@@ -832,7 +832,7 @@ jobs:
           cosign-release: ${{ env.COSIGN_VERSION }}
       - name: Take the rehearsal's own build
         if: env.REHEARSAL == 'true'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: rehearsal-assets
           path: ${{ runner.temp }}/rehearsal
@@ -996,7 +996,7 @@ jobs:
           cache: false
       - name: Take the rehearsal's own build
         if: env.REHEARSAL == 'true'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: rehearsal-assets
           path: ${{ runner.temp }}/rehearsal
@@ -1141,7 +1141,7 @@ jobs:
       # The registry logins run in a rehearsal too. They mint a credential and
       # spend nothing, and a policy that has drifted is exactly the kind of
       # failure a rehearsal is for; only the push below is skipped.
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -1159,7 +1159,7 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
       - if: steps.dockerhub-login.outputs.skip == 'false'
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4
         with:
           registry: docker.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -1381,7 +1381,7 @@ jobs:
       # A rehearsal uploads too: the upload is part of the path a release takes
       # and costs a few hundred kilobytes.
       - name: Keep the SBOMs for the signing job
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: image-sboms
           path: image-sbom-*.spdx.json
@@ -1461,7 +1461,7 @@ jobs:
           statements=$(jq '.statements | length' "${RUNNER_TEMP}/libgen-mcp.openvex.json")
           echo "statements=${statements}" >> "$GITHUB_OUTPUT"
           echo "${statements} statements, pinned to ${RELEASE_TAG} and ${INDEX_DIGEST}"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: openvex
           path: ${{ runner.temp }}/libgen-mcp.openvex.json
@@ -1512,13 +1512,13 @@ jobs:
 
       # Nothing is signed or attested in a rehearsal, so nothing below runs and
       # this job needs no credential then either.
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4
         if: env.REHEARSAL != 'true'
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4
         if: env.REHEARSAL != 'true' && env.DOCKERHUB_SKIP == 'false'
         with:
           registry: docker.io
@@ -1527,13 +1527,13 @@ jobs:
 
       - name: Take the SBOMs the docker job generated
         if: env.REHEARSAL != 'true'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: image-sboms
 
       - name: Take the OpenVEX document the vex job wrote
         if: env.REHEARSAL != 'true' && env.VEX_STATEMENTS != '0'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: openvex
 
@@ -1932,7 +1932,7 @@ jobs:
 
       - name: Take the rehearsal's own build
         if: env.REHEARSAL == 'true'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: rehearsal-assets
           path: ${{ runner.temp }}/rehearsal
@@ -2019,7 +2019,7 @@ jobs:
       # Pinned to a commit SHA because this is an individually-maintained action
       # that receives WINGET_TOKEN — a mutable tag would let a compromised
       # release exfiltrate it.
-      - uses: vedantmgoyal9/winget-releaser@4ffc7888bffd451b357355dc214d43bb9f23917e # v2
+      - uses: vedantmgoyal9/winget-releaser@b7370d4d152efdce803a26cc6ca9eee58cb2ad54 # v2
         if: steps.winget-token.outputs.skip == 'false'
         continue-on-error: true
         with:
