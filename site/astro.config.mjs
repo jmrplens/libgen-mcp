@@ -362,7 +362,6 @@ const jsonLd = JSON.stringify({
 				"https://lobehub.com/mcp/jmrplens-libgen-mcp",
 				"https://cursor.directory/plugins/libgen-mcp",
 				"https://glama.ai/mcp/servers/jmrplens/libgen-mcp",
-				"https://smithery.ai/servers/jmrp/libgen-mcp",
 				"https://deepwiki.com/jmrplens/libgen-mcp",
 				"https://verifymcp.io/servers/jmrplens-libgen-mcp/libgen",
 			],
