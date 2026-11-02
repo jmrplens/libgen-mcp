@@ -52,7 +52,7 @@ head:
         ]
       }
   # Resultados de medición, así que Dataset es el tipo correcto. `distribution`
-  # apunta a la ejecución registrada de la que se genera esta página — el
+  # apunta a la ejecución registrada de la que se genera esta página, el
   # artefacto que un motor sí puede descargar. Sin `datePublished` ni
   # `temporalCoverage`: el informe no lleva marca de tiempo, y una fecha
   # inventada aquí sería peor que ninguna.
@@ -68,7 +68,7 @@ head:
         "description": "Resultados de un arnés de evaluación controlado y guiado por un LLM que conecta un modelo de lenguaje real a un servidor libgen-mcp real sobre MCP y evalúa la selección de herramienta, los argumentos, las descargas, los reintentos, el progreso, las citas, el enriquecimiento, la lectura en documento (find/outline), el descubrimiento de acceso abierto, la escalada más allá del catálogo y la elicitación, contra el sitio en vivo de Library Genesis.",
         "inLanguage": "es",
         "url": "https://docs.jmrp.io/libgen-mcp/es/eval-results/",
-        "license": "https://opensource.org/licenses/MIT",
+        "license": "https://opensource.org/license/MIT",
         "isAccessibleForFree": true,
         "keywords": "Model Context Protocol, evaluación de servidores MCP, uso de herramientas por LLM, Library Genesis, acceso abierto, Claude",
         "creator": { "@type": "Person", "@id": "https://jmrp.io/#person", "name": "José Manuel Requena Plens" },
@@ -112,7 +112,7 @@ libgen-mcp incluye un **arnés de evaluación controlado y guiado por un LLM**
 (`cmd/eval`) que va más allá de los tests unitarios y e2e: conecta un **modelo de
 lenguaje real** (Claude Haiku) a un **servidor libgen-mcp real** por el protocolo
 MCP y comprueba que el modelo realmente _usa bien las herramientas_ contra el
-sitio **en vivo** de Library Genesis — la herramienta correcta, los argumentos
+sitio **en vivo** de Library Genesis: la herramienta correcta, los argumentos
 correctos, una recuperación sensata ante fallos y un manejo correcto de la salida
 estructurada.
 
@@ -127,8 +127,8 @@ Para cada escenario, el arnés:
 3. Ejecuta cada llamada de herramienta del modelo **contra el servidor real**
    (mirrors reales, descargas reales) y le devuelve los resultados.
 4. Evalúa la transcripción: el nombre de la herramienta, la forma de los
-   argumentos y si la respuesta MCP real está bien formada — nunca el contenido
-   exacto del catálogo, que cambia con el tiempo.
+   argumentos y si la respuesta MCP real está bien formada. Nunca evalúa el
+   contenido exacto del catálogo, que cambia con el tiempo.
 
 Cada escenario devuelve **PASS**, **FAIL** o **SKIP**. Un SKIP significa que no
 había nada que evaluar: una fuente opcional de la que trata el escenario no aportó
@@ -139,7 +139,7 @@ antes de responder. Nunca es un fallo del modelo.
 <Aside type="note">
 	El arnés está detrás del build tag `eval` y solo se ejecuta con
 	`LIBGEN_EVAL=1` y una `ANTHROPIC_API_KEY`. Gasta tokens reales de la API y
-	hace descargas reales, así que nunca corre en CI — es una comprobación de
+	hace descargas reales, así que nunca corre en CI; es una comprobación de
 	calidad bajo demanda.
 </Aside>
 
@@ -155,25 +155,26 @@ La suite son **81 escenarios** (S1–S80 más la variante S6b). 10 de ellos ejer
 Cubren búsqueda, detalles, descargas, selección de
 fuente, recuperación de errores, progreso, resolución de enlaces, lectura y
 resumen de texto extraído, descubrimiento de acceso abierto, la escalada más
-allá del catálogo de Library Genesis y — de forma importante — prompts **sin
+allá del catálogo de Library Genesis y, de forma importante, prompts **sin
 guiar** que no dan pistas al modelo, para comprobar si la superficie de
 herramientas es lo bastante auto-descriptiva para que un LLM la use sin ayuda. La
 columna de estímulo de cada fila dice de cuál se trata, así que una medición
 guiada nunca se lee como una sin guiar.
 
-S21–S31 cubren las capacidades incorporadas desde v1.2.0: **citas** BibTeX/RIS,
-**enriquecimiento** opcional (metadatos de revista y número de citas vía
-Crossref), los modos **find** (búsqueda dentro del documento) y **outline**
-(tabla de contenidos) de la herramienta `read`, y la **elicitación** condicionada
-a la capacidad del cliente (un email de Unpaywall bajo demanda y una confirmación
-de descarga) con su fallback determinista.
+Los escenarios de S21 a S31 cubren las capacidades incorporadas desde v1.2.0:
+**citas** BibTeX/RIS, **enriquecimiento** opcional (metadatos de revista y número
+de citas vía Crossref), los modos **find** (búsqueda dentro del documento) y
+**outline** (tabla de contenidos) de la herramienta `read`, y la **elicitación**
+condicionada a la capacidad del cliente (un email de Unpaywall bajo demanda y una
+confirmación de descarga) con su fallback determinista.
 
-S32–S41 cubren las **fuentes de búsqueda adicionales**: un título que el catálogo
-no tiene debe encontrarse, describirse, descargarse y leerse igualmente a través
-de Anna's Archive; los tres modos de despliegue deben comportarse como está
-documentado, incluido que `never` es un cierre que ninguna llamada puede levantar;
-y el nivel de socio debe ser descubrible solo desde la superficie de herramientas.
-Varios se repiten contra un servidor en modo **remoto** (`--http`).
+Los escenarios de S32 a S41 cubren las **fuentes de búsqueda adicionales**: un
+título que el catálogo no tiene debe encontrarse, describirse, descargarse y
+leerse igualmente a través de Anna's Archive; los tres modos de despliegue deben
+comportarse como está documentado, incluido que `never` es un cierre que ninguna
+llamada puede levantar; y el nivel de socio debe ser descubrible solo desde la
+superficie de herramientas. Varios se repiten contra un servidor en modo
+**remoto** (`--http`).
 
 {/* generated:scenarios — run `make eval-pages`, do not edit by hand */}
 
@@ -267,26 +268,26 @@ Varios se repiten contra un servidor en modo **remoto** (`--http`).
 ## Bloques local y remoto
 
 La mayoría de los escenarios corre contra un servidor **local**, donde `download`
-escribe el archivo en disco. S17–S18 forman un **bloque remoto**: las mismas
+escribe el archivo en disco. S17 y S18 forman un **bloque remoto**: las mismas
 peticiones de descarga corren contra un servidor en modo remoto (`--http`),
 donde `download` devuelve un enlace en vez de guardar un archivo. El arnés
-entonces descarga ese enlace al sandbox — haciendo las veces de la propia
-herramienta de fetch de un agente — de modo que el archivo termina en local en
+entonces descarga ese enlace al sandbox (haciendo las veces de la propia
+herramienta de fetch de un agente), de modo que el archivo termina en local en
 ambos casos. Juntos, los dos bloques verifican que el modelo se comporta igual
 aunque el servidor se comporte de forma distinta, y que el archivo acaba en
 local de cualquier manera.
 
 Lo que evalúa el bloque remoto es el enlace: el modelo debe llamar a `download` y
 el servidor debe devolver una URL que el arnés pueda descargar. Que el host del
-otro extremo sirva o no a ese arnés es decisión suya — un mirror que devuelve un
+otro extremo sirva o no a ese arnés es decisión suya (un mirror que devuelve un
 500, un editor que hace rebotar a un cliente sin marca por un bucle de
-redirecciones — y ninguna de las dos cosas es conducta que este proyecto
+redirecciones), y ninguna de las dos cosas es conducta que este proyecto
 controle, así que un fetch rechazado se registra en la fila como evidencia y no
 suspende el escenario. Una ejecución en la que no vuelva ningún enlace
-descargable sí lo suspende. S27–S31, y la mitad remota de S32–S37, forman un
-segundo bloque remoto: las comprobaciones de lectura, acceso abierto, citas,
-enriquecimiento y escalada repetidas sobre el mismo transporte `--http`, ocho
-escenarios en total. Con S17 y S18, diez escenarios van por HTTP.
+descargable sí lo suspende. Los escenarios de S27 a S31, y la mitad remota de
+los de S32 a S37, forman un segundo bloque remoto: las comprobaciones de lectura,
+acceso abierto, citas, enriquecimiento y escalada repetidas sobre el mismo
+transporte `--http`, ocho escenarios en total. Con S17 y S18, diez escenarios van por HTTP.
 
 ## Últimos resultados
 
@@ -297,18 +298,18 @@ La tabla siguiente es una única ejecución en vivo de la suite completa el 2026
 
 {/* end generated */}
 
-Nueve de esos aprobados evalúan una ausencia y no un resultado. S32–S37, S40, S41
-y S77 ejercitan Anna's Archive, cuyo sitio HTML respondió a todas las peticiones
-con un desafío de navegador el día de la ejecución, así que lo que midieron es que
-el modelo dijo con claridad que no llegó ningún resultado de Anna's en lugar de
-inventarse uno. Son aprobados por honestidad, y no dicen nada de la ruta de Anna's
-en sí.
+Nueve de esos aprobados evalúan una ausencia y no un resultado. Los escenarios de
+S32 a S37, S40, S41 y S77 ejercitan Anna's Archive, cuyo sitio HTML respondió a
+todas las peticiones con un desafío de navegador el día de la ejecución, así que
+lo que midieron es que el modelo dijo con claridad que no llegó ningún resultado
+de Anna's en lugar de inventarse uno. Son aprobados por honestidad, y no dicen
+nada de la ruta de Anna's en sí.
 
 `libgen-mcp` solo llega a un pleno tras quitar las dos fuentes de falsa
 confianza que había en el arnés: escenarios que se saltaban ante cualquier
 condición de datos en vivo, y aserciones que juzgaban un intento cualquiera en
 lugar de lo que el modelo llegó a conseguir. Un SKIP que se repite no es una
-prueba que pasa, es una pregunta sin hacer — y la primera que esta suite dejó de
+prueba que pasa, es una pregunta sin hacer; la primera que esta suite dejó de
 saltarse resultó ser un modelo inventándose un índice para un fichero que no había
 podido leer.
 
@@ -408,8 +409,8 @@ Ambos pasan justamente por comportarse así.
 
 {/* end generated */}
 
-Una condición de datos en vivo — un 403, un PDF solo escaneado, un mirror que no
-sirve al arnés — ya no salta un escenario. El comportamiento del modelo sigue
+Una condición de datos en vivo (un 403, un PDF solo escaneado, un mirror que no
+sirve al arnés) ya no salta un escenario. El comportamiento del modelo sigue
 siendo plenamente observable cuando la carga útil no llega, y el único movimiento
 equivocado que le queda es afirmar un resultado que nunca recibió, así que esas
 ejecuciones se evalúan por si la respuesta dice con claridad que no vino nada. El

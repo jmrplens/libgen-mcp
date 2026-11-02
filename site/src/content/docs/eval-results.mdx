@@ -52,7 +52,7 @@ head:
         ]
       }
   # Measurement results, so Dataset is the right type. `distribution` points at
-  # the recorded run this page is generated from — the artifact an engine can
+  # the recorded run this page is generated from, the artifact an engine can
   # actually fetch. No `datePublished`/`temporalCoverage`: the run report
   # carries no timestamp, and a date invented here would be worse than none.
   - tag: script
@@ -67,7 +67,7 @@ head:
         "description": "Results of a gated, LLM-driven evaluation harness that connects a real language model to a real libgen-mcp server over MCP and grades tool selection, arguments, downloads, retries, progress, citations, enrichment, in-document read/find/outline, open-access discovery, escalation beyond the catalog and elicitation, against the live Library Genesis site.",
         "inLanguage": "en",
         "url": "https://docs.jmrp.io/libgen-mcp/eval-results/",
-        "license": "https://opensource.org/licenses/MIT",
+        "license": "https://opensource.org/license/MIT",
         "isAccessibleForFree": true,
         "keywords": "Model Context Protocol, MCP server evaluation, LLM tool use, Library Genesis, open access, Claude",
         "creator": { "@type": "Person", "@id": "https://jmrp.io/#person", "name": "José Manuel Requena Plens" },
@@ -111,7 +111,7 @@ libgen-mcp ships a **gated, LLM-driven evaluation harness** (`cmd/eval`) that go
 beyond unit and end-to-end tests: it connects a **real language model** (Claude
 Haiku) to a **real libgen-mcp server** over the MCP protocol and checks that the
 model actually _uses the tools correctly_ against the **live** Library Genesis
-site — the right tool, the right arguments, sensible recovery on failure, and
+site: the right tool, the right arguments, sensible recovery on failure, and
 correct handling of the structured output.
 
 ## How it works
@@ -125,7 +125,8 @@ For each scenario the harness:
 3. Executes every tool call the model makes **against the real server** (real
    mirrors, real downloads) and feeds the results back.
 4. Grades the transcript: the tool name, the argument shape, and whether the
-   real MCP response is well-formed — never exact catalog content, which drifts.
+   real MCP response is well-formed. It never grades exact catalog content,
+   which drifts.
 
 Each scenario returns **PASS**, **FAIL**, or **SKIP**. A SKIP means there was
 nothing to grade: an optional source the scenario is about contributed nothing
@@ -136,7 +137,7 @@ answering. It is never a model failure.
 <Aside type="note">
 	The harness is behind the `eval` build tag and only runs with `LIBGEN_EVAL=1`
 	and an `ANTHROPIC_API_KEY`. It spends real API tokens and performs real
-	downloads, so it never runs in CI — it is an on-demand quality check.
+	downloads, so it never runs in CI; it is an on-demand quality check.
 </Aside>
 
 ## Scenarios
@@ -150,19 +151,19 @@ The suite is **81 scenarios** (S1–S80 plus the S6b variant). 10 of them drive 
 
 They cover search, details, downloads, source selection, error
 recovery, progress, link resolution, reading and summarizing extracted text,
-open-access discovery, the escalation beyond the Library Genesis catalog, and —
-importantly — **uncoached** prompts that give the model no hints, testing whether
+open-access discovery, the escalation beyond the Library Genesis catalog, and,
+importantly, **uncoached** prompts that give the model no hints, testing whether
 the tool surface is self-describing enough for an LLM to use unaided. The
 stimulus column on every row says which kind it is, so a coached measurement is
 never read as an uncoached one.
 
-S21–S31 cover the capabilities shipped since v1.2.0: BibTeX/RIS **citations**,
+S21 to S31 cover the capabilities shipped since v1.2.0: BibTeX/RIS **citations**,
 opt-in **enrichment** (Crossref journal and citation-count metadata), the `read`
 tool's **find** (in-document search) and **outline** (table of contents) modes,
 and capability-gated **elicitation** (an on-demand Unpaywall email prompt, and a
 download-confirmation prompt) with its deterministic fallback.
 
-S32–S41 cover the **extra search sources**: a title the catalog does not carry
+S32 to S41 cover the **extra search sources**: a title the catalog does not carry
 must still be found, described, downloaded and read through Anna's Archive; the
 three deployment modes must behave as documented, including `never` being a lock
 no call can lift; and the membership tier must be discoverable from the tool
@@ -260,21 +261,21 @@ surface alone. Several repeat against a server in **remote** (`--http`) mode.
 ## Local and remote blocks
 
 Most scenarios run against a **local** server, where `download` writes the file to
-disk. S17–S18 form a **remote block**: the same download requests run against a
+disk. S17 and S18 form a **remote block**: the same download requests run against a
 server in remote mode (`--http`), where `download` returns a link instead of
-saving a file. The harness then fetches that link to the sandbox — standing in
-for an agent's own fetch tool — so the file lands locally in both cases.
+saving a file. The harness then fetches that link to the sandbox (standing in
+for an agent's own fetch tool), so the file lands locally in both cases.
 Together the two blocks verify the model behaves the same while the server
 behaves differently, and the file ends up local either way.
 
 What the remote block grades is the link: the model must call `download` and the
 server must hand back a URL the harness can fetch. Whether the host at the far
-end then serves that harness is the host's own decision — a mirror returning 500,
-a publisher bouncing an unbranded client through a redirect loop — and neither is
+end then serves that harness is the host's own decision (a mirror returning 500,
+a publisher bouncing an unbranded client through a redirect loop), and neither is
 behavior this project controls, so a refused fetch is recorded in the row as
 evidence and does not fail the scenario. A run in which no fetchable link came
-back at all does fail it. S27–S31, and the
-remote half of S32–S37, form a second remote block: the read, open-access,
+back at all does fail it. S27 to S31, and the
+remote half of S32 to S37, form a second remote block: the read, open-access,
 citation, enrichment and escalation checks repeated over the same `--http`
 transport, eight scenarios in all. With S17 and S18, ten scenarios run over HTTP.
 
@@ -287,7 +288,7 @@ The table below is a single live run of the full suite on 2026-09-22 against `cl
 
 {/* end generated */}
 
-Nine of those passes grade an absence rather than a result. S32–S37, S40, S41
+Nine of those passes grade an absence rather than a result. S32 to S37, S40, S41
 and S77 exercise Anna's Archive, whose HTML site answered every request with a
 browser challenge on the day of the run, so what they measured is that the model
 said plainly that no Anna's result came back instead of inventing one. They are
@@ -297,7 +298,7 @@ passes on honesty, and say nothing about the Anna's path itself.
 were removed from the harness: scenarios that skipped whenever live data
 misbehaved, and assertions that graded one arbitrary attempt instead of what the
 model achieved. A skip that recurs is not a passing test, it is an unasked
-question — and the first one this suite stopped skipping turned out to be a model
+question; the first one this suite stopped skipping turned out to be a model
 inventing a table of contents for a file it could not read.
 
 Two scenarios in the table are deliberate negatives rather than happy paths. S9
@@ -395,8 +396,8 @@ honest "not found" with the extras staying out. Both pass by behaving that way.
 
 {/* end generated */}
 
-A live-data condition — a 403, a scanned-only PDF, a mirror that will not serve
-the harness — no longer skips a scenario. The model's behavior is still fully
+A live-data condition (a 403, a scanned-only PDF, a mirror that will not serve
+the harness) no longer skips a scenario. The model's behavior is still fully
 observable when the payload does not arrive, and the only wrong move left to it is
 claiming a result it never received, so those runs are graded on whether the answer
 says plainly that nothing came back. SKIP is reserved for the cases with genuinely
