@@ -25,12 +25,24 @@ minimumReleaseAge: 0
 overrides:
   lodash-es@4.17.23: 4.18.1
   compression@1.8.1: 1.8.2
+  # High advisories published after the last dependency update, each lifted
+  # within its own major (2026-11-02): undici before 6.29.1 under cheerio
+  # (pa11y-ci) and before 8.12.2 under unifont (astro).
+  "cheerio>undici": "^6.29.1"
+  "unifont>undici": "^8.12.2"
 
 # Advisories judged and accepted, each with its reason. This is the only place
 # pnpm reads them from: a `pnpm` field in package.json is ignored with a
 # warning, so an exception written there looks applied and is not.
 auditConfig:
   ignoreGhsas:
+    # zod <4.6.6: oversized constrained collections exhaust memory while
+    # validating. Its only copy here is zod 3.25.76 under chromium-bidi, through
+    # pa11y-ci > puppeteer, the accessibility audit tool, which validates its
+    # own protocol messages with it; nothing the site runs or ships depends on
+    # it, and no 3.x release is patched. Retire it when chromium-bidi moves to
+    # zod 4.6.6 or later. Reviewed 2026-11-02.
+    - GHSA-mrhx-c7xc-m3w5
     # extract-zip <=2.0.1, symlink path traversal and arbitrary file write, with
     # no fixed release. Its only path here is pa11y-ci > puppeteer >
     # @puppeteer/browsers, which uses it to unpack the Chromium archive
