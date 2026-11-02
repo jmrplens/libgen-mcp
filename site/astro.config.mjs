@@ -29,9 +29,9 @@ const websiteId = `${fullUrl}/#website`;
 const softwareId = `${repositoryUrl}#software`;
 const sourceCodeId = `${repositoryUrl}#source-code`;
 const socialImageAlt =
-	"libgen-mcp — search, read and download books and papers from Library Genesis, plus open-access discovery, over MCP";
+	"libgen-mcp: search, read and download books and papers from Library Genesis, plus open-access discovery, over MCP";
 
-// Product version — single-sourced from the repo-root VERSION file. Read
+// Product version, single-sourced from the repo-root VERSION file. Read
 // strictly: the pages write it wherever they show how to pin the current
 // release (remarkReleaseVersion), so a build without it has nothing honest to
 // print there and stops.
@@ -94,7 +94,7 @@ const featureList = [
 	"stdio and streamable HTTP transports; no account or API key required",
 ];
 const softwareRequirements =
-	"None — a single static binary; Go 1.27+ only to build from source.";
+	"None: a single static binary; Go 1.27+ only to build from source.";
 
 // Site-wide JSON-LD @graph: the stable Person / WebSite / SoftwareApplication /
 // SourceCode nodes that per-page TechArticle + BreadcrumbList nodes link into.
@@ -110,7 +110,7 @@ const softwareRequirements =
 // purpose: this build runs on a CI runner, and jmrp.io sits behind Cloudflare,
 // CrowdSec and a MikroTik bouncer, where a blocked runner IP would silently
 // degrade this site to a stale snapshot. GitHub serves the same bytes and is
-// already a hard dependency of the build — the checkout comes from it.
+// already a hard dependency of the build: the checkout comes from it.
 const CANONICAL_IDENTITY_URL =
 	"https://raw.githubusercontent.com/jmrplens/jmrp.io/main/public/identity/person.jsonld";
 
@@ -170,7 +170,7 @@ const canonicalPerson = Object.fromEntries(
 /**
  * Topics specific to this project, kept alongside the canonical expertise list
  * rather than replacing it. `knowsAbout` is multi-valued, so the two sets merge
- * instead of conflicting — which is why these may stay local while the
+ * instead of conflicting, which is why these may stay local while the
  * single-valued properties above may not. The full original set is listed, not
  * just the entries the canonical lacks, so this site keeps asserting its own
  * topics even if the canonical list changes.
@@ -239,8 +239,8 @@ const personNode = (() => {
 const jsonLd = JSON.stringify({
 	"@context": "https://schema.org",
 	"@graph": [
-		// The canonical Person entity, fetched at build time — see the
-		// "Canonical identity" block above. Spliced verbatim so this document
+		// The canonical Person entity, fetched at build time (see the
+		// "Canonical identity" block above). Spliced verbatim so this document
 		// and jmrp.io describe the same node with the same values, instead of
 		// two hand-maintained copies that drift.
 		personNode,
@@ -299,10 +299,10 @@ const jsonLd = JSON.stringify({
 				url: `${fullUrl}/`,
 			},
 			image: socialImage,
-			// The same IRI jmrp.io and the other project sites state for this @id.
-			// opensource.org 301s it to /license/MIT; the identifier, not the
-			// fetch, is what has to match.
-			license: "https://opensource.org/licenses/MIT",
+			// The same IRI jmrp.io and the other project sites state for this @id:
+			// OSI's current address for the license, which the old /licenses/MIT
+			// answers 301 to. The identifier, not the fetch, is what has to match.
+			license: "https://opensource.org/license/MIT",
 			isAccessibleForFree: true,
 			datePublished,
 			dateModified,
@@ -328,8 +328,8 @@ const jsonLd = JSON.stringify({
 				},
 			],
 			// No aggregateRating or review: the SoftwareApplication rich result wants
-			// one, but there is no legitimate source for either here — GitHub stars
-			// are not ratings — so the result stays ineligible rather than invented.
+			// one, but there is no legitimate source for either here (GitHub stars
+			// are not ratings), so the result stays ineligible rather than invented.
 			offers: {
 				"@type": "Offer",
 				price: "0",
@@ -374,7 +374,7 @@ const jsonLd = JSON.stringify({
 			codeRepository: repositoryUrl,
 			programmingLanguage: "Go",
 			runtimePlatform: "Windows, macOS, Linux",
-			license: "https://opensource.org/licenses/MIT",
+			license: "https://opensource.org/license/MIT",
 			isPartOf: { "@id": softwareId },
 			// The forward edge to the product; `isPartOf` alone only points back.
 			targetProduct: { "@id": softwareId },
@@ -428,7 +428,7 @@ export default defineConfig({
 					strategy: "inline-svg",
 					// The SVG is baked once, so it cannot follow the theme toggle on its
 					// own. Emit it in neutral light colours and let custom.css repaint it
-					// for dark mode through CSS variables — no JS, no second render, and
+					// for dark mode through CSS variables: no JS, no second render, and
 					// the switch stays instant.
 					mermaidConfig: {
 						theme: "base",
@@ -468,7 +468,7 @@ export default defineConfig({
 			description: siteDescription,
 			expressiveCode: {
 				// Otherwise the code-block stylesheet is emitted as a <link> inside
-				// <body>, mid-content — it blocks render of everything after it and
+				// <body>, mid-content; it blocks render of everything after it and
 				// flashes unstyled code blocks. Inlining it puts the styles in <head>.
 				emitExternalStylesheet: false,
 			},
@@ -585,8 +585,8 @@ export default defineConfig({
 				},
 				// Search Console and Bing Webmaster ownership. Verifying the host
 				// root at docs.jmrp.io covers this sub-path, but a sub-path
-				// registered as a property in its own right — which is what lets you
-				// see this project's queries and sitemap status separately — has to
+				// registered as a property in its own right (which is what lets you
+				// see this project's queries and sitemap status separately) has to
 				// carry the tag itself. Same tokens as the hub and the sibling docs
 				// sites, so all three verify against one account.
 				{
