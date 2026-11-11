@@ -1360,8 +1360,8 @@ See [Release binaries](install/binary.md).
   `go install github.com/jmrplens/libgen-mcp/v2/cmd/server@latest`. Without `/v2`, `@latest`
   quietly resolves the newest 1.x release, and a `@v2.x.y` is refused.
 - **`requires go >= 1.27.4`.** The toolchain is older than the module needs, and
-  `GOTOOLCHAIN=local` stops Go from fetching a newer one. Install Go 1.27 or newer, or let it
-  switch toolchains.
+  `GOTOOLCHAIN=local` stops Go from fetching a newer one. Install Go 1.27.4 or newer, or let
+  it switch toolchains.
 - **The command is called `server`.** `go install` names the binary after its package,
   `cmd/server`. Build it with `go build -o libgen-mcp ./cmd/server` from a clone to get the
   usual name.
