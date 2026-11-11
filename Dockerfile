@@ -5,7 +5,7 @@
 # moving target: the same Dockerfile would build different images on different
 # days, so a reproducible build and an attestation that names what went into it
 # both rest on this. Bumping one is a deliberate act with a diff.
-FROM --platform=$BUILDPLATFORM golang:1.27-alpine@sha256:d530cf60723abf1ffae0cd16bb546b379ec0550d2f3815e5b16ed69dbc00fba4 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf AS builder
 
 # hadolint ignore=DL3018
 RUN apk add --no-cache git ca-certificates
@@ -31,7 +31,7 @@ ARG TARGETARCH
 # stat-ing the *build* host (cmd/link/internal/ld/elf.go): the builder runs on
 # $BUILDPLATFORM, so the native architecture got Alpine's musl loader and every
 # cross-compiled one got a glibc path this image does not ship. Naming the
-# interpreter by hand fixes that, and dropping the flag removes the question —
+# interpreter by hand fixes that, and dropping the flag removes the question:
 # the binary then requests no interpreter at all, which is also what makes it
 # runnable on a musl host, a distroless image or scratch.
 #
@@ -100,7 +100,7 @@ USER appuser
 # Port used only when the server is started in streamable HTTP mode on a TCP
 # address (`--http 0.0.0.0:8080`). The default transport is stdio, which needs no
 # port; nor does the other HTTP form, `--http /run/mcp/libgen.sock`, which binds a
-# unix socket in a mounted directory and publishes nothing at all — the shape to
+# unix socket in a mounted directory and publishes nothing at all: the shape to
 # use when a reverse proxy shares the host. The socket is created 0660, so the
 # proxy's worker processes must run in the group that owns it (10001 here).
 EXPOSE 8080
@@ -126,8 +126,8 @@ LABEL org.opencontainers.image.title="libgen-mcp" \
 
 # The binary probes itself, rather than the image carrying a curl or wget line
 # that restates the flags. Such a line is right for the default command and
-# wrong for every other listener this server supports — another port, a unix
-# socket, TLS this process terminates, a mount under --http-path — each of which
+# wrong for every other listener this server supports (another port, a unix
+# socket, TLS this process terminates, a mount under --http-path), each of which
 # would report unhealthy while serving perfectly, and an orchestrator would then
 # restart a container whose restart changes nothing. --healthcheck reads the
 # listener off the running instance's own command line instead.
@@ -143,14 +143,14 @@ ENTRYPOINT ["libgen-mcp"]
 # The transport is decided by what stdin is, which is what `auto` reads.
 #
 # `docker run -i` connects a pipe and gets a stdio server, which is what an MCP
-# client starts. A run without `-i` connects /dev/null — a Compose file with no
-# `stdin_open`, a Kubernetes pod, anything an orchestrator starts — and used to
+# client starts. A run without `-i` connects /dev/null (a Compose file with no
+# `stdin_open`, a Kubernetes pod, anything an orchestrator starts) and used to
 # get a stdio server reading /dev/null, which is a process that is up, healthy
 # and unreachable. It now gets the HTTP listener the port below advertises.
 #
 # Two consequences worth knowing before overriding it. **Any argument replaces
 # CMD wholesale**, so `docker run image --http :9000` drops `--transport auto`
-# with it — which is fine, since naming a listener is deciding the transport.
+# with it, which is fine, since naming a listener is deciding the transport.
 # And a container binding 0.0.0.0 **with LIBGEN_MCP_ALLOW_PRIVATE_ADDRESSES set
 # is refused at startup**: the default listener below is exactly the shape that
 # refusal is about, so the two settings now meet by default rather than only

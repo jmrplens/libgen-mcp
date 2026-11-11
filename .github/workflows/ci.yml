@@ -11,7 +11,7 @@ name: CI
 on:
   # Deliberately unfiltered by base branch. A stacked pull request is based on
   # the branch below it rather than on main, so a `branches: [main]` filter
-  # silently gives every layer but the bottom one no CI at all — the checks do
+  # silently gives every layer but the bottom one no CI at all: the checks do
   # not fail, they never run, which reads as "nothing to report". Pushes stay
   # filtered: a branch that is not yet a pull request has nothing to gate.
   #
@@ -41,21 +41,21 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: "1.27.3"
+  GO_VERSION: "1.27.4"
   COVERAGE_MIN: "90"
   # The same exact version release.yml pins, for the Release binaries job's
   # snapshot build. Move the two together.
   GORELEASER_VERSION: "v2.18.2"
 
-  # Whether this run checks that the committed generated artifacts — llms.txt,
+  # Whether this run checks that the committed generated artifacts (llms.txt,
   # llms-full.txt, lhm.plugin.json, tool-schema.json, the evaluator pages and the
-  # normalized Markdown tables — are current.
+  # normalized Markdown tables) are current.
   #
   # They are regenerated once, in the layer that changes the surface, and a lower
   # layer of a stack is not that layer. Every layer of a stacked pull request is
   # built as the whole stack up to it merged into the stack's base, so a bottom
   # layer that adds a tool would have to carry regenerated artifacts describing a
-  # surface only the top layer finishes — and a top layer that regenerates them
+  # surface only the top layer finishes, and a top layer that regenerates them
   # would make every layer below it red. Deferring below the top is what lets a
   # stack land one reviewable layer at a time.
   #
@@ -150,7 +150,7 @@ jobs:
   # It was once named for a required status check in the branch ruleset. It is
   # not any more: the ruleset requires `CI verdict` alone, and this job is
   # required by being in that job's `needs` list. So renaming it is safe as long
-  # as `verdict` is renamed with it — which is the general rule for every job
+  # as `verdict` is renamed with it, which is the general rule for every job
   # here, and the reason the ruleset names one check instead of sixteen. See
   # docs/development/repository-settings.md.
   server-json:
@@ -170,9 +170,9 @@ jobs:
         run: make check-manifests
       # The stamper writes what the registry serves, and it runs once per
       # release inside the job holding this repository's publishing identities.
-      # Two of its rewrites fail in a shape that still reads correctly — an OCI
+      # Two of its rewrites fail in a shape that still reads correctly (an OCI
       # entry stamped with another entry's repository, and a digest-pinned
-      # identifier stamped without a digest — so they are driven here, on a
+      # identifier stamped without a digest), so they are driven here, on a
       # fixture, rather than discovered on a tag.
       - name: The release stamper does what server.json's entries need
         run: make check-stamper
@@ -295,7 +295,7 @@ jobs:
       - name: Verify e2e tests compile
         run: go test -tags e2e -c -o /dev/null ./test/e2e/
 
-      # The live e2e suite cannot run here — it depends on third-party mirrors
+      # The live e2e suite cannot run here: it depends on third-party mirrors
       # whose outages would be reported as our regressions. This module depends
       # on nothing external: it builds the binary, drives it over a socket, and
       # skips its nginx cases when the runner has no Docker. So unlike the suite
@@ -427,7 +427,7 @@ jobs:
         run: make test-binary-vulns
 
   # The release workflow only invokes GoReleaser when a tag is pushed, so a
-  # malformed .goreleaser.yml used to surface at the worst possible moment —
+  # malformed .goreleaser.yml used to surface at the worst possible moment:
   # mid-release, after the tag exists. Validate the config on every PR instead.
   goreleaser-config:
     name: GoReleaser config
@@ -463,8 +463,8 @@ jobs:
       - name: llms.txt and llms-full.txt match the registered tools
         if: env.FRESHNESS == 'checked'
         run: make check-llms
-      # LobeHub reads the capability arrays straight out of lhm.plugin.json — its
-      # crawler cannot introspect a Go binary — so a stale manifest publishes the
+      # LobeHub reads the capability arrays straight out of lhm.plugin.json (its
+      # crawler cannot introspect a Go binary), so a stale manifest publishes the
       # previous release's tool surface to the marketplace with no warning.
       - name: lhm.plugin.json matches the registered tools and prompts
         if: env.FRESHNESS == 'checked'
@@ -485,9 +485,9 @@ jobs:
       - name: docs/ names the VERSION file's release wherever the site pins it
         if: env.FRESHNESS == 'checked'
         run: make check-doc-versions
-      # The README's counts are read from the source — the registered tools and
+      # The README's counts are read from the source (the registered tools and
       # prompts, config.KnownSources, config.KnownEnvNames, and a walk of the
-      # tree — so a sentence that says four when the server registers five is a
+      # tree), so a sentence that says four when the server registers five is a
       # failure rather than a stale line nobody notices.
       - name: The README's counts match the source
         if: env.FRESHNESS == 'checked'
@@ -502,7 +502,7 @@ jobs:
       # Not FRESHNESS-gated, unlike everything above it: those check that a
       # generated file was regenerated, which is the top layer of a stack's job.
       # This checks what a button actually registers, and a button can be edited
-      # in any layer — deferring it would let the layer that changes one be the
+      # in any layer; deferring it would let the layer that changes one be the
       # only layer that does not look at it.
       - name: The install buttons agree within each command
         run: make check-install-buttons
@@ -550,7 +550,7 @@ jobs:
   # an image nothing has ever executed on the platform it advertises is not a
   # tested artefact. This job used to build the runner's native platform alone
   # and never run it, which is a shape that cannot see the class of defect the
-  # smoke script's header describes — a cross-compiled binary asking for a
+  # smoke script's header describes: a cross-compiled binary asking for a
   # loader the runtime image does not ship execs fine on amd64 and not at all
   # on arm64.
   #
@@ -580,7 +580,7 @@ jobs:
             echo "docker=true" >> "$GITHUB_OUTPUT"
           else
             echo "docker=false" >> "$GITHUB_OUTPUT"
-            echo "No Docker-related files changed — skipping build"
+            echo "No Docker-related files changed; skipping build"
           fi
       # QEMU so the non-native variant can be executed here, not only built.
       - name: Set up QEMU
@@ -625,7 +625,7 @@ jobs:
         working-directory: site
         env:
           # The lint job does not run pa11y, so skip puppeteer's Chromium download.
-          # Playwright's browser is a separate install, handled below — Mermaid
+          # Playwright's browser is a separate install, handled below; Mermaid
           # needs it and puppeteer's copy would not satisfy that.
           PUPPETEER_SKIP_DOWNLOAD: "true"
       # Advisories rated high or critical in anything the site installs. The
@@ -695,7 +695,7 @@ jobs:
       - run: go test ./... -count=1
       # The stdio module belongs on all three platforms rather than on Linux
       # alone: what it drives is a process, two pipes and a termination signal,
-      # and each of those is spelled differently on Windows — the home directory
+      # and each of those is spelled differently on Windows: the home directory
       # the server resolves its cache through, the console event that stands in
       # for SIGTERM, the executable extension. None of that is exercised by the
       # unit suite above.
@@ -781,7 +781,7 @@ jobs:
   # Naming every job in the ruleset means a job added later is not a gate until
   # somebody remembers to add it there too, which is a protection that weakens
   # each time the pipeline grows. This job needs them all, so a new job becomes
-  # required by being added to its needs list — one edit, in the file the job
+  # required by being added to its needs list: one edit, in the file the job
   # was added to.
   #
   # always() is what makes it able to report at all: without it the job is

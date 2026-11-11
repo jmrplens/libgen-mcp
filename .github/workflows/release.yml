@@ -30,7 +30,7 @@ on:
 permissions: {}
 
 env:
-  GO_VERSION: "1.27.3"
+  GO_VERSION: "1.27.4"
   # The switch every step reads. Its companion, RELEASE_TAG, is the version
   # whichever way the run started, so a step stamps, tags or compares against
   # one name; that one is a job-level variable fed from preflight's output
@@ -53,7 +53,7 @@ env:
   COSIGN_VERSION: "v3.1.3"
   # syft and oras are fetched by hand in the jobs that hold a signing identity,
   # so they are pinned here and their SHA256 beside each install. Dependabot
-  # does not see a curl, so these move when somebody moves them — deliberately
+  # does not see a curl, so these move when somebody moves them, deliberately
   # a release old rather than the newest, which is the same window the
   # `cooldown: 3` on every Dependabot ecosystem buys.
   SYFT_VERSION: "v1.52.0"
@@ -61,7 +61,7 @@ env:
 
 jobs:
   # The one check that runs before anything else spends a runner, and the answer
-  # every later job releases — or rehearses — as.
+  # every later job releases (or rehearses) as.
   #
   # The docker job tagged ghcr.io from the VERSION file while everything else
   # used the git tag, and nothing compared them: a tag pushed without the bump
@@ -94,7 +94,7 @@ jobs:
           fi
           TAG_V="${TAG#v}"
           if [ "${FILE_V}" != "${TAG_V}" ]; then
-            echo "::error::VERSION file says ${FILE_V} but the tag is v${TAG_V} — the docker job would tag ghcr.io:${FILE_V} while server.json pins ghcr.io/jmrplens/libgen-mcp:${TAG_V}"
+            echo "::error::VERSION file says ${FILE_V} but the tag is v${TAG_V}: the docker job would tag ghcr.io:${FILE_V} while server.json pins ghcr.io/jmrplens/libgen-mcp:${TAG_V}"
             if [ "$REHEARSAL" = "true" ]; then
               echo "::error::a rehearsal is of the version this tree carries: leave the tag input empty, or set it to v${FILE_V}"
             fi
@@ -106,8 +106,8 @@ jobs:
   # The gate in front of everything a tag sets in motion.
   #
   # Nothing used to stand between a tag push and published binaries, a pushed
-  # image and a registry entry. The live e2e suite cannot fill that slot — it
-  # depends on third-party mirrors a release runner may not reach — but this
+  # image and a registry entry. The live e2e suite cannot fill that slot (it
+  # depends on third-party mirrors a release runner may not reach), but this
   # module depends on nothing external, so it can.
   #
   # It deliberately declares no permissions beyond the default read and takes no
@@ -178,7 +178,7 @@ jobs:
     # `docker` is a dependency and not a sibling: server.json declares the two
     # images by digest, and a digest only exists once the index has been pushed.
     # Stamping before that would pin the previous release's image under the new
-    # tag — which is the one failure a reader of the manifest cannot see, since
+    # tag, which is the one failure a reader of the manifest cannot see, since
     # the tag in the identifier would look right.
     #
     # `sign-attest` is named here so a failed signature stops every publisher.
@@ -207,7 +207,7 @@ jobs:
       # Fetched by hand rather than through anchore/sbom-action/download-syft.
       # That action is pinned by SHA, but on Linux it downloads
       # raw.githubusercontent.com/anchore/syft/main/install.sh and runs it with
-      # sh — so the code that executed here came from a branch head. This job
+      # sh, so the code that executed here came from a branch head. This job
       # mints the release's cosign signature and holds the identity npm, PyPI,
       # NuGet and the attestation store trust, which is precisely where nothing
       # may be resolved at run time. Pinning the action pinned nothing about
@@ -254,7 +254,7 @@ jobs:
           # Exact, not `latest` and not `~> v2`: this binary is downloaded at
           # run time into the job that mints this release's signature and holds
           # every publishing identity, so SHA-pinning the action that fetches it
-          # pins nothing about the thing fetched. Never past v2 — the config is
+          # pins nothing about the thing fetched. Never past v2: the config is
           # a `version: 2` config.
           version: ${{ env.GORELEASER_VERSION }}
           # A rehearsal builds everything and publishes nothing: --snapshot skips
@@ -290,13 +290,13 @@ jobs:
       - name: The release binaries carry no undeclared advisory
         run: make check-binary-vulns BINARIES='dist/libgen-mcp_*/libgen-mcp*'
 
-      # GoReleaser leaves every binary in a per-target subdirectory — the first
+      # GoReleaser leaves every binary in a per-target subdirectory; the first
       # rehearsal proved it: dist/artifacts.json names
       # `libgen-mcp-linux-amd64` with a path of
       # `dist/libgen-mcp_linux_amd64_v1/libgen-mcp`. The release-asset name
       # exists only in that manifest, so `dist/` has no file under it and every
-      # step below that takes a directory of assets — the npm, PyPI and NuGet
-      # builders, and their validators — finds nothing.
+      # step below that takes a directory of assets (the npm, PyPI and NuGet
+      # builders, and their validators) finds nothing.
       #
       # It went unnoticed because each of those channels landed after the last
       # tag, so none of them had ever run. `build-mcpb.sh` is the exception and
@@ -311,8 +311,8 @@ jobs:
               done
           ls -1 dist/
 
-      # Built in a rehearsal too — packing the bundles is the part that can
-      # break, and they are the files server.json's hashes are taken from — and
+      # Built in a rehearsal too (packing the bundles is the part that can
+      # break, and they are the files server.json's hashes are taken from) and
       # uploaded only when there is a release to attach them to. One run packs
       # four: one per operating system, which server.json declares, and the
       # universal libgen-mcp.mcpb, kept under its old name for the links that
@@ -350,7 +350,7 @@ jobs:
         run: gh release upload "v${RELEASE_TAG#v}" dist/libgen-mcp.openvex.json --clobber
 
       # SLSA build provenance for every asset this release ships, stored in
-      # GitHub's attestation store — no release asset changes and nothing is
+      # GitHub's attestation store: no release asset changes and nothing is
       # re-uploaded. The cosign signature over checksums.txt answers "did our
       # release job mint this manifest"; provenance answers the other question,
       # which commit and which workflow run produced these bytes, and until now
@@ -362,7 +362,7 @@ jobs:
       # smuggled in. The
       # .mcpb bundles need their own step: they are built after GoReleaser, so
       # appending them to checksums.txt would invalidate the signature over that
-      # file — the same reason the stamper hashes each bundle itself rather than
+      # file, the same reason the stamper hashes each bundle itself rather than
       # reading it from there. One glob attests all four, so a bundle added to
       # the build is attested without an edit here.
       #
@@ -387,8 +387,8 @@ jobs:
         with:
           subject-path: dist/libgen-mcp.openvex.json
 
-      # Every asset — binaries, checksums.txt and its signature, the SBOMs,
-      # THIRD_PARTY_NOTICES and the .mcpb bundles above — is attached before the release
+      # Every asset (binaries, checksums.txt and its signature, the SBOMs,
+      # THIRD_PARTY_NOTICES and the .mcpb bundles above) is attached before the release
       # becomes visible, so no
       # installer or updater ever observes a partial one. GoReleaser creates it
       # as a draft (.goreleaser.yml: draft: true) and this is the flip.
@@ -468,7 +468,7 @@ jobs:
           REHEARSAL_ARCHIVE: ${{ env.REHEARSAL == 'true' && format('{0}/rehearsal/rehearsal-assets.tar', runner.temp) || '' }}
         run: bash scripts/fetch-release-assets.sh "${RELEASE_TAG#v}" dist
 
-      # npm publish via OIDC trusted publisher — no stored token. dist/ holds
+      # npm publish via OIDC trusted publisher, with no stored token. dist/ holds
       # the release binaries under their published names, fetched and checked
       # against the signed checksums.txt above. This job's id-token: write
       # permission lets npm mint the OIDC token; npm >= 11.5.1 performs the
@@ -509,8 +509,8 @@ jobs:
           # than rebuilding it and shipping bytes nothing looked at.
           bash scripts/publish-npm.sh dist "${RELEASE_TAG#v}" --no-assemble
 
-  # PyPI runs beside npm rather than after it — they share no state now that
-  # each fetches the release for itself — and all three come before the registry
+  # PyPI runs beside npm rather than after it (they share no state now that
+  # each fetches the release for itself), and all three come before the registry
   # publish, which is an explicit `needs:` edge on the mcp-registry job:
   # mcp-publisher validates ownership by fetching each package server.json
   # declares, so a package declared and not yet published fails the release
@@ -552,8 +552,8 @@ jobs:
       # Rehearsal only, and the counterpart of the NuGet login below: it
       # performs the same OIDC exchange the publish would, gets a short-lived
       # API token back and throws it away. Without this a rehearsal proves
-      # nothing about PyPI — the upload is the only step that touches the
-      # policy, and it is skipped — so a publisher named for the wrong workflow
+      # nothing about PyPI (the upload is the only step that touches the
+      # policy, and it is skipped), so a publisher named for the wrong workflow
       # file or with an environment set would surface for the first time at a
       # tag, after the release is already public.
       #
@@ -584,7 +584,7 @@ jobs:
       # OIDC trusted publisher: no stored token, PEP 740 attestations attached
       # automatically, and skip-existing lets a re-run land on files already
       # uploaded without failing. The publisher on pypi.org names this
-      # repository, this workflow file and a **blank** environment — this job
+      # repository, this workflow file and a **blank** environment: this job
       # declares no `environment:`, exactly as the npm publisher requires, and
       # adding one would break both at once.
       - name: Publish to PyPI
@@ -684,7 +684,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       # nuget.org trusted publishing: the job's OIDC token is exchanged for an
-      # API key that lives one hour. **This runs in a rehearsal too** — it mints
+      # API key that lives one hour. **This runs in a rehearsal too**: it mints
       # a credential and spends nothing, and a policy that has drifted is
       # exactly what a rehearsal should catch. The input is the nuget.org
       # profile name, which is public, so it is a literal rather than a secret.
@@ -717,7 +717,7 @@ jobs:
   #
   # It exists because the publishers **re-assemble** their packages after
   # validating them, so the bytes that were validated are not necessarily the
-  # bytes that went out — and of the six per-platform binaries, only the
+  # bytes that went out, and of the six per-platform binaries, only the
   # runner's own is ever executed by any check. A stale or swapped binary for
   # the other five reaches three registries that cannot be corrected, with
   # nothing in the pipeline looking at it again.
@@ -725,8 +725,8 @@ jobs:
   # This is the only step that inspects the bytes a user installs, and it runs
   # in a job holding no publishing credential of any kind. The retry budget is
   # the same allowance the registry publish gives itself and for the same
-  # reason — this runs minutes after the uploads, and a registry CDN that has
-  # not caught up answers 404 — and it is spent only on downloads: a digest
+  # reason (this runs minutes after the uploads, and a registry CDN that has
+  # not caught up answers 404), and it is spent only on downloads: a digest
   # that does not match fails on sight, with no second attempt.
   #
   # The NuGet packages are also compared whole, with nuget.org's repository
@@ -809,8 +809,8 @@ jobs:
   # them as an explicit `needs:` edge. The registry validates the npm entry by
   # reading mcpName off the published package, the PyPI one by GETting
   # pypi.org's JSON for this version, the NuGet one by reading that version's
-  # README off the v3 feed, and the two OCI entries by resolving the image tag
-  # — so racing any of those uploads spends the retry budget on a version that
+  # README off the v3 feed, and the two OCI entries by resolving the image tag,
+  # so racing any of those uploads spends the retry budget on a version that
   # is not there yet. `sign-attest` is named too: this job is what points
   # installers at the image, and it must not advertise an index nobody signed.
   mcp-registry:
@@ -848,7 +848,7 @@ jobs:
       # Runs in a rehearsal too, and that is the point: this is where the
       # stamper meets a real digest and a real bundle, and a rehearsal that
       # skipped it could not catch the one thing the stamper's refusals exist
-      # for. The working tree only — the commit to main is a separate job with
+      # for. The working tree only: the commit to main is a separate job with
       # a separate credential. The stamp writes one mcpb entry per bundle
       # given, so the single universal entry main declared before the first
       # per-OS release becomes three, and refuses a set that does not serve
@@ -864,7 +864,7 @@ jobs:
             "${OCI_DIGEST}"
           # Prove the pin landed before anything is published. mcp-publisher reads
           # server.json, so a pin that silently no-opped would publish the previous
-          # version — and the duplicate-version guard below would then report that
+          # version, and the duplicate-version guard below would then report that
           # as "already published" and let the release go green with the registry
           # never advancing. Fail here, where the cause is still obvious.
           PINNED=$(jq -r '.version' server.json)
@@ -924,7 +924,7 @@ jobs:
             # wordings the registry itself labels transient; a plain 404 is
             # deliberately absent, so a package that genuinely was not
             # published fails on the first attempt instead of eight minutes
-            # later. The OCI entry's own 404 is absent for the same reason —
+            # later. The OCI entry's own 404 is absent for the same reason:
             # the image was pushed by the job this one needs.
             if grep -qE "take a moment to appear|retry later|retry shortly|validation timed out|wait for validation to complete" mcp-publisher-publish.log; then
               echo "::notice::the registry has not caught up with this release yet (attempt ${attempt}); retrying in 60s"
@@ -940,7 +940,7 @@ jobs:
             # there is no longer a path where a stale manifest re-offers an older
             # version and hides behind this branch. Matching the registry's error
             # text alone therefore keeps re-runs idempotent without reopening that
-            # hole — the guard that closes it is the assertion, not this grep.
+            # hole; the guard that closes it is the assertion, not this grep.
             if grep -q "invalid version: cannot publish duplicate version" mcp-publisher-publish.log; then
               echo "::notice::MCP Registry already has ${VERSION}; this is a re-run, continuing"
             else
@@ -961,8 +961,8 @@ jobs:
   # the publishers also preserves the old single-job semantics: a failed publish
   # aborted before the commit ever happened.
   #
-  # It holds the deploy key alone and runs no third-party code — no build
-  # action, no CLI resolved at run time — which is the point of it being a job
+  # It holds the deploy key alone and runs no third-party code (no build
+  # action, no CLI resolved at run time), which is the point of it being a job
   # rather than the tail of one that does. The Go it installs is the pinned
   # toolchain, uncached, and it runs this repository's own stdlib-only
   # generators before the key is written to disk.
@@ -1031,7 +1031,7 @@ jobs:
           # main is protected by a ruleset. Push over SSH with a write-enabled
           # deploy key, which the ruleset's DeployKey bypass allows.
           if [ -z "${RELEASE_DEPLOY_KEY_B64:-}" ]; then
-            echo "::warning::RELEASE_DEPLOY_KEY_B64 not set — skipping the server.json pin-back to main."
+            echo "::warning::RELEASE_DEPLOY_KEY_B64 not set; skipping the server.json pin-back to main."
             exit 0
           fi
 
@@ -1050,8 +1050,8 @@ jobs:
             exit 1
           fi
           # The script is idempotent and reads checksums.txt, the version and
-          # the three bundles — checked against this release's cosign-signed
-          # manifest and their own attestations by the fetch step above — so
+          # the three bundles (checked against this release's cosign-signed
+          # manifest and their own attestations by the fetch step above), so
           # running it here on current main produces the same fields the
           # registry job stamped. It rebuilds the mcpb entries from the
           # bundles, so the first release that builds per-OS bundles turns
@@ -1106,7 +1106,7 @@ jobs:
     #
     # In a rehearsal it is the digest of the index exported to a tarball, read
     # back by the step below, so the stamping step downstream runs on a real
-    # value rather than being skipped — which is the only way a rehearsal can
+    # value rather than being skipped, which is the only way a rehearsal can
     # exercise the refusals that exist for exactly this field.
     outputs:
       digest: ${{ steps.rehearsal-digest.outputs.digest || steps.docker-push.outputs.digest }}
@@ -1131,8 +1131,8 @@ jobs:
       - name: Extract version
         id: version
         run: echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
-      # cosign is here to *verify* a download — syft's own signed checksums,
-      # below — and for nothing else. This job has no `id-token`, so there is
+      # cosign is here to *verify* a download (syft's own signed checksums,
+      # below) and for nothing else. This job has no `id-token`, so there is
       # no keyless identity to sign with even if a step tried to; signing lives
       # in sign-attest, which runs none of the build code this job does.
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
@@ -1154,7 +1154,7 @@ jobs:
         run: |
           if [ -z "${DOCKERHUB_USERNAME}" ] || [ -z "${DOCKERHUB_TOKEN}" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "::warning::DOCKERHUB_USERNAME/DOCKERHUB_TOKEN not set — skipping Docker Hub publish."
+            echo "::warning::DOCKERHUB_USERNAME/DOCKERHUB_TOKEN not set; skipping Docker Hub publish."
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
@@ -1286,7 +1286,7 @@ jobs:
       # document *inside* the index as an attestation manifest, one per
       # platform, and a client reading the registry's referrers never sees it:
       # those two `unknown/unknown` manifests are part of the index rather than
-      # referrers of anything. Both are kept — they answer different readers
+      # referrers of anything. Both are kept: they answer different readers
       # and neither replaces the other.
       #
       # Per platform rather than over the index, because an SBOM describes
@@ -1338,7 +1338,7 @@ jobs:
       # Scanned from ghcr.io alone: both registries hold the byte-identical
       # index, so a platform digest names the same bytes on either and one
       # document is what gets attested to both. `--platform` beside the digest
-      # is for the document's own record — a manifest digest already names one
+      # is for the document's own record: a manifest digest already names one
       # platform's bytes, but syft learns the architecture only from the flag,
       # and without it the image purl carries an empty arch qualifier.
       #
@@ -1395,13 +1395,13 @@ jobs:
       # image publish. The full README (~50KB) exceeds Docker Hub's 25,000
       # character limit, so .github/dockerhub-description.md carries the
       # Docker-relevant sections. DOCKERHUB_TOKEN must be a Docker Hub PAT
-      # with read/write/delete scope — the descriptions API rejects narrower
+      # with read/write/delete scope; the descriptions API rejects narrower
       # ones.
       - name: Update Docker Hub description
         if: env.REHEARSAL != 'true' && steps.dockerhub-login.outputs.skip == 'false'
         # Pinned to a commit SHA (unlike the org-owned actions above) because
         # this is an individually-maintained action that receives
-        # DOCKERHUB_TOKEN — a mutable tag would let a compromised release
+        # DOCKERHUB_TOKEN: a mutable tag would let a compromised release
         # exfiltrate it.
         uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
         with:
@@ -1475,7 +1475,7 @@ jobs:
   # build is not byte-reproducible: BuildKit's `provenance: true` attestation
   # carries its own timestamps whatever the build args say. With the signing
   # inside that job, one signature failing meant "re-run failed jobs" rebuilt
-  # the image and pushed a NEW index under the same version and `latest` tags —
+  # the image and pushed a NEW index under the same version and `latest` tags,
   # orphaning the index that had already been signed and leaving server.json
   # pinning a digest the tag no longer resolves to. Here a failed signature
   # re-runs two minutes of signing against the image that is already published,
@@ -1483,7 +1483,7 @@ jobs:
   # moves is a registry tag.
   #
   # The second is who holds the identity. This job runs no third-party build
-  # action — no QEMU, no BuildKit, no Dockerfile. The docker job keeps
+  # action: no QEMU, no BuildKit, no Dockerfile. The docker job keeps
   # `packages: write` and loses `id-token`, so the credential the attestation
   # store trusts is no longer live while code fetched at build time runs.
   sign-attest:
@@ -1569,7 +1569,7 @@ jobs:
       # in-toto predicate is empty: they answer "was this pushed by our release
       # job" and not "which commit and which run produced it". That second
       # question is build provenance, which the release assets now answer and
-      # the image did not — the only provenance it carried was BuildKit's own
+      # the image did not: the only provenance it carried was BuildKit's own
       # `provenance: true` attestation, unsigned in-toto JSON inside the index,
       # bound to no verifiable identity.
       #
@@ -1653,15 +1653,15 @@ jobs:
       # docker job's package-count guard already covers, and it derives the
       # predicate type from `spdxVersion`, which yields
       # https://spdx.dev/Document/v2.3. The in-toto specification blesses that
-      # spelling and the unversioned https://spdx.dev/Document equally — both
-      # are listed as Type URIs — so this is interoperability, not correctness.
+      # spelling and the unversioned https://spdx.dev/Document equally (both
+      # are listed as Type URIs), so this is interoperability, not correctness.
       # It matters because Trivy matches the unversioned literal by exact
       # equality: the versioned form is read as "unknown" and refused. cosign,
       # BuildKit and in-toto-golang all emit the unversioned form.
       #
       # Six steps, the index included. An index has no contents of its own, so
       # the index attestation carries the amd64 document by convention rather
-      # than by right — and it is there because a consumer that resolves a tag
+      # than by right, and it is there because a consumer that resolves a tag
       # looks at the index and nowhere else: with the SBOM on the platform
       # manifests alone, `trivy image <tag>` finds nothing and `--platform`
       # does not change it.
@@ -1880,7 +1880,7 @@ jobs:
       # wrote. The distribution spec says that descriptor MUST carry the pushed
       # manifest's artifactType and copy all of its annotations; cosign writes
       # it through go-containerregistry, whose releases before v0.22.1 wrote
-      # less — so a signature lands in the list as
+      # less, so a signature lands in the list as
       # "application/vnd.oci.empty.v1+json" with no annotations. The manifest
       # behind it is right; the list entry is not, and `gh attestation verify
       # --bundle-from-oci`, Kyverno and Trivy all filter on exactly those
@@ -1966,7 +1966,7 @@ jobs:
           # The tap repository and its deploy key are set up once, by hand. Until
           # then a release is not held up by a channel that does not exist yet.
           if [ -z "${TAP_DEPLOY_KEY_B64}" ]; then
-            echo "::warning::TAP_DEPLOY_KEY_B64 is not configured — skipping the Homebrew tap update"
+            echo "::warning::TAP_DEPLOY_KEY_B64 is not configured; skipping the Homebrew tap update"
             exit 0
           fi
           KEY_FILE="${RUNNER_TEMP}/tap_deploy_key"
@@ -1995,7 +1995,7 @@ jobs:
         run: |
           if [ -z "${WINGET_TOKEN}" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "::warning::WINGET_TOKEN is not configured — skipping the winget submission."
+            echo "::warning::WINGET_TOKEN is not configured; skipping the winget submission."
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
@@ -2003,7 +2003,7 @@ jobs:
       # The fork MUST be synced before the releaser runs: komac creates its
       # branch on the fork, and a stale fork fails with "Ref cannot be created",
       # which the releaser's continue-on-error would then hide. This step is
-      # deliberately blocking — nothing downstream depends on this job, so a red
+      # deliberately blocking: nothing downstream depends on this job, so a red
       # winget job is the visibility a silently skipped submission lacks.
       - name: Sync the winget-pkgs fork with upstream
         if: steps.winget-token.outputs.skip == 'false'
@@ -2017,7 +2017,7 @@ jobs:
       # validation service hiccups.
       #
       # Pinned to a commit SHA because this is an individually-maintained action
-      # that receives WINGET_TOKEN — a mutable tag would let a compromised
+      # that receives WINGET_TOKEN: a mutable tag would let a compromised
       # release exfiltrate it.
       - uses: vedantmgoyal9/winget-releaser@4ffc7888bffd451b357355dc214d43bb9f23917e # v2
         if: steps.winget-token.outputs.skip == 'false'
