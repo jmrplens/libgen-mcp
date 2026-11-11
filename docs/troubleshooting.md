@@ -1,6 +1,6 @@
 # Troubleshooting
 
-**How-to guide** — for someone looking at a symptom right now.
+**How-to guide**: for someone looking at a symptom right now.
 
 The entries below are grouped by where the symptom shows up: in the client, at startup, on the
 wire, behind a proxy, in a search, in a record lookup, in a download, in `read`, in a
@@ -94,7 +94,7 @@ depends on what started the server:
 - **systemd** keeps it in the journal: `journalctl -u <unit>`.
 
 These are the server's own diagnostic logs, written straight to stderr. They are not the MCP
-`logging` capability — that capability is deprecated (SEP-2577), this server declares no
+`logging` capability: that capability is deprecated (SEP-2577), this server declares no
 handler for it, and no log line ever reaches a client as an MCP notification.
 
 ## The client does not see the server
@@ -142,7 +142,7 @@ cannot find the file specified`).
 
 **Meaning.** This is deliberate, and it is the default for a remote deployment. `read` cannot
 return a single page without first pulling the whole file over the **server's** connection,
-and a hosted server's egress IP is shared by every user it serves — one caller's transfers can
+and a hosted server's egress IP is shared by every user it serves: one caller's transfers can
 get that address throttled or blocked for everybody. So `LIBGEN_MCP_SERVER_FETCH` defaults to
 off under `--http`, on a unix socket, and with `LIBGEN_MCP_REMOTE_DOWNLOADS=1`, and with it off
 the tool is not registered at all rather than listed and failing every call.
@@ -151,7 +151,7 @@ the tool is not registered at all rather than listed and failing every call.
 
 - Call `download` instead: it returns a direct link (a `resource_link` plus a `resolved`
   object). Fetch that link with your own HTTP tool and read the file where it lands.
-- `search`, `get_details` and `download`'s link resolution are unaffected — only the file body
+- `search`, `get_details` and `download`'s link resolution are unaffected; only the file body
   stays on your side of the connection.
 - If you run the deployment and its egress is yours to spend (a private instance, or one that
   is not shared), set `LIBGEN_MCP_SERVER_FETCH=1` to get the tool back.
@@ -210,7 +210,7 @@ never goes green because the process is gone.
 dial loopback, your LAN and carrier-grade-NAT space; an HTTP listener that is anything but a
 loopback address or a unix socket can be reached by whoever else is on that network.
 Together, a tool call naming a URL is enough to have the server fetch an address the caller
-could not reach and hand back the answer — a request-forgery proxy into your network, turned on
+could not reach and hand back the answer: a request-forgery proxy into your network, turned on
 by a variable that says nothing about who may reach the endpoint. It is a startup refusal
 rather than a warning because a warning is read once by whoever deployed it while the exposure
 lasts for the life of the process.
@@ -222,8 +222,8 @@ container published on every interface.
 **Fixes**, best first.
 
 - **Drop the variable.** It is very probably no longer doing anything. The destination guard
-  exempts the hosts you named yourself — `LIBGEN_MIRROR`, `LIBGEN_MCP_SCIHUB_HOSTS` and each
-  mirror family's own hosts — so a mirror on your own network is reachable without it, and so
+  exempts the hosts you named yourself (`LIBGEN_MIRROR`, `LIBGEN_MCP_SCIHUB_HOSTS` and each
+  mirror family's own hosts), so a mirror on your own network is reachable without it, and so
   is a redirect from that mirror to a private sibling. See
   [the operator-named-host ADR](decisions/2026-09-17-an-operator-named-host-is-exempt-from-the-destination-guard.md).
 - **Bind loopback instead**, `--http 127.0.0.1:8080`, and let the reverse proxy in front reach
@@ -232,7 +232,7 @@ container published on every interface.
 - **Keep the variable only if you have measured that you need it**: a mirror you configured
   that resolves publicly and then redirects into private space is the one case the exemption
   above does not cover. Then bind loopback or a socket, which is what the refusal is asking
-  for — not a reason to keep a wildcard bind.
+  for, not a reason to keep a wildcard bind.
 
 **How it works.** [Security](security.md) and
 [Architecture](architecture.md#outbound-address-policy).
@@ -339,7 +339,7 @@ and [Reverse proxy](deploy/reverse-proxy.md).
 ### Every HTTP path answers 404 (`--http` deployments)
 
 **Symptom.** A server started with `--http` answers `404` and
-`{"error":"not found","mcp_endpoint":"/"}` to the MCP client, to `/health`, or to both — on a
+`{"error":"not found","mcp_endpoint":"/"}` to the MCP client, to `/health`, or to both, on a
 path that used to work.
 
 **Meaning.** The MCP endpoint is mounted on one path rather than as a catch-all, so a request
@@ -356,7 +356,7 @@ return. Two configurations produce it:
 **Fixes.**
 
 - Read the `mcp_endpoint` field in the 404 body: it names the path this process serves the
-  MCP endpoint on. Compare it with the path the request actually arrived with — the proxy's
+  MCP endpoint on. Compare it with the path the request actually arrived with: the proxy's
   access log has that, your client's URL may not.
 - Then pick one layer, never both: either strip the prefix at the proxy (in nginx, a
   `proxy_pass` whose URI ends in `/`), or mount the server under it with
@@ -364,7 +364,7 @@ return. Two configurations produce it:
 - Point container and load-balancer probes at the mounted health route, which moves with
   `--http-path` (`/libgen/health` in the example above).
 - If the process exits at startup complaining about `--http-path`, the value carries a query,
-  a fragment, a `..` segment or a percent-escape. That is refused deliberately — a server
+  a fragment, a `..` segment or a percent-escape. That is refused deliberately: a server
   mounted on a path it can never match would answer `404` to everything, which reads as a
   proxy fault.
 - A plain-text `session not found` with `404` is a different case: with `--stateless=false`,
@@ -481,7 +481,7 @@ log names the socket and says `Permission denied` (nginx: `connect() to unix:/�
 Permission denied)`).
 
 **Meaning.** The socket exists and the proxy found it, but the process that tried to open it is
-neither the socket's owner nor in its group. The socket is created `0660` on purpose — a unix
+neither the socket's owner nor in its group. The socket is created `0660` on purpose: a unix
 socket is reached through the filesystem, so anything wider than owner+group means every local
 account can talk to the MCP endpoint.
 
@@ -500,7 +500,7 @@ account can talk to the MCP endpoint.
 - Widen the mode only if you must: `--http-socket-mode 0666` makes it reachable by every
   account in that namespace, which is reasonable only when the directory above it is already
   restricted.
-- Under Docker, both containers must see the **same** directory — one bind mount or one named
+- Under Docker, both containers must see the **same** directory: one bind mount or one named
   volume mounted in both. Two containers each writing to their own copy of `/run/mcp` produce
   a server that binds happily and a proxy that gets `No such file or directory`, not
   `permission denied`.
@@ -582,7 +582,7 @@ address, the server charges every caller to the same key.
 **Symptom.** With `--tls-cert`/`--tls-key` set, a client or proxy cannot complete the
 handshake: nginx logs `upstream SSL certificate verify error: (20:unable to get local issuer
 certificate)`, `curl` reports `SSL certificate problem: unable to get local issuer
-certificate`, and the server's own log shows nothing wrong — it is serving.
+certificate`, and the server's own log shows nothing wrong: it is serving.
 
 **Meaning.** The certificate is fine; nothing on the client side trusts the CA that issued it.
 A private or internal CA is not in the system trust store, and nginx does not verify upstream
@@ -603,7 +603,7 @@ certificates at all unless told to.
 - A handshake that fails with a protocol-version error is the TLS 1.2 floor: this listener
   refuses TLS 1.0 and 1.1.
 - If the process never got as far as serving and exited with `loading the TLS certificate and
-  key`, the pair itself is the problem — a missing file, an unreadable one, or a key that does
+  key`, the pair itself is the problem: a missing file, an unreadable one, or a key that does
   not match the certificate. That check runs at startup on purpose, so it is not discovered at
   a handshake nobody is watching. `--tls-cert was given without --tls-key` (or the reverse) is
   the other half of the same guard.
@@ -616,7 +616,7 @@ certificates at all unless told to.
 ### A renewed certificate is not being served
 
 **Symptom.** Certbot or a secret projection has written a new certificate, the files on disk
-are current, and clients are still presented the old one — or the log carries
+are current, and clients are still presented the old one, or the log carries
 `the TLS certificate on disk could not be loaded; serving the previous one`.
 
 **Meaning.** The pair is re-read when the files change, and "changed" means the size or the
@@ -629,14 +629,14 @@ them apart.
   A renewal that writes through a symlink the server was not started on, or a copy made with
   `cp -p` that preserves the original timestamps, both leave the paths the server is watching
   exactly as they were. Point `--tls-cert`/`--tls-key` at the paths the renewal actually
-  rewrites — for certbot that is `live/<name>/fullchain.pem` and `privkey.pem` — or drop the
+  rewrites (for certbot that is `live/<name>/fullchain.pem` and `privkey.pem`), or drop the
   timestamp-preserving flag.
 - A **warning** means the pair on disk was read and refused. Mid-rotation that is expected and
   self-correcting: the certificate lands before its key, the pair does not match for as long as
   the second write takes, and the previous certificate is served meanwhile. One warning is
   logged per distinct state of the files, so a line that keeps repeating with a new timestamp
   is a rotation that keeps failing rather than a busy server. If it persists, the two files do
-  not belong together — check that the key matches the certificate with
+  not belong together: check that the key matches the certificate with
   `openssl pkey -in key.pem -pubout` against `openssl x509 -in cert.pem -pubkey -noout`.
 - Connections **already open keep the certificate they handshook with**, which is by design.
   A client holding a keep-alive connection sees the new certificate when it reconnects, not
@@ -687,7 +687,7 @@ open-access search fails with `refusing to connect to a private or local address
 block? try a VPN or different DNS)`.
 
 **Meaning.** At least one mirror failed transiently (network error, timeout, HTTP 5xx, or
-429) on every retry pass — a genuine connectivity problem, not a missing resource.
+429) on every retry pass: a genuine connectivity problem, not a missing resource.
 
 **Fixes.**
 
@@ -699,12 +699,12 @@ block? try a VPN or different DNS)`.
   stays the fallback.
 - Increase `LIBGEN_MCP_TIMEOUT` (e.g. `45s` or `1m`) and/or `LIBGEN_MCP_RETRY_ATTEMPTS` on
   slow links.
-- Mirrors that fail are put in a 45-second cooldown; wait a moment and retry — the server
+- Mirrors that fail are put in a 45-second cooldown; wait a moment and retry: the server
   fails over automatically once a mirror recovers.
 
 A related but distinct error, `request rejected by all mirrors`, means every mirror returned
 a _permanent_ error (e.g. 404/403). That is a normal "not found / rejected", not a network
-problem — re-check the query or identifier rather than your connection.
+problem; re-check the query or identifier rather than your connection.
 
 **How it works.** [Architecture](architecture.md#failover-retry-and-cooldown).
 
@@ -762,7 +762,7 @@ md5 with an error about no IPFS CID or no gateway serving it.
 
 **Meaning.** That result came from an escalated search: the Library Genesis catalog does not
 carry the file, so the only route to it is Anna's Archive. The keyless route reads the item's
-IPFS address from Anna's record page — and **most Anna's records publish no IPFS address at
+IPFS address from Anna's record page, and **most Anna's records publish no IPFS address at
 all**. When there is none, there is nothing to fetch keylessly, and this is expected rather
 than a fault.
 
@@ -773,8 +773,8 @@ than a fault.
 - Search again with different terms; another edition of the same work may be in the catalog,
   which downloads through the ordinary sources.
 - Call `get_details` on the md5 anyway. It falls back to Anna's record, so you still get the
-  title, author, year and language — plus ISBNs when that record carries them, which a
-  minority do — even when the bytes are out of reach, enough to find the item elsewhere.
+  title, author, year and language (plus ISBNs when that record carries them, which a
+  minority do), even when the bytes are out of reach, enough to find the item elsewhere.
 
 A gateway that is merely slow reports a timeout instead; retrying later often succeeds, since
 the public IPFS gateways vary in how quickly they locate an item.
@@ -958,20 +958,20 @@ failure.
 
 **Meaning and fixes.**
 
-- **MD5 mismatch** — the downloaded bytes did not match the requested `md5` (corrupt or
+- **MD5 mismatch**: the downloaded bytes did not match the requested `md5` (corrupt or
   tampered transfer, or a stale mirror). The partial file is deleted automatically; simply
   retry. If it persists on one mirror, the `randombook` fallback will try freshly discovered
   mirrors.
-- **"mirror returned an HTML page instead of the file"** — the download key expired or the
+- **"mirror returned an HTML page instead of the file"**: the download key expired or the
   mirror served an error/challenge page. Retry; the pipeline resolves a fresh key each time
   and falls over to the next source.
-- **"download exceeds the configured size limit"** — the file is larger than
+- **"download exceeds the configured size limit"**: the file is larger than
   `LIBGEN_MCP_MAX_DOWNLOAD_BYTES`. Raise the cap (up to 50 GiB) or set it to `0` to disable
   it.
-- **"truncated download"** — the connection dropped mid-stream. The `.part` file is kept, so
+- **"truncated download"**: the connection dropped mid-stream. The `.part` file is kept, so
   re-running `download` resumes from where it stopped (the result's `resumed` field reports
   `true` when it does).
-- **All sources failed** — the tool returns the joined per-source errors, one line per
+- **All sources failed**: the tool returns the joined per-source errors, one line per
   source it tried. Read them to see whether the item was simply not found or every provider
   was unreachable.
 
@@ -1002,7 +1002,7 @@ declining just moves on), and `core` needs `LIBGEN_MCP_CORE_KEY`.
   then SciDB are the fallbacks.
 - Sci-Hub mirrors rotate and go down often. Update `LIBGEN_MCP_SCIHUB_HOSTS` with a currently
   working host list if all defaults fail.
-- Set your own `LIBGEN_MCP_UNPAYWALL_EMAIL` — until you do, Unpaywall is disabled (the other
+- Set your own `LIBGEN_MCP_UNPAYWALL_EMAIL`: until you do, Unpaywall is disabled (the other
   open-access sources and Sci-Hub are still tried). The API expects a real contact address.
 - Set `LIBGEN_MCP_CORE_KEY` (a free CORE API key) to add CORE to the open-access chain.
 - A `crossref` error naming the browser as the remaining route means every link the publisher
@@ -1012,7 +1012,7 @@ declining just moves on), and `core` needs `LIBGEN_MCP_CORE_KEY`.
   dataset marks … retracted, so it is not served` means the article was retracted. That source
   declines it and the chain moves on, so check the retraction notice before relying on any
   copy another source serves.
-- Note that DOI downloads are **not** MD5-verified (`verified` is `false`) — there is no
+- Note that DOI downloads are **not** MD5-verified (`verified` is `false`): there is no
   LibGen digest for them.
 
 **How it works.** [Sources](sources.md) has each source's corpus, what it does not cover and
@@ -1024,8 +1024,8 @@ the errors it reports, and [Download a paper](https://docs.jmrp.io/libgen-mcp/do
 "9780141439518"` or `no freely downloadable scan ... (every candidate is lending-restricted
 or holds no book file)`.
 
-**Meaning.** The `isbn` route reaches only the two **open-access** book sources — `oapen` and
-`archive` — and neither will serve a book it may not redistribute:
+**Meaning.** The `isbn` route reaches only the two **open-access** book sources (`oapen` and
+`archive`), and neither will serve a book it may not redistribute:
 
 - `oapen` holds openly licensed scholarly monographs. It confirms the record it found really
   states the ISBN (or DOI) you asked for before serving anything, because its search is free
@@ -1040,7 +1040,7 @@ or holds no book file)`.
 
 - For an in-copyright book, use the `md5` route instead: search the catalog and download by
   the result's `md5`.
-- Check the ISBN itself — a typo, or the ISBN of a different edition, is the common cause. Both
+- Check the ISBN itself: a typo, or the ISBN of a different edition, is the common cause. Both
   the 10- and 13-character forms work, with or without hyphens.
 - If the book is a public-domain classic, search again and look for a `gutenberg` hit in
   `open_access`: its `full_text_url` is the ebook file itself.
@@ -1049,7 +1049,7 @@ or holds no book file)`.
 
 ### A source is missing from the errors of a repeated download
 
-**Symptom.** A `download` fails, and a second attempt reports fewer sources than the first —
+**Symptom.** A `download` fails, and a second attempt reports fewer sources than the first:
 one that failed a moment ago is not mentioned at all.
 
 **Meaning.** That source is in **cooldown**. When a source fails because it is unavailable (a
@@ -1059,14 +1059,14 @@ skipped, not removed: the cooldown expires on its own, nothing is written to dis
 clears it), and when every source able to serve the item is in cooldown they are all tried
 anyway. A source that merely reported it does not hold the item is never set aside.
 
-The server log says which sources were skipped and why — `source in cooldown, skipping` with
+The server log says which sources were skipped and why: `source in cooldown, skipping` with
 the instant it becomes eligible again, or `every capable source is in cooldown, trying them
 anyway`. Run with `LIBGEN_MCP_LOG_LEVEL=info` (the default) to see them.
 
 **Fixes.**
 
 - Nothing is needed: retry later, or immediately with `source: "<name>"` to address that
-  provider directly — an explicit source is always tried, cooldown or not.
+  provider directly; an explicit source is always tried, cooldown or not.
 - If a source is repeatedly cooled down, it is genuinely unreachable from this host. Check it
   by hand before suspecting the server.
 
@@ -1087,7 +1087,7 @@ disk.
 - Remove stale `.part` files left by interrupted downloads if you do not intend to resume
   them (they live in the download directory, named `.libgen-mcp-*.part`). A download that
   eventually succeeds tries to clean up after itself, including the partials of the sources
-  that failed first — it skips any a concurrent download is still writing to. A download
+  that failed first; it skips any a concurrent download is still writing to. A download
   where _every_ source failed keeps its partials on purpose, one per source that got far
   enough to write bytes, so a later call can resume from them.
 - Under Docker, make sure the mounted download volume is large enough and writable by UID
@@ -1359,7 +1359,7 @@ See [Release binaries](install/binary.md).
   compatible`.** The module path carries the major version:
   `go install github.com/jmrplens/libgen-mcp/v2/cmd/server@latest`. Without `/v2`, `@latest`
   quietly resolves the newest 1.x release, and a `@v2.x.y` is refused.
-- **`requires go >= 1.27.3`.** The toolchain is older than the module needs, and
+- **`requires go >= 1.27.4`.** The toolchain is older than the module needs, and
   `GOTOOLCHAIN=local` stops Go from fetching a newer one. Install Go 1.27 or newer, or let it
   switch toolchains.
 - **The command is called `server`.** `go install` names the binary after its package,
@@ -1375,7 +1375,7 @@ See [Release binaries](install/binary.md).
 ### Why does libgen-mcp say all mirrors are unreachable?
 
 The error `all libgen mirrors unreachable (network block? try a VPN or different DNS)` means at
-least one mirror failed transiently — a network error, timeout, HTTP 5xx, or 429 — on every
+least one mirror failed transiently (a network error, timeout, HTTP 5xx, or 429) on every
 retry pass, which is a genuine connectivity problem rather than a missing resource. Check
 connectivity and DNS to the `libgen.li` family; some ISPs block these domains, so a VPN or a
 different resolver such as `1.1.1.1` often helps. If discovery itself is blocked, pin a
@@ -1386,7 +1386,7 @@ reachable mirror with `LIBGEN_MIRROR=https://libgen.li`. You can also raise
 ### Why did my libgen-mcp download fail an MD5 check?
 
 For book (`md5`) downloads libgen-mcp hashes the whole downloaded file and compares it to the
-requested MD5. An `integrity check failed: MD5 mismatch` means the bytes did not match —
+requested MD5. An `integrity check failed: MD5 mismatch` means the bytes did not match:
 usually a corrupt or tampered transfer or a stale mirror. The partial file is deleted
 automatically, so simply retry; if it persists on one mirror, the `randombook` fallback tries
 freshly discovered mirrors. DOI (article) downloads are not MD5-verified, because there is no
@@ -1416,8 +1416,8 @@ writable by that user.
 
 That applies to a local stdio/Docker server. A remote/hosted server (started with `--http`)
 cannot write to disk at all, so no file ever lands anywhere on it: `download` automatically
-returns a link (a `resource_link` plus a `resolved` object) instead of saving a file —
-`resolve_only` is implied and need not be set. A hosted **stdio** server — for example running
-behind `mcp-proxy` on a catalog like Glama — is on the same remote/ephemeral footing even
+returns a link (a `resource_link` plus a `resolved` object) instead of saving a file;
+`resolve_only` is implied and need not be set. A hosted **stdio** server (for example running
+behind `mcp-proxy` on a catalog like Glama) is on the same remote/ephemeral footing even
 without an HTTP listener; set `LIBGEN_MCP_REMOTE_DOWNLOADS=1` on it so its downloads come back
 as links too.

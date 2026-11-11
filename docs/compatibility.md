@@ -1,6 +1,6 @@
 # Compatibility
 
-**Reference** — for anyone checking whether the server runs where they need it.
+**Reference**: for anyone checking whether the server runs where they need it.
 
 What each release is built for, what each install channel needs on top, which MCP protocol
 versions and capabilities the server speaks, and what a client or a gateway in front of it
@@ -26,8 +26,8 @@ is. Anything outside this table (FreeBSD, 32-bit, RISC-V) has to be built from s
 
 ### Glibc and musl
 
-The binaries name **no C library and no dynamic loader**. Every build in this repository —
-the release binaries, the image and `make build` — is `CGO_ENABLED=0` and deliberately
+The binaries name **no C library and no dynamic loader**. Every build in this repository
+(the release binaries, the image and `make build`) is `CGO_ENABLED=0` and deliberately
 **without** `-buildmode=pie`, so the ELF files carry no `PT_INTERP` and run unchanged on
 glibc, on musl (Alpine), in a distroless image and on `scratch`.
 
@@ -59,8 +59,8 @@ anything or runs a script at install time.
 | [Homebrew](install/homebrew.md) (`jmrplens/tap`)           | yes         | yes         | yes         | yes         | no            | no            | Homebrew                                 |
 | [Docker](install/docker.md) (`linux/amd64`, `linux/arm64`) | yes         | yes         | in a VM     | in a VM     | in a VM       | in a VM       | Any OCI runtime                          |
 | [Claude Desktop `.mcpb`](install/claude-desktop.md)        | yes         | yes         | yes         | yes         | yes           | emulated      | Claude Desktop (beta on Linux)           |
-| [`go install`](install/binary.md)                          | yes         | yes         | yes         | yes         | yes           | yes           | Go, which fetches 1.27.3 itself          |
-| [winget](install/winget.md)                                | —           | —           | —           | —           | pending       | pending       | Not yet published                        |
+| [`go install`](install/binary.md)                          | yes         | yes         | yes         | yes         | yes           | yes           | Go, which fetches 1.27.4 itself          |
+| [winget](install/winget.md)                                | no          | no          | no          | no          | pending       | pending       | Not yet published                        |
 
 What each channel carries per platform:
 
@@ -88,7 +88,7 @@ Notes that matter when a platform is on the edge:
   architecture, so the Linux bundle starts a small `/bin/sh` launcher that picks the binary by
   `uname -m`. The per-OS bundles first ship with 2.2.0. For 2.1.0 and earlier the universal
   `libgen-mcp.mcpb` is the one to download.
-- **`go install`** compiles from source with your toolchain. `go.mod` declares Go 1.27.3, and any
+- **`go install`** compiles from source with your toolchain. `go.mod` declares Go 1.27.4, and any
   Go from 1.21 on downloads that toolchain by itself unless `GOTOOLCHAIN=local` forbids it. The
   binary it produces is named `server`, after the package `cmd/server`.
 - **winget** is pending review in
@@ -178,8 +178,8 @@ The server, each tool and each prompt carry three icons, always in this order:
 The SVG uses `currentColor`, so one entry follows any theme. The WebP pair exists because a
 client can support icons and still refuse SVG: VS Code Copilot's allowlist admits
 `image/webp` but not `image/svg+xml`, and an SVG-only icon rendered nothing there. A raster
-cannot inherit a color, so it needs one image per theme. The order is a published contract —
-the server card republishes the arrays verbatim, and a consumer may read `icons[0]` — and
+cannot inherit a color, so it needs one image per theme. The order is a published contract
+(the server card republishes the arrays verbatim, and a consumer may read `icons[0]`), and
 [Architecture → Icons](architecture.md#icons) has the details.
 
 ## Clients
@@ -206,8 +206,8 @@ worth knowing before you pick a transport for one:
 
 ## Gateways
 
-Everything a client receives from `tools/list` and `prompts/list` — each description, title,
-schema description and prompt argument — is **plain ASCII prose with no semicolon**.
+Everything a client receives from `tools/list` and `prompts/list` (each description, title,
+schema description and prompt argument) is **plain ASCII prose with no semicolon**.
 
 The reason is a gateway: one refused a sibling project's onboarding with
 `Description contains unsafe characters: ';'`, over ordinary English punctuation. A validator
@@ -221,6 +221,6 @@ and a citation truncated with `…` stays as it is.
 
 ## Go toolchain
 
-The module is `github.com/jmrplens/libgen-mcp/v2` and needs Go 1.27.3 to build, which is the
+The module is `github.com/jmrplens/libgen-mcp/v2` and needs Go 1.27.4 to build, which is the
 `go` line in `go.mod`. The `/v2` suffix is required: `go install
 github.com/jmrplens/libgen-mcp/cmd/server@latest` without it resolves the last v1 release.

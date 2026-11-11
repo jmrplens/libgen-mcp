@@ -32,7 +32,7 @@ Las versiones mínimas son los suelos de la propia cadena de herramientas Go 1.2
 
 ### Glibc y musl
 
-Los binarios **no nombran ninguna biblioteca de C ni ningún cargador dinámico**. Todas las compilaciones de este repositorio —los binarios de la release, la imagen y `make build`— son `CGO_ENABLED=0` y, a propósito, **sin** `-buildmode=pie`, así que los ficheros ELF no llevan `PT_INTERP` y funcionan sin cambios sobre glibc, sobre musl (Alpine), en una imagen distroless y sobre `scratch`.
+Los binarios **no nombran ninguna biblioteca de C ni ningún cargador dinámico**. Todas las compilaciones de este repositorio (los binarios de la release, la imagen y `make build`) son `CGO_ENABLED=0` y, a propósito, **sin** `-buildmode=pie`, así que los ficheros ELF no llevan `PT_INTERP` y funcionan sin cambios sobre glibc, sobre musl (Alpine), en una imagen distroless y sobre `scratch`.
 
 Es una propiedad vigilada, no una esperanza. PIE hace que un binario de Go se enlace dinámicamente contra el cargador de la máquina que compila, y una vez publicó una imagen `linux/arm64` que no podía arrancar en absoluto y unos binarios `linux/amd64` de la release que pedían `/lib64/ld-linux-x86-64.so.2`. Por eso el `Dockerfile` busca una ruta de cargador en el binario que acaba de compilar y hace fallar la compilación, y el validador de la release de npm hace lo mismo sobre los bytes empaquetados. En los otros dos sistemas el flag no cambiaría nada: Go ya genera binarios con ASLR para Windows y macOS.
 
@@ -55,8 +55,8 @@ Todos los canales salvo `go install` llevan el mismo binario de la release; ning
 | [Homebrew](/libgen-mcp/es/install/homebrew/) (`jmrplens/tap`)           | sí          | sí          | sí          | sí          | no            | no            | Homebrew                                    |
 | [Docker](/libgen-mcp/es/install/docker/) (`linux/amd64`, `linux/arm64`) | sí          | sí          | en una VM   | en una VM   | en una VM     | en una VM     | Cualquier runtime OCI                       |
 | [`.mcpb` de Claude Desktop](/libgen-mcp/es/install/claude-desktop/)     | sí          | sí          | sí          | sí          | sí            | emulado       | Claude Desktop (beta en Linux)              |
-| [`go install`](/libgen-mcp/es/install/binary/)                          | sí          | sí          | sí          | sí          | sí            | sí            | Go, que descarga 1.27.3 por sí mismo        |
-| [winget](/libgen-mcp/es/install/winget/)                                | —           | —           | —           | —           | pendiente     | pendiente     | Aún no publicado                            |
+| [`go install`](/libgen-mcp/es/install/binary/)                          | sí          | sí          | sí          | sí          | sí            | sí            | Go, que descarga 1.27.4 por sí mismo        |
+| [winget](/libgen-mcp/es/install/winget/)                                | no          | no          | no          | no          | pendiente     | pendiente     | Aún no publicado                            |
 
 Lo que lleva cada canal por plataforma:
 
@@ -76,7 +76,7 @@ Notas que importan cuando una plataforma está en el límite:
 - **Windows on Arm y Claude Desktop.** El bundle `.mcpb` de Windows lleva el ejecutable amd64, que Windows on Arm ejecuta emulado. Todos los demás canales que sirven Windows tienen una compilación `arm64` nativa.
 - **Docker en macOS y Windows** ejecuta la imagen de Linux en la máquina virtual que proporciona Docker Desktop (o un equivalente), con la arquitectura de esa VM.
 - **El `.mcpb` de Linux.** El manifiesto de un bundle puede elegir un fichero por sistema operativo pero no por arquitectura, así que el bundle de Linux arranca un pequeño lanzador `/bin/sh` que elige el binario según `uname -m`. Los bundles por sistema se publican por primera vez con la 2.2.0. Para la 2.1.0 y anteriores, el universal `libgen-mcp.mcpb` es el que hay que descargar.
-- **`go install`** compila desde el código con tu cadena de herramientas. `go.mod` declara Go 1.27.3, y cualquier Go desde 1.21 descarga esa cadena por sí mismo salvo que `GOTOOLCHAIN=local` lo impida. El binario que produce se llama `server`, por el paquete `cmd/server`.
+- **`go install`** compila desde el código con tu cadena de herramientas. `go.mod` declara Go 1.27.4, y cualquier Go desde 1.21 descarga esa cadena por sí mismo salvo que `GOTOOLCHAIN=local` lo impida. El binario que produce se llama `server`, por el paquete `cmd/server`.
 - **winget** está pendiente de revisión en [microsoft/winget-pkgs#437507](https://github.com/microsoft/winget-pkgs/pull/437507).
 
 ## Transportes
@@ -133,7 +133,7 @@ El servidor, cada herramienta y cada prompt llevan tres iconos, siempre en este 
 | 1      | WebP    | `16x16` | `light`     | Clientes que rechazan SVG, temas claros  |
 | 2      | WebP    | `16x16` | `dark`      | Clientes que rechazan SVG, temas oscuros |
 
-El SVG usa `currentColor`, así que una sola entrada sigue a cualquier tema. El par WebP existe porque un cliente puede admitir iconos y aun así rechazar SVG: la lista de permitidos de VS Code Copilot admite `image/webp` pero no `image/svg+xml`, y un icono solo en SVG no se veía allí. Un ráster no puede heredar un color, así que necesita una imagen por tema. El orden es un contrato publicado —la tarjeta del servidor reproduce los arrays tal cual, y un consumidor puede leer `icons[0]`— y [Arquitectura → Iconos](/libgen-mcp/es/architecture/#iconos) tiene los detalles.
+El SVG usa `currentColor`, así que una sola entrada sigue a cualquier tema. El par WebP existe porque un cliente puede admitir iconos y aun así rechazar SVG: la lista de permitidos de VS Code Copilot admite `image/webp` pero no `image/svg+xml`, y un icono solo en SVG no se veía allí. Un ráster no puede heredar un color, así que necesita una imagen por tema. El orden es un contrato publicado (la tarjeta del servidor reproduce los arrays tal cual, y un consumidor puede leer `icons[0]`), y [Arquitectura → Iconos](/libgen-mcp/es/architecture/#iconos) tiene los detalles.
 
 ## Clientes
 
@@ -148,7 +148,7 @@ Cualquier cliente MCP que hable stdio o streamable HTTP puede usar el servidor. 
 
 ## Gateways
 
-Todo lo que un cliente recibe de `tools/list` y `prompts/list` —cada descripción, título, descripción de esquema y argumento de prompt— es **prosa ASCII pura sin punto y coma**.
+Todo lo que un cliente recibe de `tools/list` y `prompts/list` (cada descripción, título, descripción de esquema y argumento de prompt) es **prosa ASCII pura sin punto y coma**.
 
 La razón es un gateway: uno rechazó el alta de un proyecto hermano con `Description contains unsafe characters: ';'`, por puntos y comas que eran puntuación inglesa corriente. Un validador que habla de «caracteres inseguros» compara contra una clase de caracteres, así que ceñir el texto servido a una clase (ASCII, menos una lista corta) es la única forma de limpieza que el siguiente gateway no puede sorprender. `make check-gateway-chars` lee un intercambio real y falla ante cualquier carácter fuera de ella, así que un cambio no puede volver a introducir uno.
 
@@ -156,4 +156,4 @@ La regla cubre la superficie servida, no los resultados: la salida de una herram
 
 ## Cadena de herramientas de Go
 
-El módulo es `github.com/jmrplens/libgen-mcp/v2` y necesita Go 1.27.3 para compilarse, que es la línea `go` de `go.mod`. El sufijo `/v2` es obligatorio: `go install github.com/jmrplens/libgen-mcp/cmd/server@latest` sin él resuelve la última release v1.
+El módulo es `github.com/jmrplens/libgen-mcp/v2` y necesita Go 1.27.4 para compilarse, que es la línea `go` de `go.mod`. El sufijo `/v2` es obligatorio: `go install github.com/jmrplens/libgen-mcp/cmd/server@latest` sin él resuelve la última release v1.

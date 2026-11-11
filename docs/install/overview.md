@@ -1,6 +1,6 @@
 # Installation
 
-**How-to guide** — for anyone putting the server on a machine.
+**How-to guide**: for anyone putting the server on a machine.
 
 `libgen-mcp` is published to most of the places you already get software from.
 Whichever you pick you end up with the same single executable: nothing is
@@ -19,13 +19,13 @@ removal steps. For the shortest path to a working client, see
 | [npm](npm.md)                       | `npx -y @jmrp.io/libgen-mcp`                            | `npm install -g @jmrp.io/libgen-mcp`                             | Node 18 or newer                   | Linux, macOS, Windows; x64 and arm64     |
 | [PyPI](pypi.md)                     | `uvx libgen-mcp`                                        | `pipx install libgen-mcp`                                        | Python 3.9 or newer                | Linux, macOS 13+, Windows; x64 and arm64 |
 | [NuGet](nuget.md)                   | `dnx libgen-mcp`                                        | `dotnet tool install -g libgen-mcp`                              | .NET 10 SDK                        | Linux, macOS, Windows; x64 and arm64     |
-| [Homebrew](homebrew.md)             | —                                                       | `brew install jmrplens/tap/libgen-mcp`                           | Homebrew                           | macOS and Linux; x64 and arm64           |
-| [Docker](docker.md)                 | `docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` | —                                                                | Docker or an OCI runtime           | `linux/amd64`, `linux/arm64` images      |
-| [Release binary](binary.md)         | —                                                       | download it and put it on your `PATH`                            | Nothing                            | Linux, macOS, Windows; amd64 and arm64   |
-| [Go](binary.md#build-from-source)   | —                                                       | `go install github.com/jmrplens/libgen-mcp/v2/cmd/server@latest` | Go 1.27.3 or newer                 | Wherever Go builds                       |
-| [Claude Desktop](claude-desktop.md) | —                                                       | open the `.mcpb` file                                            | Claude Desktop                     | macOS, Windows, Linux (beta)             |
-| [Agent plugin](agent-plugin.md)     | —                                                       | your host's plugin installer                                     | A plugin host and Node 18 or newer | Linux, macOS, Windows; x64 and arm64     |
-| [winget](winget.md) (pending)       | —                                                       | `winget install --id jmrplens.libgen-mcp -e`                     | winget                             | Windows; x64 and arm64                   |
+| [Homebrew](homebrew.md)             | not offered                                             | `brew install jmrplens/tap/libgen-mcp`                           | Homebrew                           | macOS and Linux; x64 and arm64           |
+| [Docker](docker.md)                 | `docker run -i --rm ghcr.io/jmrplens/libgen-mcp:latest` | not needed                                                       | Docker or an OCI runtime           | `linux/amd64`, `linux/arm64` images      |
+| [Release binary](binary.md)         | not offered                                             | download it and put it on your `PATH`                            | Nothing                            | Linux, macOS, Windows; amd64 and arm64   |
+| [Go](binary.md#build-from-source)   | not offered                                             | `go install github.com/jmrplens/libgen-mcp/v2/cmd/server@latest` | Go 1.27.4 or newer                 | Wherever Go builds                       |
+| [Claude Desktop](claude-desktop.md) | not offered                                             | open the `.mcpb` file                                            | Claude Desktop                     | macOS, Windows, Linux (beta)             |
+| [Agent plugin](agent-plugin.md)     | not offered                                             | your host's plugin installer                                     | A plugin host and Node 18 or newer | Linux, macOS, Windows; x64 and arm64     |
+| [winget](winget.md) (pending)       | not offered                                             | `winget install --id jmrplens.libgen-mcp -e`                     | winget                             | Windows; x64 and arm64                   |
 
 If you have no preference: **`npx` if you already have Node 18 or newer, Docker
 otherwise.** Neither installs anything you have to remember to update. If you
@@ -125,7 +125,7 @@ channel's page has the commands:
 **The signature is the half usually skipped, and it is the half that matters.**
 A `checksums.txt` fetched from the same page as the binary proves only that the
 two agree with each other. The Sigstore bundle proves the manifest was minted by
-this repository's release workflow, and the signing is keyless — there is no
+this repository's release workflow, and the signing is keyless: there is no
 public key to distribute, the identity **is** the workflow, which is what
 `--certificate-identity-regexp` pins in the cosign commands.
 
